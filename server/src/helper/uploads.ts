@@ -31,19 +31,28 @@ export function assertSize(sizeBytes: number): void {
   }
 }
 
-/** Caminho relativo privado: {orgId}/evidence/{uuid}{ext} */
-export function buildEvidenceStoragePath(
+/** Caminho relativo privado: {orgId}/{folder}/{uuid}{ext} */
+export function buildPrivateStoragePath(
   organizationId: string,
+  folder: string,
   mimeType: string,
 ): { storagePath: string; absolutePath: string; ext: string } {
   const ext = assertAllowedMime(mimeType);
   const storagePath = path.posix.join(
     organizationId,
-    "evidence",
+    folder,
     `${randomUUID()}${ext}`,
   );
   const absolutePath = path.join(uploadsRoot(), storagePath);
   return { storagePath, absolutePath, ext };
+}
+
+/** Caminho relativo privado: {orgId}/evidence/{uuid}{ext} */
+export function buildEvidenceStoragePath(
+  organizationId: string,
+  mimeType: string,
+): { storagePath: string; absolutePath: string; ext: string } {
+  return buildPrivateStoragePath(organizationId, "evidence", mimeType);
 }
 
 export function writeEvidenceFile(absolutePath: string, data: Buffer): void {

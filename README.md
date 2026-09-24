@@ -138,6 +138,10 @@ Seed:
 | Perfis | `GET/POST /api/employee-profiles`, `GET …/me`, `GET/PATCH/DELETE …/:id` |
 | Ideias | `GET/POST /api/ideas`, `GET/PATCH …/:id`, `POST …/decide` |
 | Avisos | `GET/POST /api/announcements`, `GET …/:id`, `POST …/read` |
+| Docs RH | `GET/POST /api/hr-documents`, `GET …/:id`, `POST …/ack` |
+| Holerites | `GET/POST /api/payslips`, `GET …/:id`, `POST …/questions`, `POST …/questions/:qid/answer` |
+| Atestados | `GET/POST /api/medical-certificates`, `POST …/review`, `POST …/read` |
+| Férias/licenças | `GET/POST /api/leaves`, `POST …/decide`, `POST …/cancel` |
 
 Comitê exige grant `ethics_committee` no Membership (ou MASTER). Relato anônimo não grava `reporterUserId`; `access_code` só na criação.  
 Perfil RH: CPF só dígitos (11/14); matrícula/CPF/`user_id` únicos por org; `DELETE` = demissão (`dismissedAt`).  

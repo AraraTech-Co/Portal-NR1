@@ -18,6 +18,7 @@ import {
   AepStatus,
   AnnouncementKind,
   AssessmentStatus,
+  CertificateStatus,
   ControlStatus,
   ControlType,
   ContractorRelation,
@@ -26,7 +27,10 @@ import {
   HazardCategory,
   HazardOrigin,
   HazardStatus,
+  HrDocumentKind,
   IdeaStatus,
+  LeaveKind,
+  LeaveStatus,
   OccurrenceType,
   ParticipationType,
   PgrDocumentType,
@@ -353,6 +357,40 @@ export const ANNOUNCEMENT_KIND_VALUES: readonly AnnouncementKind[] =
 /** Kind padrão ao criar aviso sem `kind` no body. */
 export const ANNOUNCEMENT_KIND_DEFAULT = AnnouncementKind.NOTICE;
 
+// ─── Documentos de RH ────────────────────────────────────────────────────────
+
+/**
+ * Tipo de documento RH publicado para ciência.
+ * - CONTRACT, WARNING, NOTICE, RECEIPT, TERM, OTHER
+ */
+export const HR_DOCUMENT_KINDS = HrDocumentKind;
+
+export const HR_DOCUMENT_KIND_VALUES: readonly HrDocumentKind[] =
+  Object.values(HrDocumentKind);
+
+export const HR_DOCUMENT_KIND_DEFAULT = HrDocumentKind.OTHER;
+
+// ─── Atestados / certificados (reusa CertificateStatus) ───────────────────────
+
+/**
+ * Status de atestado médico ou certificado do trabalhador.
+ * PENDING → APPROVED | REJECTED
+ */
+export const CERTIFICATE_STATUSES = CertificateStatus;
+
+export const CERTIFICATE_STATUS_VALUES: readonly CertificateStatus[] =
+  Object.values(CertificateStatus);
+
+// ─── Férias / licenças ───────────────────────────────────────────────────────
+
+export const LEAVE_KINDS = LeaveKind;
+export const LEAVE_KIND_VALUES: readonly LeaveKind[] = Object.values(LeaveKind);
+export const LEAVE_KIND_DEFAULT = LeaveKind.VACATION;
+
+export const LEAVE_STATUSES = LeaveStatus;
+export const LEAVE_STATUS_VALUES: readonly LeaveStatus[] =
+  Object.values(LeaveStatus);
+
 // ─── Helpers de validação ────────────────────────────────────────────────────
 
 export function isSurveyTrigger(v: string): v is SurveyTrigger {
@@ -401,4 +439,20 @@ export function isIdeaStatus(v: string): v is IdeaStatus {
 
 export function isAnnouncementKind(v: string): v is AnnouncementKind {
   return (ANNOUNCEMENT_KIND_VALUES as readonly string[]).includes(v);
+}
+
+export function isHrDocumentKind(v: string): v is HrDocumentKind {
+  return (HR_DOCUMENT_KIND_VALUES as readonly string[]).includes(v);
+}
+
+export function isCertificateStatus(v: string): v is CertificateStatus {
+  return (CERTIFICATE_STATUS_VALUES as readonly string[]).includes(v);
+}
+
+export function isLeaveKind(v: string): v is LeaveKind {
+  return (LEAVE_KIND_VALUES as readonly string[]).includes(v);
+}
+
+export function isLeaveStatus(v: string): v is LeaveStatus {
+  return (LEAVE_STATUS_VALUES as readonly string[]).includes(v);
 }
