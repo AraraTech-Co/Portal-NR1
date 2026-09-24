@@ -115,10 +115,13 @@ Seed:
 | Inventário (vivo) | `GET /api/inventory` |
 | Documentos PGR | `GET/POST /api/pgr-documents` (INVENTORY, ACTION_PLAN, CRITERIA) |
 | Mudanças | `GET/POST /api/change-events` |
+| AEP | `GET/POST /api/aeps`, `GET/PATCH …/:id`, `POST …/conclude`, `…/hazards`, `…/evidences` |
+| Fatores psicossociais | `GET /api/psychosocial-factors` (catálogo orientativo) |
 
 `organizationId` sempre vem da sessão (nunca do body).  
 Completar ação exige ≥1 evidência; quem executou não valida; aprovar marca controle como implementado.  
-Documentos PGR são append-only (versão++) com responsável e declaração de assinatura.
+Documentos PGR são append-only (versão++) com responsável e declaração de assinatura.  
+AEP: questionário exige anonimato; concluir sem fator exige `findings`; `needs_aet` exige motivo; fator vira Hazard PSYCHOSOCIAL no inventário.
 
 ## Prisma
 
