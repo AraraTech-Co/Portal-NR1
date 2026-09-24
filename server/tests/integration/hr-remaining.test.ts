@@ -134,6 +134,12 @@ describe("RH restante (compliance → onboarding)", () => {
       .set("Authorization", `Bearer ${token}`)
       .send({ activity: "training_complete", points: 100 });
 
+    const before = await request(app)
+      .get("/api/points/balance")
+      .set("Authorization", `Bearer ${token}`);
+    expect(before.status).toBe(200);
+    const balanceBefore = before.body.balance as number;
+
     const grant = await request(app)
       .post("/api/point-entries")
       .set("Authorization", `Bearer ${token}`)
@@ -147,7 +153,11 @@ describe("RH restante (compliance → onboarding)", () => {
     const reward = await request(app)
       .post("/api/rewards")
       .set("Authorization", `Bearer ${token}`)
-      .send({ name: "Vale café", cost: 50, stock: 10 });
+      .send({
+        name: `Vale café ${Date.now()}`,
+        cost: 50,
+        stock: 10,
+      });
     expect(reward.status).toBe(201);
 
     const redeem = await request(app)
@@ -159,7 +169,7 @@ describe("RH restante (compliance → onboarding)", () => {
       .get("/api/points/balance")
       .set("Authorization", `Bearer ${token}`);
     expect(balance.status).toBe(200);
-    expect(balance.body.balance).toBe(50);
+    expect(balance.body.balance).toBe(balanceBefore + 50);
 
     const ref = await request(app)
       .post("/api/referrals")
