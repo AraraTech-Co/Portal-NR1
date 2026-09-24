@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build
+dist/
+build/
+client/dist/
+
+# Env
+.env
+.env.local
+.env.*.local
+server/.env
+
+# Prisma
+prisma/*.db
+prisma/*.db-journal
+
+# Logs / cache
+*.log
+npm-debug.log*
+.DS_Store
+.cache/
+coverage/
+*.tsbuildinfo
+
+# IDE
+.idea/
+.vscode/
+*.swp

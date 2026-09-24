@@ -1,0 +1,15 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+generator serverClient {
+  provider = "prisma-client-js"
+  output   = "../server/node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Domínio NR-1 será adicionado por partes (backend first).
