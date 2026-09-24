@@ -30,13 +30,16 @@ Camada de dados no server:
 ```bash
 # raiz
 npm install
-
-# server + client
 npm run setup
 
-# copiar env
+# env
 cp .env.example .env
 cp server/.env.example server/.env
+
+# banco
+docker compose up -d postgres
+npm run db:migrate
+npm run db:seed
 ```
 
 ## Desenvolvimento
@@ -54,6 +57,40 @@ npm run client
 
 - API: http://localhost:8080 — `GET /api/health`
 - Client: http://localhost:5173
+
+## Autenticação
+
+Hierarquia:
+
+```text
+Organization (empresa)
+  └── Account (várias)
+        └── User (vários) via AccountMembership
+```
+
+| Nível | Onde | Poder |
+|-------|------|--------|
+| **MASTER** | `Membership` na empresa | Controla **todas** as contas da org |
+| **OWNER** | `AccountMembership` | Responsável / acesso total **naquela** conta |
+| **ADMIN** / **USER** | `AccountMembership` | Acesso limitado à conta |
+
+`master` > `owner` > `admin` > `user` em `server/config/permissions.json`  
+(OWNER **não** tem `master: true`.)
+
+MASTER entra em qualquer conta da empresa (mesmo sem membership nela).
+
+```bash
+docker compose up -d postgres
+npm run db:migrate
+npm run db:seed
+npm test
+npm run local:dev
+```
+
+Seed:
+
+- `master` / `admin123` — MASTER (Conta Matriz + Conta Filial)
+- `admin` / `admin123` — OWNER só da Conta Matriz
 
 ## Prisma
 

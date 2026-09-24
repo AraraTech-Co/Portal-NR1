@@ -1,0 +1,50 @@
+{
+  "owner": {
+    "owner": true,
+    "admin": true,
+    "sst": true,
+    "rh": true,
+    "user": true,
+    "master": false
+  },
+  "admin": {
+    "owner": false,
+    "admin": true,
+    "sst": true,
+    "rh": true,
+    "user": true,
+    "master": false
+  },
+  "sst": {
+    "owner": false,
+    "admin": false,
+    "sst": true,
+    "rh": false,
+    "user": true,
+    "master": false
+  },
+  "rh": {
+    "owner": false,
+    "admin": false,
+    "sst": false,
+    "rh": true,
+    "user": true,
+    "master": false
+  },
+  "user": {
+    "owner": false,
+    "admin": false,
+    "sst": false,
+    "rh": false,
+    "user": true,
+    "master": false
+  },
+  "master": {
+    "owner": true,
+    "admin": true,
+    "sst": true,
+    "rh": true,
+    "user": true,
+    "master": true
+  }
+}

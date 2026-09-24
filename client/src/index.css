@@ -14,7 +14,7 @@ body {
 }
 
 .shell {
-  max-width: 40rem;
+  max-width: 24rem;
   margin: 4rem auto;
   padding: 0 1.5rem;
 }
@@ -25,7 +25,52 @@ h1 {
   margin: 0 0 0.5rem;
 }
 
-p {
-  margin: 0;
+.muted {
+  margin: 0 0 1.25rem;
   color: #52525b;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+input {
+  padding: 0.55rem 0.7rem;
+  border: 1px solid #d4d4d8;
+  border-radius: 6px;
+  font: inherit;
+  background: #fff;
+}
+
+button {
+  margin-top: 0.25rem;
+  padding: 0.6rem 0.9rem;
+  border: none;
+  border-radius: 6px;
+  background: #1c1917;
+  color: #fafaf9;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.error {
+  margin: 0;
+  color: #b91c1c;
+  font-size: 0.9rem;
 }
