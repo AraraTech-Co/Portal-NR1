@@ -5,6 +5,7 @@ import { Establishment } from "../model/schema/Establishment/Establishment";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { REQUIRED_PGR_DOCUMENTS } from "../helper/compliance";
 import { writeAudit } from "../helper/audit";
+import { isPgrDocumentType } from "../constants";
 import type { AuthRequest } from "../types/auth";
 
 function fail(res: Response, err: unknown) {
@@ -212,7 +213,7 @@ class DocumentController {
         signature_statement?: string;
       };
 
-      if (!type || !REQUIRED_PGR_DOCUMENTS.includes(type as never)) {
+      if (!type || !isPgrDocumentType(type) || !REQUIRED_PGR_DOCUMENTS.includes(type as never)) {
         res.status(400).json({
           message: `type deve ser um de: ${REQUIRED_PGR_DOCUMENTS.join(", ")}`,
         });
@@ -248,9 +249,9 @@ class DocumentController {
       }
 
       let content: unknown;
-      if (type === "INVENTORY") {
+      if (type === PgrDocumentType.INVENTORY) {
         content = await buildInventorySnapshot(orgId, establishment_id);
-      } else if (type === "ACTION_PLAN") {
+      } else if (type === PgrDocumentType.ACTION_PLAN) {
         content = await buildActionPlanSnapshot(orgId, establishment_id);
       } else {
         content = await buildCriteriaSnapshot(orgId);
@@ -259,7 +260,7 @@ class DocumentController {
       const last = await prisma.pgrDocument.findFirst({
         where: {
           organizationId: orgId,
-          type: type as PgrDocumentType,
+          type,
           establishmentId: establishment_id ?? null,
         },
         orderBy: { version: "desc" },
@@ -270,7 +271,7 @@ class DocumentController {
         data: {
           organizationId: orgId,
           establishmentId: establishment_id ?? null,
-          type: type as PgrDocumentType,
+          type,
           version,
           content: content as never,
           issuedById: userId,

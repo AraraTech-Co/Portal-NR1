@@ -1,4 +1,4 @@
-import { AepMethod, AepStatus, HazardCategory } from "@prisma/client";
+import { AepMethod } from "@prisma/client";
 import { Request, Response } from "express";
 import prisma from "../model/prisma";
 import { Aep } from "../model/schema/Aep/Aep";
@@ -18,6 +18,13 @@ import {
   buildEvidenceStoragePath,
   writeEvidenceFile,
 } from "../helper/uploads";
+import {
+  AEP_METHOD_DEFAULT,
+  AEP_METHOD_TO_HAZARD_ORIGIN,
+  AEP_METHODS,
+  AEP_STATUSES,
+  HAZARD_CATEGORIES,
+} from "../constants";
 import type { AuthRequest } from "../types/auth";
 
 function fail(res: Response, err: unknown) {
@@ -33,7 +40,7 @@ function assertMethodConsistency(
   method: AepMethod,
   anonymityMeasures: string | null,
 ) {
-  if (method === "QUESTIONNAIRE" && !anonymityMeasures) {
+  if (method === AEP_METHODS.QUESTIONNAIRE && !anonymityMeasures) {
     throw Object.assign(
       new Error(
         "Método por questionário exige registrar como o anonimato das respostas foi garantido.",
@@ -44,17 +51,7 @@ function assertMethodConsistency(
 }
 
 function originFromMethod(method: AepMethod) {
-  switch (method) {
-    case "OBSERVATION":
-      return "INSPECTION" as const;
-    case "INTERVIEW":
-    case "QUESTIONNAIRE":
-    case "WORKSHOP":
-    case "FOCUS_GROUP":
-      return "WORKER_REPORT" as const;
-    default:
-      return "ROUTINE_REVIEW" as const;
-  }
+  return AEP_METHOD_TO_HAZARD_ORIGIN[method];
 }
 
 async function resolveScope(
@@ -185,7 +182,7 @@ class AepController {
       const body = req.body as Record<string, unknown>;
       const establishmentId = body.establishment_id as string | undefined;
       const scopeDescription = body.scope_description as string | undefined;
-      const method = (body.method as AepMethod) || AepMethod.OBSERVATION;
+      const method = (body.method as AepMethod) || AEP_METHOD_DEFAULT;
 
       if (!establishmentId || !scopeDescription?.trim()) {
         res.status(400).json({
@@ -213,7 +210,7 @@ class AepController {
         workersConsulted: (body.workers_consulted as number) ?? null,
         findings: blank(body.findings as string),
         conductedById: userId,
-        status: AepStatus.DRAFT,
+        status: AEP_STATUSES.DRAFT,
       });
 
       await writeAudit({
@@ -243,7 +240,7 @@ class AepController {
         res.status(404).json({ message: "Avaliação não encontrada." });
         return;
       }
-      if (current.status !== AepStatus.DRAFT) {
+      if (current.status !== AEP_STATUSES.DRAFT) {
         res.status(409).json({
           message:
             "Avaliação concluída não pode ser editada — registre uma nova AEP.",
@@ -323,7 +320,7 @@ class AepController {
             status: 404,
           });
         }
-        if (aep.status === AepStatus.CONCLUDED) {
+        if (aep.status === AEP_STATUSES.CONCLUDED) {
           throw Object.assign(new Error("Avaliação já concluída."), {
             status: 409,
           });
@@ -355,7 +352,7 @@ class AepController {
         return tx.aep.update({
           where: { id: aep.id },
           data: {
-            status: AepStatus.CONCLUDED,
+            status: AEP_STATUSES.CONCLUDED,
             concludedAt: new Date(),
             findings: findingsValue,
             needsAet,
@@ -392,7 +389,7 @@ class AepController {
         res.status(404).json({ message: "Avaliação não encontrada." });
         return;
       }
-      if (aep.status !== AepStatus.DRAFT) {
+      if (aep.status !== AEP_STATUSES.DRAFT) {
         res.status(409).json({
           message: "Avaliação concluída não recebe novos fatores.",
         });
@@ -437,7 +434,7 @@ class AepController {
         exposedGroup: blank(body.exposed_group as string),
         exposedWorkersCount: (body.exposed_workers_count as number) ?? null,
         monitoringData: psychosocialFactorNote(factor),
-        category: HazardCategory.PSYCHOSOCIAL,
+        category: HAZARD_CATEGORIES.PSYCHOSOCIAL,
         origin: originFromMethod(aep.method),
         createdById: userId,
       });
@@ -473,7 +470,7 @@ class AepController {
         res.status(404).json({ message: "Avaliação não encontrada." });
         return;
       }
-      if (aep.status !== AepStatus.DRAFT) {
+      if (aep.status !== AEP_STATUSES.DRAFT) {
         res.status(409).json({
           message: "Avaliação concluída não recebe novas evidências.",
         });

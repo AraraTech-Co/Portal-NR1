@@ -1,10 +1,4 @@
-import {
-  HazardCategory,
-  HazardOrigin,
-  HazardStatus,
-  SurveyOutcome,
-  SurveyTrigger,
-} from "@prisma/client";
+import { HazardCategory } from "@prisma/client";
 import { Request, Response } from "express";
 import prisma from "../model/prisma";
 import { PreliminarySurvey } from "../model/schema/PreliminarySurvey/PreliminarySurvey";
@@ -12,6 +6,20 @@ import { Establishment } from "../model/schema/Establishment/Establishment";
 import { Activity } from "../model/schema/Activity/Activity";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
+import {
+  ACTION_SOURCE_TYPES,
+  HAZARD_CATEGORIES,
+  HAZARD_CATEGORY_DEFAULT,
+  HAZARD_ORIGINS,
+  HAZARD_STATUSES,
+  SURVEY_DEFERRED_ACTION_PRIORITY,
+  SURVEY_OUTCOME_VALUES,
+  SURVEY_OUTCOMES,
+  SURVEY_TRIGGER_VALUES,
+  isSurveyOutcome,
+  isSurveyTrigger,
+  surveyOutcomeNeedsActivity,
+} from "../constants";
 import type { AuthRequest } from "../types/auth";
 
 function fail(res: Response, err: unknown) {
@@ -22,9 +30,6 @@ function fail(res: Response, err: unknown) {
 function blank(v?: string | null) {
   return v && v.trim() !== "" ? v.trim() : null;
 }
-
-const TRIGGERS = new Set<string>(Object.values(SurveyTrigger));
-const OUTCOMES = new Set<string>(Object.values(SurveyOutcome));
 
 class PreliminarySurveyController {
   async list(req: Request, res: Response) {
@@ -97,9 +102,9 @@ class PreliminarySurveyController {
         });
         return;
       }
-      if (!TRIGGERS.has(trigger)) {
+      if (!isSurveyTrigger(trigger)) {
         res.status(400).json({
-          message: `trigger inválido. Use: ${[...TRIGGERS].join(", ")}.`,
+          message: `trigger inválido. Use: ${SURVEY_TRIGGER_VALUES.join(", ")}.`,
         });
         return;
       }
@@ -117,7 +122,7 @@ class PreliminarySurveyController {
       const survey = await new PreliminarySurvey().create.new({
         organizationId: orgId,
         establishmentId: establishment_id,
-        trigger: trigger as SurveyTrigger,
+        trigger,
         description: blank(description),
         conductedById: userId,
         conductedAt: conducted_at ? new Date(conducted_at) : new Date(),
@@ -171,18 +176,17 @@ class PreliminarySurveyController {
         });
         return;
       }
-      if (!OUTCOMES.has(outcome)) {
+      if (!isSurveyOutcome(outcome)) {
         res.status(400).json({
-          message: `outcome inválido. Use: ${[...OUTCOMES].join(", ")}.`,
+          message: `outcome inválido. Use: ${SURVEY_OUTCOME_VALUES.join(", ")}.`,
         });
         return;
       }
 
       const measureTaken = blank(measure_taken);
-      const surveyOutcome = outcome as SurveyOutcome;
 
       // 1.5.4.2.1.1 "b": risco evidente com medida imediata — exige registrar a medida.
-      if (surveyOutcome === SurveyOutcome.IMMEDIATE_MEASURE && !measureTaken) {
+      if (outcome === SURVEY_OUTCOMES.IMMEDIATE_MEASURE && !measureTaken) {
         res.status(400).json({
           message:
             "Outcome IMMEDIATE_MEASURE exige measure_taken (NR-1 1.5.4.2.1.1).",
@@ -190,10 +194,7 @@ class PreliminarySurveyController {
         return;
       }
 
-      const needsActivity =
-        surveyOutcome === SurveyOutcome.DEFERRED_TO_ACTION_PLAN ||
-        surveyOutcome === SurveyOutcome.ESCALATED_TO_ASSESSMENT;
-
+      const needsActivity = surveyOutcomeNeedsActivity(outcome);
       let activityId: string | null = activity_id ?? null;
       if (needsActivity) {
         if (!activityId) {
@@ -203,19 +204,9 @@ class PreliminarySurveyController {
           });
           return;
         }
-        const activity = await new Activity().read.one({
-          id: activityId,
-          organizationId: orgId,
-          establishmentId: survey.establishmentId,
-          archivedAt: null,
-        });
-        if (!activity) {
-          res.status(400).json({
-            message: "Atividade inválida neste estabelecimento.",
-          });
-          return;
-        }
-      } else if (activityId) {
+      }
+
+      if (activityId) {
         const activity = await new Activity().read.one({
           id: activityId,
           organizationId: orgId,
@@ -230,13 +221,19 @@ class PreliminarySurveyController {
         }
       }
 
+      const hazardCategory =
+        (category as HazardCategory | undefined) &&
+        Object.values(HAZARD_CATEGORIES).includes(category as HazardCategory)
+          ? (category as HazardCategory)
+          : HAZARD_CATEGORY_DEFAULT;
+
       const result = await prisma.$transaction(async (tx) => {
         const item = await tx.preliminarySurveyItem.create({
           data: {
             surveyId: survey.id,
             activityId,
             description: description.trim(),
-            outcome: surveyOutcome,
+            outcome,
             measureTaken,
           },
         });
@@ -245,16 +242,16 @@ class PreliminarySurveyController {
         let action = null;
 
         // 1.5.4.2.1.3: sem medida imediata → plano de ação + inventário (Hazard).
-        if (surveyOutcome === SurveyOutcome.DEFERRED_TO_ACTION_PLAN) {
+        if (outcome === SURVEY_OUTCOMES.DEFERRED_TO_ACTION_PLAN) {
           hazard = await tx.hazard.create({
             data: {
               organizationId: orgId,
               activityId: activityId!,
               description: description.trim(),
               source: `Levantamento preliminar ${survey.id}`,
-              category: (category as HazardCategory) || HazardCategory.ACCIDENT,
-              origin: HazardOrigin.ROUTINE_REVIEW,
-              status: HazardStatus.IDENTIFIED,
+              category: hazardCategory,
+              origin: HAZARD_ORIGINS.ROUTINE_REVIEW,
+              status: HAZARD_STATUSES.IDENTIFIED,
               monitoringData: `Preliminar · deferred · item ${item.id}`,
               createdById: userId,
             },
@@ -267,24 +264,24 @@ class PreliminarySurveyController {
                 `Origem: levantamento preliminar (NR-1 1.5.4.2.1.3).\n` +
                 `Item: ${item.id}\n` +
                 `Perigo: ${hazard.id}`,
-              sourceType: "MANUAL",
-              priority: "HIGH",
+              sourceType: ACTION_SOURCE_TYPES.MANUAL,
+              priority: SURVEY_DEFERRED_ACTION_PRIORITY,
               createdById: userId,
             },
           });
         }
 
         // 1.5.4.2.1.2: segue identificação/avaliação completa → Hazard no inventário.
-        if (surveyOutcome === SurveyOutcome.ESCALATED_TO_ASSESSMENT) {
+        if (outcome === SURVEY_OUTCOMES.ESCALATED_TO_ASSESSMENT) {
           hazard = await tx.hazard.create({
             data: {
               organizationId: orgId,
               activityId: activityId!,
               description: description.trim(),
               source: `Levantamento preliminar ${survey.id}`,
-              category: (category as HazardCategory) || HazardCategory.ACCIDENT,
-              origin: HazardOrigin.ROUTINE_REVIEW,
-              status: HazardStatus.IDENTIFIED,
+              category: hazardCategory,
+              origin: HAZARD_ORIGINS.ROUTINE_REVIEW,
+              status: HAZARD_STATUSES.IDENTIFIED,
               monitoringData: `Preliminar · escalated · item ${item.id}`,
               createdById: userId,
             },
@@ -301,7 +298,7 @@ class PreliminarySurveyController {
         entityType: "PreliminarySurveyItem",
         entityId: result.item.id,
         after: {
-          outcome: surveyOutcome,
+          outcome,
           hazardId: result.hazard?.id ?? null,
           actionId: result.action?.id ?? null,
         },

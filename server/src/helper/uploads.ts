@@ -1,23 +1,19 @@
 import path from "path";
 import fs from "fs";
 import { randomUUID } from "crypto";
+import {
+  EVIDENCE_ALLOWED_MIME,
+  MAX_EVIDENCE_BYTES,
+} from "../constants";
 
-const ALLOWED: Record<string, string> = {
-  "image/jpeg": ".jpg",
-  "image/png": ".png",
-  "image/webp": ".webp",
-  "application/pdf": ".pdf",
-  "video/mp4": ".mp4",
-};
-
-export const MAX_EVIDENCE_BYTES = 20 * 1024 * 1024;
+export { MAX_EVIDENCE_BYTES };
 
 export function uploadsRoot(): string {
   return process.env.UPLOADS_DIR || path.resolve(process.cwd(), "uploads");
 }
 
 export function assertAllowedMime(mimeType: string): string {
-  const ext = ALLOWED[mimeType];
+  const ext = EVIDENCE_ALLOWED_MIME[mimeType];
   if (!ext) {
     throw Object.assign(
       new Error("Tipo de arquivo não permitido (jpg/png/webp/pdf/mp4)."),
