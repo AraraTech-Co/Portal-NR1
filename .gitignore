@@ -5,6 +5,8 @@ node_modules/
 dist/
 build/
 client/dist/
+server/uploads/
+uploads/
 
 # Env
 .env

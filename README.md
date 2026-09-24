@@ -110,9 +110,11 @@ Seed:
 | Riscos | `/api/risks` |
 | Avaliações | `POST /api/assessments`, `POST …/:id/validate` |
 | Controles | `/api/controls` |
-| Ações | `/api/actions` |
+| Ações | `/api/actions`, `POST …/:id/complete`, `POST …/:id/review` |
+| Evidências | `GET/POST /api/evidences` |
 
-`organizationId` sempre vem da sessão (nunca do body).
+`organizationId` sempre vem da sessão (nunca do body).  
+Completar ação exige ≥1 evidência; quem executou não valida; aprovar marca controle como implementado.
 
 ## Prisma
 

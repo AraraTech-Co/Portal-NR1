@@ -2,6 +2,7 @@ import { Router } from "express";
 import { verify } from "../model/lib/Auth";
 import workplace from "../controller/WorkplaceController";
 import risk from "../controller/RiskController";
+import actionEvidence from "../controller/ActionEvidenceController";
 
 const router = Router();
 
@@ -93,5 +94,18 @@ router.post("/api/controls", write, (req, res) => risk.createControl(req, res));
 
 router.get("/api/actions", read, (req, res) => risk.listActions(req, res));
 router.post("/api/actions", write, (req, res) => risk.createAction(req, res));
+
+router.get("/api/evidences", read, (req, res) =>
+  actionEvidence.listEvidences(req, res),
+);
+router.post("/api/evidences", write, (req, res) =>
+  actionEvidence.createEvidence(req, res),
+);
+router.post("/api/actions/:id/complete", write, (req, res) =>
+  actionEvidence.completeAction(req, res),
+);
+router.post("/api/actions/:id/review", write, (req, res) =>
+  actionEvidence.reviewAction(req, res),
+);
 
 export default router;
