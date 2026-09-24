@@ -5,6 +5,7 @@ import risk from "../controller/RiskController";
 import actionEvidence from "../controller/ActionEvidenceController";
 import documents from "../controller/DocumentController";
 import aep from "../controller/AepController";
+import survey from "../controller/PreliminarySurveyController";
 
 const router = Router();
 
@@ -145,6 +146,20 @@ router.post("/api/aeps/:id/hazards", write, (req, res) =>
 );
 router.post("/api/aeps/:id/evidences", write, (req, res) =>
   aep.addEvidence(req, res),
+);
+
+// Levantamento preliminar (NR-1 1.5.4.2)
+router.get("/api/preliminary-surveys", read, (req, res) =>
+  survey.list(req, res),
+);
+router.post("/api/preliminary-surveys", write, (req, res) =>
+  survey.create(req, res),
+);
+router.get("/api/preliminary-surveys/:id", read, (req, res) =>
+  survey.get(req, res),
+);
+router.post("/api/preliminary-surveys/:id/items", write, (req, res) =>
+  survey.addItem(req, res),
 );
 
 export default router;

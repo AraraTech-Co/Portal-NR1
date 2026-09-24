@@ -117,11 +117,13 @@ Seed:
 | Mudanças | `GET/POST /api/change-events` |
 | AEP | `GET/POST /api/aeps`, `GET/PATCH …/:id`, `POST …/conclude`, `…/hazards`, `…/evidences` |
 | Fatores psicossociais | `GET /api/psychosocial-factors` (catálogo orientativo) |
+| Levantamento preliminar | `GET/POST /api/preliminary-surveys`, `GET …/:id`, `POST …/:id/items` |
 
 `organizationId` sempre vem da sessão (nunca do body).  
 Completar ação exige ≥1 evidência; quem executou não valida; aprovar marca controle como implementado.  
 Documentos PGR são append-only (versão++) com responsável e declaração de assinatura.  
-AEP: questionário exige anonimato; concluir sem fator exige `findings`; `needs_aet` exige motivo; fator vira Hazard PSYCHOSOCIAL no inventário.
+AEP: questionário exige anonimato; concluir sem fator exige `findings`; `needs_aet` exige motivo; fator vira Hazard PSYCHOSOCIAL no inventário.  
+Preliminar (1.5.4.2): `IMMEDIATE_MEASURE` exige `measure_taken`; `DEFERRED_TO_ACTION_PLAN` cria Hazard + Action; `ESCALATED_TO_ASSESSMENT` cria Hazard.
 
 ## Prisma
 
