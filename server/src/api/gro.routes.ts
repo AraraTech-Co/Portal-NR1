@@ -7,6 +7,7 @@ import documents from "../controller/DocumentController";
 import aep from "../controller/AepController";
 import survey from "../controller/PreliminarySurveyController";
 import occurrence from "../controller/OccurrenceController";
+import emergency from "../controller/EmergencyController";
 
 const router = Router();
 
@@ -184,6 +185,34 @@ router.post("/api/occurrences/:id/actions", write, (req, res) =>
 );
 router.post("/api/occurrences/:id/evidences", write, (req, res) =>
   occurrence.addEvidence(req, res),
+);
+
+// Emergências — procedimentos e exercícios (NR-1 1.5.6)
+router.get("/api/emergency-procedures", read, (req, res) =>
+  emergency.listProcedures(req, res),
+);
+router.post("/api/emergency-procedures", write, (req, res) =>
+  emergency.createProcedure(req, res),
+);
+router.get("/api/emergency-procedures/:id", read, (req, res) =>
+  emergency.getProcedure(req, res),
+);
+router.patch("/api/emergency-procedures/:id", write, (req, res) =>
+  emergency.updateProcedure(req, res),
+);
+router.delete("/api/emergency-procedures/:id", write, (req, res) =>
+  emergency.archiveProcedure(req, res),
+);
+router.post("/api/emergency-procedures/:id/drills", write, (req, res) =>
+  emergency.addDrill(req, res),
+);
+router.get("/api/emergency-procedures/:id/drills/:drillId", read, (req, res) =>
+  emergency.getDrill(req, res),
+);
+router.post(
+  "/api/emergency-procedures/:id/drills/:drillId/evidences",
+  write,
+  (req, res) => emergency.addDrillEvidence(req, res),
 );
 
 export default router;

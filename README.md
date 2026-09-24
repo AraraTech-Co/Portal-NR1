@@ -119,13 +119,15 @@ Seed:
 | Fatores psicossociais | `GET /api/psychosocial-factors` (catálogo orientativo) |
 | Levantamento preliminar | `GET/POST /api/preliminary-surveys`, `GET …/:id`, `POST …/:id/items` |
 | Ocorrências | `GET/POST /api/occurrences`, `GET/PATCH …/:id`, `POST …/analyze`, `…/actions`, `…/evidences` |
+| Emergências | `GET/POST /api/emergency-procedures`, `GET/PATCH/DELETE …/:id`, `POST …/drills`, `GET …/drills/:drillId`, `POST …/drills/:drillId/evidences` |
 
 `organizationId` sempre vem da sessão (nunca do body).  
 Completar ação exige ≥1 evidência; quem executou não valida; aprovar marca controle como implementado.  
 Documentos PGR são append-only (versão++) com responsável e declaração de assinatura.  
 AEP: questionário exige anonimato; concluir sem fator exige `findings`; `needs_aet` exige motivo; fator vira Hazard PSYCHOSOCIAL no inventário.  
 Preliminar (1.5.4.2): `IMMEDIATE_MEASURE` exige `measure_taken`; `DEFERRED_TO_ACTION_PLAN` cria Hazard + Action; `ESCALATED_TO_ASSESSMENT` cria Hazard.  
-Ocorrência (1.5.5.5): análise exige os 3 campos da norma; se houver `risk_id`, marca reassessment; ações nascem com `sourceType=OCCURRENCE`.
+Ocorrência (1.5.5.5): análise exige os 3 campos da norma; se houver `risk_id`, marca reassessment; ações nascem com `sourceType=OCCURRENCE`.  
+Emergência (1.5.6): procedimento exige meios/responsáveis/evacuação; drill grava exercício; evidência do simulado em `…/drills/:id/evidences` (1.5.6.3.1).
 
 Constantes de domínio (enums, limites de upload, PGR obrigatório) ficam em `server/src/constants.ts`.
 

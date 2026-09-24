@@ -186,6 +186,28 @@ export const OCCURRENCE_TYPES = OccurrenceType;
 export const OCCURRENCE_TYPE_VALUES: readonly OccurrenceType[] =
   Object.values(OccurrenceType);
 
+// ─── Emergências (NR-1 1.5.6) ─────────────────────────────────────────────────
+
+/**
+ * Periodicidade padrão sugerida para exercícios simulados (meses),
+ * quando o procedimento não informa `drillFrequencyMonths` (1.5.6.3).
+ * A norma exige que a periodicidade esteja definida no procedimento —
+ * este valor é só fallback de leitura, não substitui o cadastro.
+ */
+export const EMERGENCY_DRILL_FREQUENCY_MONTHS_DEFAULT = 12;
+
+/**
+ * Campos mínimos do procedimento (1.5.6.2 "a"):
+ * meios de primeiros socorros / encaminhamento / abandono,
+ * responsáveis e plano de evacuação.
+ * `largeScaleMeasures` (1.5.6.2 "b") é opcional.
+ */
+export const EMERGENCY_PROCEDURE_REQUIRED_FIELDS = [
+  "first_aid_means",
+  "responsibles",
+  "evacuation_plan",
+] as const;
+
 // ─── Helpers de validação ────────────────────────────────────────────────────
 
 export function isSurveyTrigger(v: string): v is SurveyTrigger {
