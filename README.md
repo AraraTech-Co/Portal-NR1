@@ -131,9 +131,16 @@ Seed:
 | Meta | `GET /api/ethics-reports/meta` |
 | Comitê | `GET /api/ethics-reports`, `GET/PATCH …/:id`, `POST …/:id/messages` |
 
-Comitê exige grant `ethics_committee` no Membership (ou MASTER). Relato anônimo não grava `reporterUserId`; `access_code` só na criação.
+### RH (`api/hr/`)
 
-`organizationId` sempre vem da sessão (nunca do body).  
+| Recurso | Rotas |
+|---------|--------|
+| Perfis | `GET/POST /api/employee-profiles`, `GET …/me`, `GET/PATCH/DELETE …/:id` |
+
+Comitê exige grant `ethics_committee` no Membership (ou MASTER). Relato anônimo não grava `reporterUserId`; `access_code` só na criação.  
+Perfil RH: CPF só dígitos (11/14); matrícula/CPF/`user_id` únicos por org; `DELETE` = demissão (`dismissedAt`).
+
+`organizationId` sempre vem da sessão (nunca do body).
 Completar ação exige ≥1 evidência; quem executou não valida; aprovar marca controle como implementado.  
 Documentos PGR são append-only (versão++) com responsável e declaração de assinatura.  
 AEP: questionário exige anonimato; concluir sem fator exige `findings`; `needs_aet` exige motivo; fator vira Hazard PSYCHOSOCIAL no inventário.  

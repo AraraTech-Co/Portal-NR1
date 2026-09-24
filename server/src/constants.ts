@@ -293,6 +293,28 @@ export const ETHICS_ACCESS_CODE_LENGTH = 10;
 /** Custo bcrypt do hash do código de acesso. */
 export const ETHICS_ACCESS_CODE_BCRYPT_ROUNDS = 10;
 
+// ─── RH / perfil do colaborador ──────────────────────────────────────────────
+
+/**
+ * Normaliza CPF/CNPJ para só dígitos (NR-7 7.5.19.1 b — chave de saúde).
+ * Retorna null se vazio; lança 400 se houver caracteres não numéricos misturados
+ * de forma inválida após strip (já só dígitos).
+ */
+export function normalizeTaxIdDigits(raw?: string | null): string | null {
+  if (raw === undefined || raw === null || String(raw).trim() === "") {
+    return null;
+  }
+  const digits = String(raw).replace(/\D/g, "");
+  if (digits.length === 0) return null;
+  if (digits.length !== 11 && digits.length !== 14) {
+    throw Object.assign(
+      new Error("tax_id deve ter 11 (CPF) ou 14 (CNPJ) dígitos."),
+      { status: 400 },
+    );
+  }
+  return digits;
+}
+
 // ─── Helpers de validação ────────────────────────────────────────────────────
 
 export function isSurveyTrigger(v: string): v is SurveyTrigger {
