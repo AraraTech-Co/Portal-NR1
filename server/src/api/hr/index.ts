@@ -6,6 +6,8 @@ import hrDocuments from "./hr-documents.route";
 import payslips from "./payslips.route";
 import medicalCertificates from "./medical-certificates.route";
 import leaves from "./leaves.route";
+import summons from "./summons.route";
+import trainings from "./trainings.route";
 
 /** RH e engajamento (ADR-14) — separado do GRO. */
 const router = Router();
@@ -16,5 +18,7 @@ router.use(hrDocuments);
 router.use(payslips);
 router.use(medicalCertificates);
 router.use(leaves);
+router.use(summons);
+router.use(trainings);
 
 export default router;

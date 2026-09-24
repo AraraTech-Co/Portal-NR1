@@ -142,6 +142,8 @@ Seed:
 | Holerites | `GET/POST /api/payslips`, `GET …/:id`, `POST …/questions`, `POST …/questions/:qid/answer` |
 | Atestados | `GET/POST /api/medical-certificates`, `POST …/review`, `POST …/read` |
 | Férias/licenças | `GET/POST /api/leaves`, `POST …/decide`, `POST …/cancel` |
+| Convocações | `GET/POST /api/summons`, `GET …/:id`, `POST …/invite`, `POST …/attendance` |
+| Treinamentos | `GET/POST /api/trainings`, `GET/DELETE …/:id`, `POST …/enroll|start|complete` |
 
 Comitê exige grant `ethics_committee` no Membership (ou MASTER). Relato anônimo não grava `reporterUserId`; `access_code` só na criação.  
 Perfil RH: CPF só dígitos (11/14); matrícula/CPF/`user_id` únicos por org; `DELETE` = demissão (`dismissedAt`).  

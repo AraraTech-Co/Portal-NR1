@@ -22,6 +22,7 @@ import {
   ControlStatus,
   ControlType,
   ContractorRelation,
+  EnrollmentStatus,
   EvidenceType,
   EvidenceValidationStatus,
   HazardCategory,
@@ -37,6 +38,8 @@ import {
   ReportAuthorSide,
   ReportCategory,
   ReportStatus,
+  RequirementKind,
+  SummonAttendanceStatus,
   SurveyOutcome,
   SurveyTrigger,
 } from "@prisma/client";
@@ -391,6 +394,33 @@ export const LEAVE_STATUSES = LeaveStatus;
 export const LEAVE_STATUS_VALUES: readonly LeaveStatus[] =
   Object.values(LeaveStatus);
 
+// ─── Convocações ─────────────────────────────────────────────────────────────
+
+/**
+ * Presença em convocação (reunião, DDS, treinamento presencial).
+ * INVITED → CONFIRMED → ATTENDED | ABSENT
+ */
+export const SUMMON_ATTENDANCE_STATUSES = SummonAttendanceStatus;
+
+export const SUMMON_ATTENDANCE_STATUS_VALUES: readonly SummonAttendanceStatus[] =
+  Object.values(SummonAttendanceStatus);
+
+// ─── Treinamentos ────────────────────────────────────────────────────────────
+
+/** Status da matrícula no treinamento online. */
+export const ENROLLMENT_STATUSES = EnrollmentStatus;
+
+export const ENROLLMENT_STATUS_VALUES: readonly EnrollmentStatus[] =
+  Object.values(EnrollmentStatus);
+
+/**
+ * Tipo de exigência por função (CNH, ASO, treinamento, etc.).
+ */
+export const REQUIREMENT_KINDS = RequirementKind;
+
+export const REQUIREMENT_KIND_VALUES: readonly RequirementKind[] =
+  Object.values(RequirementKind);
+
 // ─── Helpers de validação ────────────────────────────────────────────────────
 
 export function isSurveyTrigger(v: string): v is SurveyTrigger {
@@ -455,4 +485,18 @@ export function isLeaveKind(v: string): v is LeaveKind {
 
 export function isLeaveStatus(v: string): v is LeaveStatus {
   return (LEAVE_STATUS_VALUES as readonly string[]).includes(v);
+}
+
+export function isSummonAttendanceStatus(
+  v: string,
+): v is SummonAttendanceStatus {
+  return (SUMMON_ATTENDANCE_STATUS_VALUES as readonly string[]).includes(v);
+}
+
+export function isEnrollmentStatus(v: string): v is EnrollmentStatus {
+  return (ENROLLMENT_STATUS_VALUES as readonly string[]).includes(v);
+}
+
+export function isRequirementKind(v: string): v is RequirementKind {
+  return (REQUIREMENT_KIND_VALUES as readonly string[]).includes(v);
 }
