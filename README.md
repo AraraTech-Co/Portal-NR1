@@ -136,9 +136,13 @@ Seed:
 | Recurso | Rotas |
 |---------|--------|
 | Perfis | `GET/POST /api/employee-profiles`, `GET …/me`, `GET/PATCH/DELETE …/:id` |
+| Ideias | `GET/POST /api/ideas`, `GET/PATCH …/:id`, `POST …/decide` |
+| Avisos | `GET/POST /api/announcements`, `GET …/:id`, `POST …/read` |
 
 Comitê exige grant `ethics_committee` no Membership (ou MASTER). Relato anônimo não grava `reporterUserId`; `access_code` só na criação.  
-Perfil RH: CPF só dígitos (11/14); matrícula/CPF/`user_id` únicos por org; `DELETE` = demissão (`dismissedAt`).
+Perfil RH: CPF só dígitos (11/14); matrícula/CPF/`user_id` únicos por org; `DELETE` = demissão (`dismissedAt`).  
+Ideia: autor edita só em `NEW`; decidir `IMPLEMENTED`/`REJECTED` exige `decision_note`.  
+Aviso: `POST …/read` registra ciência (prova de comunicação).
 
 `organizationId` sempre vem da sessão (nunca do body).
 Completar ação exige ≥1 evidência; quem executou não valida; aprovar marca controle como implementado.  

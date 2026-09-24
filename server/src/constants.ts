@@ -16,6 +16,7 @@ import {
   ActionStatus,
   AepMethod,
   AepStatus,
+  AnnouncementKind,
   AssessmentStatus,
   ControlStatus,
   ControlType,
@@ -25,6 +26,7 @@ import {
   HazardCategory,
   HazardOrigin,
   HazardStatus,
+  IdeaStatus,
   OccurrenceType,
   ParticipationType,
   PgrDocumentType,
@@ -315,6 +317,42 @@ export function normalizeTaxIdDigits(raw?: string | null): string | null {
   return digits;
 }
 
+// ─── Ideias (caixa de sugestões) ─────────────────────────────────────────────
+
+/**
+ * Status da ideia enviada pelo colaborador.
+ * - NEW: recém-enviada
+ * - IN_ANALYSIS: em análise pelo RH/gestão
+ * - IMPLEMENTED: adotada
+ * - REJECTED: recusada (exige decision_note)
+ */
+export const IDEA_STATUSES = IdeaStatus;
+
+export const IDEA_STATUS_VALUES: readonly IdeaStatus[] =
+  Object.values(IdeaStatus);
+
+/** Status finais que exigem decision_note. */
+export const IDEA_STATUSES_NEEDING_NOTE: readonly IdeaStatus[] = [
+  IdeaStatus.IMPLEMENTED,
+  IdeaStatus.REJECTED,
+];
+
+// ─── Mural de avisos ─────────────────────────────────────────────────────────
+
+/**
+ * Tipo de aviso no mural.
+ * - NOTICE: comunicado geral
+ * - CAMPAIGN: campanha
+ * - TRAINING: capacitação / treino (leitura prova comunicação — NR-1 / Lei 14.457)
+ */
+export const ANNOUNCEMENT_KINDS = AnnouncementKind;
+
+export const ANNOUNCEMENT_KIND_VALUES: readonly AnnouncementKind[] =
+  Object.values(AnnouncementKind);
+
+/** Kind padrão ao criar aviso sem `kind` no body. */
+export const ANNOUNCEMENT_KIND_DEFAULT = AnnouncementKind.NOTICE;
+
 // ─── Helpers de validação ────────────────────────────────────────────────────
 
 export function isSurveyTrigger(v: string): v is SurveyTrigger {
@@ -355,4 +393,12 @@ export function isReportCategory(v: string): v is ReportCategory {
 
 export function isReportStatus(v: string): v is ReportStatus {
   return (REPORT_STATUS_VALUES as readonly string[]).includes(v);
+}
+
+export function isIdeaStatus(v: string): v is IdeaStatus {
+  return (IDEA_STATUS_VALUES as readonly string[]).includes(v);
+}
+
+export function isAnnouncementKind(v: string): v is AnnouncementKind {
+  return (ANNOUNCEMENT_KIND_VALUES as readonly string[]).includes(v);
 }
