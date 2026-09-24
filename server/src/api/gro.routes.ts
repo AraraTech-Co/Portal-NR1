@@ -8,6 +8,7 @@ import aep from "../controller/AepController";
 import survey from "../controller/PreliminarySurveyController";
 import occurrence from "../controller/OccurrenceController";
 import emergency from "../controller/EmergencyController";
+import contractor from "../controller/ContractorController";
 
 const router = Router();
 
@@ -213,6 +214,27 @@ router.post(
   "/api/emergency-procedures/:id/drills/:drillId/evidences",
   write,
   (req, res) => emergency.addDrillEvidence(req, res),
+);
+
+// Terceiros (NR-1 1.5.8)
+router.get("/api/contractors", read, (req, res) => contractor.list(req, res));
+router.post("/api/contractors", write, (req, res) =>
+  contractor.create(req, res),
+);
+router.get("/api/contractors/:id", read, (req, res) =>
+  contractor.get(req, res),
+);
+router.patch("/api/contractors/:id", write, (req, res) =>
+  contractor.update(req, res),
+);
+router.delete("/api/contractors/:id", write, (req, res) =>
+  contractor.archive(req, res),
+);
+router.post("/api/contractors/:id/documents-received", write, (req, res) =>
+  contractor.markDocumentsReceived(req, res),
+);
+router.post("/api/contractors/:id/risks-informed", write, (req, res) =>
+  contractor.markRisksInformed(req, res),
 );
 
 export default router;

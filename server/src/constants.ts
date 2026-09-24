@@ -19,6 +19,7 @@ import {
   AssessmentStatus,
   ControlStatus,
   ControlType,
+  ContractorRelation,
   EvidenceType,
   EvidenceValidationStatus,
   HazardCategory,
@@ -208,6 +209,21 @@ export const EMERGENCY_PROCEDURE_REQUIRED_FIELDS = [
   "evacuation_plan",
 ] as const;
 
+// ─── Terceiros (NR-1 1.5.8) ───────────────────────────────────────────────────
+
+/**
+ * Relação contratual com a organização.
+ * - WE_HIRE: somos contratante — recebemos inventário/plano da contratada (1.5.8.1.1)
+ * - WE_ARE_HIRED: somos contratada — fornecemos nosso inventário à contratante
+ */
+export const CONTRACTOR_RELATIONS = ContractorRelation;
+
+export const CONTRACTOR_RELATION_VALUES: readonly ContractorRelation[] =
+  Object.values(ContractorRelation);
+
+/** Relação padrão ao criar terceiro sem `relation` no body. */
+export const CONTRACTOR_RELATION_DEFAULT = ContractorRelation.WE_HIRE;
+
 // ─── Helpers de validação ────────────────────────────────────────────────────
 
 export function isSurveyTrigger(v: string): v is SurveyTrigger {
@@ -232,4 +248,8 @@ export function isPgrDocumentType(v: string): v is PgrDocumentType {
 
 export function isAepMethod(v: string): v is AepMethod {
   return (Object.values(AepMethod) as string[]).includes(v);
+}
+
+export function isContractorRelation(v: string): v is ContractorRelation {
+  return (CONTRACTOR_RELATION_VALUES as readonly string[]).includes(v);
 }
