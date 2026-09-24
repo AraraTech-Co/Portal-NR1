@@ -80,7 +80,8 @@ Organization (empresa)
 MASTER entra em qualquer conta da empresa (mesmo sem membership nela).
 
 O **schema Prisma** já inclui o domínio completo (SST/GRO, RH, saúde, engajamento).  
-Classes OOP e APIs de domínio entram módulo a módulo. O seed popula só auth + GRO mínimo.
+O **módulo GRO** já tem API (estrutura operacional + perigo/risco/avaliação/controle/ação).  
+Classes OOP de RH/engajamento entram depois.
 
 ```bash
 docker compose up -d postgres
@@ -95,6 +96,23 @@ Seed:
 - `master` / `admin123` — MASTER (Conta Matriz + Conta Filial)
 - `admin` / `admin123` — OWNER só da Conta Matriz
 - GRO demo: Planta → Produção → Usinagem → perigo/risco + matriz 5×5
+
+### API GRO (auth Bearer; escrita exige `sst`)
+
+| Recurso | Rotas |
+|---------|--------|
+| Estabelecimentos | `GET/POST /api/establishments`, `PATCH/DELETE …/:id` |
+| Setores | `/api/sectors` |
+| Funções (JobRole) | `/api/job-roles` |
+| Atividades | `/api/activities` |
+| Metodologias | `GET /api/methodologies` |
+| Perigos | `/api/hazards` |
+| Riscos | `/api/risks` |
+| Avaliações | `POST /api/assessments`, `POST …/:id/validate` |
+| Controles | `/api/controls` |
+| Ações | `/api/actions` |
+
+`organizationId` sempre vem da sessão (nunca do body).
 
 ## Prisma
 

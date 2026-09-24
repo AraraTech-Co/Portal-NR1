@@ -27,6 +27,16 @@ function mapToPrismaFields(
     account_id: "accountId",
     user_id: "userId",
     organization_id: "organizationId",
+    establishment_id: "establishmentId",
+    sector_id: "sectorId",
+    job_role_id: "jobRoleId",
+    activity_id: "activityId",
+    hazard_id: "hazardId",
+    risk_id: "riskId",
+    created_by_id: "createdById",
+    assessor_id: "assessorId",
+    validated_by_id: "validatedById",
+    methodology_version_id: "methodologyVersionId",
     date_created: "dateCreated",
   };
 
