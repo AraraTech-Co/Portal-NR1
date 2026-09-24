@@ -26,6 +26,7 @@ import {
   HazardOrigin,
   HazardStatus,
   OccurrenceType,
+  ParticipationType,
   PgrDocumentType,
   SurveyOutcome,
   SurveyTrigger,
@@ -224,6 +225,24 @@ export const CONTRACTOR_RELATION_VALUES: readonly ContractorRelation[] =
 /** Relação padrão ao criar terceiro sem `relation` no body. */
 export const CONTRACTOR_RELATION_DEFAULT = ContractorRelation.WE_HIRE;
 
+// ─── Participação dos trabalhadores (NR-1 1.5.3.3 / 1.5.5.3.2 "d") ───────────
+
+/**
+ * Tipo de registro de participação/consulta.
+ * Na fiscalização, demonstra que os trabalhadores foram ouvidos e informados —
+ * o documento sozinho não basta; evidências anexas reforçam o registro.
+ * - CONSULTATION: consulta formal aos trabalhadores
+ * - CIPA_MANIFESTATION: manifestação / atuação da CIPA
+ * - MEETING: reunião de SST / DDS
+ * - RISK_COMMUNICATION: comunicação de riscos
+ * - BASIC_TRAINING: capacitação básica vinculada à participação
+ * - WORKSHOP: oficina / workshop
+ */
+export const PARTICIPATION_TYPES = ParticipationType;
+
+export const PARTICIPATION_TYPE_VALUES: readonly ParticipationType[] =
+  Object.values(ParticipationType);
+
 // ─── Helpers de validação ────────────────────────────────────────────────────
 
 export function isSurveyTrigger(v: string): v is SurveyTrigger {
@@ -252,4 +271,8 @@ export function isAepMethod(v: string): v is AepMethod {
 
 export function isContractorRelation(v: string): v is ContractorRelation {
   return (CONTRACTOR_RELATION_VALUES as readonly string[]).includes(v);
+}
+
+export function isParticipationType(v: string): v is ParticipationType {
+  return (PARTICIPATION_TYPE_VALUES as readonly string[]).includes(v);
 }

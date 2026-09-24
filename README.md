@@ -121,6 +121,7 @@ Seed:
 | Ocorrências | `GET/POST /api/occurrences`, `GET/PATCH …/:id`, `POST …/analyze`, `…/actions`, `…/evidences` |
 | Emergências | `GET/POST /api/emergency-procedures`, `GET/PATCH/DELETE …/:id`, `POST …/drills`, `GET …/drills/:drillId`, `POST …/drills/:drillId/evidences` |
 | Terceiros | `GET/POST /api/contractors`, `GET/PATCH/DELETE …/:id`, `POST …/documents-received`, `POST …/risks-informed` |
+| Participação | `GET/POST /api/participations`, `GET/PATCH …/:id`, `POST …/evidences` |
 
 `organizationId` sempre vem da sessão (nunca do body).  
 Completar ação exige ≥1 evidência; quem executou não valida; aprovar marca controle como implementado.  
@@ -129,7 +130,8 @@ AEP: questionário exige anonimato; concluir sem fator exige `findings`; `needs_
 Preliminar (1.5.4.2): `IMMEDIATE_MEASURE` exige `measure_taken`; `DEFERRED_TO_ACTION_PLAN` cria Hazard + Action; `ESCALATED_TO_ASSESSMENT` cria Hazard.  
 Ocorrência (1.5.5.5): análise exige os 3 campos da norma; se houver `risk_id`, marca reassessment; ações nascem com `sourceType=OCCURRENCE`.  
 Emergência (1.5.6): procedimento exige meios/responsáveis/evacuação; drill grava exercício; evidência do simulado em `…/drills/:id/evidences` (1.5.6.3.1).  
-Terceiros (1.5.8): `WE_HIRE` / `WE_ARE_HIRED`; `documents-received` (1.5.8.1.1); `risks-informed` + medidas de interação (1.5.8.2–4).
+Terceiros (1.5.8): `WE_HIRE` / `WE_ARE_HIRED`; `documents-received` (1.5.8.1.1); `risks-informed` + medidas de interação (1.5.8.2–4).  
+Participação (1.5.3.3): consulta/CIPA/reunião etc.; evidências anexas demonstram que os trabalhadores foram ouvidos.
 
 Constantes de domínio (enums, limites de upload, PGR obrigatório) ficam em `server/src/constants.ts`.
 
