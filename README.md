@@ -144,6 +144,13 @@ Seed:
 | Férias/licenças | `GET/POST /api/leaves`, `POST …/decide`, `POST …/cancel` |
 | Convocações | `GET/POST /api/summons`, `GET …/:id`, `POST …/invite`, `POST …/attendance` |
 | Treinamentos | `GET/POST /api/trainings`, `GET/DELETE …/:id`, `POST …/enroll|start|complete` |
+| Exigências / certs / ASO | `/api/job-role-requirements`, `/api/worker-certificates`, `/api/occupational-exams` |
+| Clima | `GET/POST /api/climate-surveys`, `…/open|close|respond` |
+| Avaliação 360 | `/api/review-cycles`, `/api/review-assignments/mine`, `…/submit` |
+| Ponto | `GET/POST /api/time-entries` |
+| Gamificação | `/api/point-rules`, `/api/point-entries`, `/api/points/balance`, `/api/rewards` |
+| Indicações | `GET/POST /api/referrals`, `PATCH …/:id` |
+| Onboarding | `GET/POST /api/onboarding-steps`, `POST …/complete` |
 
 Comitê exige grant `ethics_committee` no Membership (ou MASTER). Relato anônimo não grava `reporterUserId`; `access_code` só na criação.  
 Perfil RH: CPF só dígitos (11/14); matrícula/CPF/`user_id` únicos por org; `DELETE` = demissão (`dismissedAt`).  

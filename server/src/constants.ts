@@ -25,6 +25,7 @@ import {
   EnrollmentStatus,
   EvidenceType,
   EvidenceValidationStatus,
+  ExamKind,
   HazardCategory,
   HazardOrigin,
   HazardStatus,
@@ -35,12 +36,15 @@ import {
   OccurrenceType,
   ParticipationType,
   PgrDocumentType,
+  RedemptionStatus,
+  ReferralStatus,
   ReportAuthorSide,
   ReportCategory,
   ReportStatus,
   RequirementKind,
   SummonAttendanceStatus,
   SurveyOutcome,
+  SurveyStatus,
   SurveyTrigger,
 } from "@prisma/client";
 
@@ -421,6 +425,24 @@ export const REQUIREMENT_KINDS = RequirementKind;
 export const REQUIREMENT_KIND_VALUES: readonly RequirementKind[] =
   Object.values(RequirementKind);
 
+/** Tipo de exame ocupacional (NR-7 / ASO). */
+export const EXAM_KINDS = ExamKind;
+export const EXAM_KIND_VALUES: readonly ExamKind[] = Object.values(ExamKind);
+export const EXAM_KIND_DEFAULT = ExamKind.PERIODIC;
+
+/** Status de pesquisa de clima / ciclo de avaliação 360. */
+export const SURVEY_STATUSES = SurveyStatus;
+export const SURVEY_STATUS_VALUES: readonly SurveyStatus[] =
+  Object.values(SurveyStatus);
+
+export const REDEMPTION_STATUSES = RedemptionStatus;
+export const REDEMPTION_STATUS_VALUES: readonly RedemptionStatus[] =
+  Object.values(RedemptionStatus);
+
+export const REFERRAL_STATUSES = ReferralStatus;
+export const REFERRAL_STATUS_VALUES: readonly ReferralStatus[] =
+  Object.values(ReferralStatus);
+
 // ─── Helpers de validação ────────────────────────────────────────────────────
 
 export function isSurveyTrigger(v: string): v is SurveyTrigger {
@@ -499,4 +521,20 @@ export function isEnrollmentStatus(v: string): v is EnrollmentStatus {
 
 export function isRequirementKind(v: string): v is RequirementKind {
   return (REQUIREMENT_KIND_VALUES as readonly string[]).includes(v);
+}
+
+export function isExamKind(v: string): v is ExamKind {
+  return (EXAM_KIND_VALUES as readonly string[]).includes(v);
+}
+
+export function isSurveyStatus(v: string): v is SurveyStatus {
+  return (SURVEY_STATUS_VALUES as readonly string[]).includes(v);
+}
+
+export function isRedemptionStatus(v: string): v is RedemptionStatus {
+  return (REDEMPTION_STATUS_VALUES as readonly string[]).includes(v);
+}
+
+export function isReferralStatus(v: string): v is ReferralStatus {
+  return (REFERRAL_STATUS_VALUES as readonly string[]).includes(v);
 }
