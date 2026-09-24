@@ -79,9 +79,12 @@ Organization (empresa)
 
 MASTER entra em qualquer conta da empresa (mesmo sem membership nela).
 
+O **schema Prisma** já inclui o domínio completo (SST/GRO, RH, saúde, engajamento).  
+Classes OOP e APIs de domínio entram módulo a módulo. O seed popula só auth + GRO mínimo.
+
 ```bash
 docker compose up -d postgres
-npm run db:migrate
+npx prisma db push   # ou migrate deploy
 npm run db:seed
 npm test
 npm run local:dev
@@ -91,6 +94,7 @@ Seed:
 
 - `master` / `admin123` — MASTER (Conta Matriz + Conta Filial)
 - `admin` / `admin123` — OWNER só da Conta Matriz
+- GRO demo: Planta → Produção → Usinagem → perigo/risco + matriz 5×5
 
 ## Prisma
 

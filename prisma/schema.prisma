@@ -1,3 +1,7 @@
+// Schema do portal-nr1 (Express + Prisma).
+// Auth/tenancy adaptado: Role + AccountRole + Token.
+// Domínio SST/RH/engajamento portado do portal-nr1 anterior.
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -12,12 +16,84 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// Papel na conta (acesso / responsabilidade).
-/// OWNER = responsável pela conta, acesso total nela.
-enum AccountRole {
-  OWNER
-  ADMIN
-  USER
+// ============================================================
+// Identidade e tenancy
+// ============================================================
+
+model User {
+  id                  String    @id @default(uuid())
+  /// Login curto único global (sem @). Indexado — o auth resolve por igualdade.
+  login               String    @unique
+  /// Opcional: nenhuma norma pede, e quem não tem entra com o CPF (EmployeeProfile.taxId).
+  email               String?   @unique
+  name                String
+  passwordHash        String
+  active              Boolean   @default(true)
+  /// Só obrigatório para AccountRole.OWNER — admin/user entram sem confirmar.
+  emailVerifiedAt     DateTime?
+  /// Senha definida pelo owner/admin: obrigatório trocar no próximo acesso.
+  mustChangePassword  Boolean   @default(false)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  memberships             Membership[]
+  accountMemberships      AccountMembership[]
+  tokens                  Token[]
+  emailVerificationTokens EmailVerificationToken[]
+  hazardsCreated        Hazard[]         @relation("HazardCreatedBy")
+  assessmentsMade   RiskAssessment[] @relation("AssessmentAssessor")
+  assessmentsValid  RiskAssessment[] @relation("AssessmentValidator")
+  actionsAssigned   Action[]         @relation("ActionAssignee")
+  actionsCreated    Action[]         @relation("ActionCreatedBy")
+  actionsValidated  Action[]         @relation("ActionValidator")
+  evidencesUploaded Evidence[]       @relation("EvidenceUploader")
+  evidencesReviewed Evidence[]       @relation("EvidenceReviewer")
+  changeEvents      ChangeEvent[]    @relation("ChangeEventReporter")
+  auditEvents       AuditEvent[]
+  documentsIssued   PgrDocument[]         @relation("DocumentIssuer")
+  aepsConducted     Aep[]                 @relation("AepConductor")
+  participations    ParticipationRecord[] @relation("ParticipationRecorder")
+  surveysConducted  PreliminarySurvey[]   @relation("SurveyConductor")
+  occurrencesFiled  Occurrence[]          @relation("OccurrenceReporter")
+  occurrencesReviewed Occurrence[]        @relation("OccurrenceAnalyst")
+  drillsRecorded    EmergencyDrill[]      @relation("DrillRecorder")
+  reportsFiled      EthicsReport[]        @relation("ReportReporter")
+  reportMessages    EthicsReportMessage[] @relation("ReportMessageAuthor")
+  employeeProfiles  EmployeeProfile[]
+  ideasAuthored     Idea[]                @relation("IdeaAuthor")
+  ideasDecided      Idea[]                @relation("IdeaDecider")
+  announcements     Announcement[]        @relation("AnnouncementAuthor")
+  announcementReads AnnouncementRead[]
+  hrDocumentsTargeted HrDocument[]        @relation("HrDocumentTarget")
+  hrDocumentsAuthored HrDocument[]        @relation("HrDocumentAuthor")
+  hrDocumentAcks    HrDocumentAck[]
+  payslips          Payslip[]             @relation("PayslipOwner")
+  payslipsPublished Payslip[]             @relation("PayslipPublisher")
+  payslipQuestions  PayslipQuestion[]     @relation("PayslipAsker")
+  payslipAnswers    PayslipQuestion[]     @relation("PayslipAnswerer")
+  certificates      MedicalCertificate[]  @relation("CertificateOwner")
+  certificatesReviewed MedicalCertificate[] @relation("CertificateReviewer")
+  leaves            LeaveRequest[]        @relation("LeaveOwner")
+  leavesDecided     LeaveRequest[]        @relation("LeaveDecider")
+  summonsCreated    Summon[]              @relation("SummonAuthor")
+  summonAttendances SummonAttendance[]
+  trainingsAuthored Training[]            @relation("TrainingAuthor")
+  enrollments       TrainingEnrollment[]  @relation("EnrollmentOwner")
+  workerCertificates WorkerCertificate[]  @relation("WorkerCertificateOwner")
+  workerCertificatesReviewed WorkerCertificate[] @relation("WorkerCertificateReviewer")
+  exams             OccupationalExam[]    @relation("ExamOwner")
+  surveysAuthored   ClimateSurvey[]       @relation("SurveyAuthor")
+  surveyResponses   ClimateResponse[]     @relation("SurveyRespondent")
+  reviewCycles      ReviewCycle[]         @relation("ReviewCycleAuthor")
+  reviewsGiven      ReviewAssignment[]    @relation("Reviewer")
+  reviewsReceived   ReviewAssignment[]    @relation("Reviewee")
+  timeEntries       TimeEntry[]           @relation("TimeEntryOwner")
+  points            PointEntry[]          @relation("PointOwner")
+  pointsGranted     PointEntry[]          @relation("PointGranter")
+  redemptions       RewardRedemption[]    @relation("RedemptionOwner")
+  redemptionsDecided RewardRedemption[]   @relation("RedemptionDecider")
+  referrals         Referral[]            @relation("ReferralAuthor")
+  onboarding        OnboardingProgress[]
 }
 
 /// MASTER = papel na *empresa* (Organization): acima de OWNER, controla todas as contas.
@@ -30,63 +106,121 @@ enum Role {
   COLABORADOR
 }
 
-model User {
-  id                 String   @id @default(uuid()) @db.Uuid
-  login              String   @unique @db.VarChar(64)
-  email              String?  @unique @db.VarChar(256)
-  name               String   @db.VarChar(256)
-  passwordHash       String   @map("password_hash")
-  active             Boolean  @default(true)
-  mustChangePassword Boolean  @default(false) @map("must_change_password")
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
-
-  memberships        Membership[]
-  accountMemberships AccountMembership[]
-  tokens             Token[]
-
-  @@map("user")
+/// Papéis de acesso à conta (Organization → Account → User).
+/// OWNER = responsável pela conta, acesso total nela.
+enum AccountRole {
+  OWNER
+  ADMIN
+  USER
 }
 
 model Organization {
-  id        String   @id @default(uuid()) @db.Uuid
-  name      String   @db.VarChar(256)
-  taxId     String?  @map("tax_id") @db.VarChar(18)
+  id        String   @id @default(uuid())
+  name      String
+  taxId     String? // CNPJ
   active    Boolean  @default(true)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  /// NR-1 1.5.4.4.6: revisão a cada 2 anos; 1.5.4.4.6.1: até 3 anos com
+  /// certificação em sistema de gestão de SST.
+  assessmentReviewMonths Int     @default(24)
+  hasSstCertification    Boolean @default(false)
+  /// NR-1 1.5.7.2: documentos do PGR datados e ASSINADOS sob responsabilidade
+  /// da organização. A norma não define o profissional (OT SIT 3/2023).
+  responsibleName         String?
+  responsibleRole         String?
+  responsibleRegistration String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  memberships Membership[]
-  accounts    Account[]
-
-  @@map("organization")
+  memberships     Membership[]
+  accounts        Account[]
+  establishments  Establishment[]
+  sectors         Sector[]
+  jobRoles        JobRole[]
+  activities      Activity[]
+  hazards         Hazard[]
+  risks           Risk[]
+  methodologies   RiskMethodology[]
+  riskAssessments RiskAssessment[]
+  controls        ControlMeasure[]
+  actions         Action[]
+  evidences       Evidence[]
+  changeEvents    ChangeEvent[]
+  auditEvents     AuditEvent[]
+  documents       PgrDocument[]
+  aeps            Aep[]
+  participations  ParticipationRecord[]
+  surveys         PreliminarySurvey[]
+  occurrences     Occurrence[]
+  emergencyPlans  EmergencyProcedure[]
+  contractors     Contractor[]
+  ethicsReports   EthicsReport[]
+  employeeProfiles EmployeeProfile[]
+  ideas           Idea[]
+  announcements   Announcement[]
+  hrDocuments     HrDocument[]
+  payslips        Payslip[]
+  medicalCertificates MedicalCertificate[]
+  leaves          LeaveRequest[]
+  summons         Summon[]
+  trainings       Training[]
+  jobRoleRequirements JobRoleRequirement[]
+  workerCertificates WorkerCertificate[]
+  exams           OccupationalExam[]
+  climateSurveys  ClimateSurvey[]
+  reviewCycles    ReviewCycle[]
+  timeEntries     TimeEntry[]
+  pointRules      PointRule[]
+  pointEntries    PointEntry[]
+  rewards         Reward[]
+  referrals       Referral[]
+  onboardingSteps OnboardingStep[]
 }
 
-/// Conta de acesso sob uma Organization.
-/// Invariante de aplicação: toda Account ativa tem ≥1 OWNER.
+/// Vínculo pessoa <-> organização. Modelado N:N desde já (consultor multi-org),
+/// mesmo que a UI do MVP trabalhe com uma organização ativa por vez.
+model Membership {
+  id             String   @id @default(uuid())
+  userId         String
+  organizationId String
+  role           Role     @default(COLABORADOR)
+  /// Grants por pessoa, ortogonais ao papel (ex.: "sensitive_data").
+  grants         String[] @default([])
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([organizationId, role])
+}
+
+/// Conta de acesso sob uma Organization. Uma org tem ≥1 Account; cada Account
+/// tem ≥1 User e ≥1 OWNER (invariantes aplicadas na camada de aplicação).
 model Account {
-  id             String   @id @default(uuid()) @db.Uuid
-  organizationId String   @map("organization_id") @db.Uuid
-  name           String   @db.VarChar(256)
+  id             String   @id @default(uuid())
+  organizationId String
+  name           String
   active         Boolean  @default(true)
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   memberships  AccountMembership[]
+  inviteLinks  AccountInviteLink[]
+  joinRequests AccountJoinRequest[]
 
   @@index([organizationId])
-  @@map("account")
 }
 
-/// Vínculo usuário ↔ conta. OWNER é o responsável (acesso total na conta).
+/// Vínculo pessoa <-> conta (owner / admin / user).
 model AccountMembership {
-  id        String      @id @default(uuid()) @db.Uuid
-  accountId String      @map("account_id") @db.Uuid
-  userId    String      @map("user_id") @db.Uuid
+  id        String      @id @default(uuid())
+  accountId String
+  userId    String
   role      AccountRole @default(USER)
-  createdAt DateTime    @default(now()) @map("created_at")
-  updatedAt DateTime    @updatedAt @map("updated_at")
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
 
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -94,36 +228,1748 @@ model AccountMembership {
   @@unique([accountId, userId])
   @@index([accountId, role])
   @@index([userId])
-  @@map("account_membership")
 }
 
-/// Papel operacional do usuário na organização (SST, RH, …).
-model Membership {
-  id             String   @id @default(uuid()) @db.Uuid
-  userId         String   @map("user_id") @db.Uuid
-  organizationId String   @map("organization_id") @db.Uuid
-  role           Role     @default(COLABORADOR)
-  grants         String[] @default([])
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, organizationId])
-  @@index([organizationId, role])
-  @@map("membership")
+/// Quando o papel do convidado é definido: no link ou na aprovação.
+enum InviteRoleMode {
+  FIXED
+  ON_APPROVE
 }
 
-model Token {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
-  tokenHash String   @unique @map("token_hash") @db.VarChar(128)
-  expiresAt DateTime @map("expires_at")
-  createdAt DateTime @default(now()) @map("created_at")
+/// Link público de auto-cadastro numa Account (ex.: terceiros / externos).
+/// Quem abre o link cria um pedido pendente; só vira membro após aprovação.
+model AccountInviteLink {
+  id          String         @id @default(uuid())
+  accountId   String
+  /// Token opaco na URL (/convite/:token).
+  token       String         @unique
+  /// FIXED = role/orgRole do link; ON_APPROVE = escolhidos na aprovação.
+  roleMode    InviteRoleMode @default(ON_APPROVE)
+  /// Papel na conta (usado quando roleMode = FIXED).
+  role        AccountRole    @default(USER)
+  /// Papel operacional na organização (usado quando roleMode = FIXED).
+  orgRole     Role        @default(COLABORADOR)
+  label       String?
+  active      Boolean        @default(true)
+  expiresAt   DateTime?
+  /// null = usos ilimitados.
+  maxUses     Int?
+  usedCount   Int            @default(0)
+  createdById String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, active])
+}
+
+/// Pedido de entrada via link de convite — só vira membro depois que
+/// gerente/admin aprova e define o papel.
+enum JoinRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model AccountJoinRequest {
+  id             String            @id @default(uuid())
+  accountId      String
+  inviteLinkId   String?
+  name           String
+  email          String
+  passwordHash   String
+  status         JoinRequestStatus @default(PENDING)
+  /// Papéis definidos na aprovação.
+  decidedRole    AccountRole?
+  decidedOrgRole Role?
+  decidedById    String?
+  decidedAt      DateTime?
+  decisionNote   String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, status])
+  @@index([email])
+}
+
+/// Token de confirmação de e-mail (somente fluxo de Account OWNER).
+model EmailVerificationToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
-  @@map("token")
+}
+
+
+/// Token JWT emitido no login — permite logout (revogação).
+model Token {
+  id        String   @id @default(uuid())
+  userId    String
+  /// Hash do JWT (não armazena o token em claro).
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ============================================================
+// Operação: Estabelecimento -> Setor -> Função -> Atividade
+// ============================================================
+
+model Establishment {
+  id             String    @id @default(uuid())
+  organizationId String
+  name           String
+  taxId          String?
+  address        String?
+  archivedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization   Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sectors        Sector[]
+  activities     Activity[]
+  changeEvents   ChangeEvent[]
+  documents      PgrDocument[]
+  aeps           Aep[]
+  participations ParticipationRecord[]
+  surveys        PreliminarySurvey[]
+  occurrences    Occurrence[]
+  emergencyPlans EmergencyProcedure[]
+  contractors    Contractor[]
+  ethicsReports  EthicsReport[]
+
+  @@index([organizationId, archivedAt])
+}
+
+model Sector {
+  id              String    @id @default(uuid())
+  organizationId  String
+  establishmentId String
+  name            String
+  description     String?
+  /// NR-1 1.5.7.3.2 "a": caracterização dos processos e ambientes de trabalho.
+  processDescription     String?
+  environmentDescription String?
+  archivedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  establishment Establishment @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+  jobRoles      JobRole[]
+  activities    Activity[]
+  aeps          Aep[]
+
+  @@index([organizationId, archivedAt])
+  @@index([establishmentId])
+}
+
+model JobRole {
+  id             String    @id @default(uuid())
+  organizationId String
+  sectorId       String
+  name           String
+  description    String?
+  archivedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sector       Sector            @relation(fields: [sectorId], references: [id], onDelete: Cascade)
+  activities   ActivityJobRole[]
+  employees    EmployeeProfile[]
+  requirements JobRoleRequirement[]
+
+  @@index([organizationId, archivedAt])
+  @@index([sectorId])
+}
+
+model Activity {
+  id              String    @id @default(uuid())
+  organizationId  String
+  establishmentId String
+  sectorId        String
+  name            String
+  description     String?
+  archivedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization  Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  establishment Establishment     @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+  sector        Sector            @relation(fields: [sectorId], references: [id], onDelete: Cascade)
+  jobRoles      ActivityJobRole[]
+  hazards       Hazard[]
+  aeps          Aep[]
+  surveyItems   PreliminarySurveyItem[]
+
+  @@index([organizationId, archivedAt])
+  @@index([sectorId])
+}
+
+/// N:N — uma função realiza várias atividades; uma atividade envolve várias funções.
+model ActivityJobRole {
+  activityId String
+  jobRoleId  String
+  createdAt  DateTime @default(now())
+
+  activity Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  jobRole  JobRole  @relation(fields: [jobRoleId], references: [id], onDelete: Cascade)
+
+  @@id([activityId, jobRoleId])
+  @@index([jobRoleId])
+}
+
+// ============================================================
+// Perigo -> Risco -> Avaliação -> Controle
+// ============================================================
+
+enum HazardStatus {
+  IDENTIFIED
+  CONFIRMED
+  DISCARDED
+}
+
+/// Natureza do perigo, conforme o agrupamento usado pelo MTE.
+/// PSYCHOSOCIAL é subgrupo de ERGONOMIC na norma, mas fica separado aqui
+/// porque precisa de tratamento próprio na UI e nos relatórios.
+enum HazardCategory {
+  PHYSICAL
+  CHEMICAL
+  BIOLOGICAL
+  ERGONOMIC
+  PSYCHOSOCIAL
+  ACCIDENT
+}
+
+enum HazardOrigin {
+  INSPECTION
+  WORKER_REPORT
+  INCIDENT
+  ROUTINE_REVIEW
+  AI_SUGGESTION
+  OTHER
+}
+
+model Hazard {
+  id             String       @id @default(uuid())
+  organizationId String
+  activityId     String
+  description    String
+  /// Fonte ou circunstância que gera o perigo.
+  source         String?
+  /// Possíveis consequências (dano esperado).
+  consequences   String?
+  /// Grupo exposto (texto no MVP; ExposureGroup vira entidade no pós-MVP).
+  exposedGroup   String?
+  /// NR-1 1.5.7.3.2 "e" + 1.5.5.2.1.1: o número de trabalhadores atingidos
+  /// deve ser usado para AUMENTAR a prioridade da ação (encurtar prazo).
+  exposedWorkersCount Int?
+  /// NR-1 1.5.7.3.2 "g": caracterização da exposição.
+  exposureTime      String?
+  exposureFrequency String?
+  exposureIntensity String?
+  /// NR-1 1.5.7.3.2 "h": análise preliminar/monitoramento (NR-9) e resultados
+  /// da avaliação de ergonomia (NR-17). O vínculo formal com a AEP é `aepId`.
+  monitoringData String?
+  aepId          String?
+  /// Natureza do perigo (a listagem oficial do MTE inclui os psicossociais
+  /// dentro dos fatores ergonômicos).
+  category       HazardCategory @default(ACCIDENT)
+  status         HazardStatus @default(IDENTIFIED)
+  origin         HazardOrigin @default(ROUTINE_REVIEW)
+  createdById    String
+  archivedAt     DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  activity     Activity     @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  createdBy    User         @relation("HazardCreatedBy", fields: [createdById], references: [id])
+  aep          Aep?         @relation(fields: [aepId], references: [id])
+  risks        Risk[]
+
+  @@index([organizationId, archivedAt])
+  @@index([activityId])
+}
+
+model Risk {
+  id                 String    @id @default(uuid())
+  organizationId     String
+  hazardId           String
+  description        String
+  /// Marcado quando um ChangeEvent ou controle implementado exige nova avaliação.
+  needsReassessment  Boolean   @default(false)
+  reassessmentReason String?
+  archivedAt         DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  hazard       Hazard           @relation(fields: [hazardId], references: [id], onDelete: Cascade)
+  assessments  RiskAssessment[]
+  controls     ControlMeasure[]
+  actions      Action[]
+  occurrences  Occurrence[]
+
+  @@index([organizationId, archivedAt])
+  @@index([hazardId])
+}
+
+/// Metodologia de avaliação. NÃO se presume matriz 5x5 como regra legal:
+/// as escalas e a matriz ficam na versão, e a versão usada fica gravada na avaliação.
+model RiskMethodology {
+  id             String    @id @default(uuid())
+  /// null = metodologia global do sistema (seed); preenchido = da organização.
+  organizationId String?
+  name           String
+  description    String?
+  isDefault      Boolean   @default(false)
+  archivedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization?             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  versions     RiskMethodologyVersion[]
+
+  @@index([organizationId])
+}
+
+model RiskMethodologyVersion {
+  id            String   @id @default(uuid())
+  methodologyId String
+  version       Int
+  /// [{value:1,label:"Leve",description:"..."}, ...]
+  severityScale Json
+  probabilityScale Json
+  /// Matriz: {"1-1":"TRIVIAL", ...} mapeando severidade-probabilidade -> nível.
+  matrix        Json
+  /// [{id:"TRIVIAL",label:"Trivial",color:"...",order:1}, ...]
+  levels        Json
+  publishedAt   DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  methodology RiskMethodology  @relation(fields: [methodologyId], references: [id], onDelete: Cascade)
+  assessments RiskAssessment[]
+
+  @@unique([methodologyId, version])
+}
+
+enum AssessmentStatus {
+  DRAFT
+  IN_REVIEW
+  VALIDATED
+  SUPERSEDED
+}
+
+/// Avaliação versionada. Uma avaliação VALIDATED é IMUTÁVEL:
+/// mudança relevante cria nova avaliação e marca a anterior como SUPERSEDED.
+model RiskAssessment {
+  id                    String           @id @default(uuid())
+  organizationId        String
+  riskId                String
+  methodologyVersionId  String
+  severity              Int
+  probability           Int
+  resultingLevel        String
+  severityReason        String?
+  probabilityReason     String?
+  controlsConsidered    String?
+  status                AssessmentStatus @default(DRAFT)
+  assessorId            String
+  assessedAt            DateTime         @default(now())
+  /// Vencimento da revisão (NR-1 1.5.4.4.6): assessedAt + meses da organização.
+  /// Preenchido na validação — rascunho não vence.
+  expiresAt             DateTime?
+  validatedById         String?
+  validatedAt           DateTime?
+  /// Avaliação que substituiu esta (preenchido ao virar SUPERSEDED).
+  supersededById        String?          @unique
+  supersededAt          DateTime?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  organization       Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  risk               Risk                   @relation(fields: [riskId], references: [id], onDelete: Cascade)
+  methodologyVersion RiskMethodologyVersion @relation(fields: [methodologyVersionId], references: [id])
+  assessor           User                   @relation("AssessmentAssessor", fields: [assessorId], references: [id])
+  validatedBy        User?                  @relation("AssessmentValidator", fields: [validatedById], references: [id])
+  supersededBy       RiskAssessment?        @relation("Supersession", fields: [supersededById], references: [id])
+  supersedes         RiskAssessment?        @relation("Supersession")
+
+  @@index([organizationId])
+  @@index([riskId, status])
+}
+
+enum ControlType {
+  ELIMINATION
+  SUBSTITUTION
+  ENGINEERING
+  ADMINISTRATIVE
+  PPE
+}
+
+enum ControlStatus {
+  PLANNED
+  IMPLEMENTED
+  INEFFECTIVE
+  REMOVED
+}
+
+/// Controle != ação para implantar o controle (a Action é que tem prazo e dono).
+model ControlMeasure {
+  id                  String        @id @default(uuid())
+  organizationId      String
+  riskId              String
+  type                ControlType
+  description         String
+  status              ControlStatus @default(PLANNED)
+  implementedAt       DateTime?
+  effectivenessStatus String?
+  archivedAt          DateTime?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  risk         Risk         @relation(fields: [riskId], references: [id], onDelete: Cascade)
+  actions      Action[]
+
+  @@index([organizationId, archivedAt])
+  @@index([riskId])
+}
+
+// ============================================================
+// Ação -> Evidência -> Validação
+// ============================================================
+
+enum ActionStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_VALIDATION
+  VALIDATED
+  CLOSED
+  CANCELLED
+}
+
+enum ActionPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+/// Origem da ação. FKs explícitas e nuláveis em vez de referência polimórfica
+/// por string (integridade garantida pelo banco).
+enum ActionSourceType {
+  RISK
+  CHANGE_EVENT
+  OCCURRENCE
+  AUDIT
+  LEGAL_REQUIREMENT
+  MANUAL
+}
+
+model Action {
+  id             String           @id @default(uuid())
+  organizationId String
+  title          String
+  description    String?
+  sourceType     ActionSourceType @default(MANUAL)
+  riskId         String?
+  changeEventId  String?
+  controlId      String?
+  occurrenceId   String?
+  priority       ActionPriority   @default(MEDIUM)
+  status         ActionStatus     @default(OPEN)
+  assigneeId     String?
+  dueDate        DateTime?
+  /// NR-1 1.5.5.2.2: além de cronograma, responsável e acompanhamento, o plano
+  /// de ação exige AFERIÇÃO DE RESULTADOS — como a eficácia será medida.
+  effectivenessCriteria String?
+  /// Resultado aferido, preenchido por quem valida.
+  effectivenessResult   String?
+  createdById    String
+  completedAt    DateTime?
+  /// Preenchido pelo validador ao aprovar/rejeitar a conclusão.
+  validatedById  String?
+  validatedAt    DateTime?
+  rejectionReason String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  risk         Risk?           @relation(fields: [riskId], references: [id])
+  changeEvent  ChangeEvent?    @relation(fields: [changeEventId], references: [id])
+  control      ControlMeasure? @relation(fields: [controlId], references: [id])
+  occurrence   Occurrence?     @relation(fields: [occurrenceId], references: [id])
+  assignee     User?           @relation("ActionAssignee", fields: [assigneeId], references: [id])
+  createdBy    User            @relation("ActionCreatedBy", fields: [createdById], references: [id])
+  validatedBy  User?           @relation("ActionValidator", fields: [validatedById], references: [id])
+  evidences    Evidence[]
+
+  @@index([organizationId, status])
+  @@index([assigneeId, status])
+  @@index([riskId])
+}
+
+enum EvidenceType {
+  PHOTO
+  VIDEO
+  DOCUMENT
+  CERTIFICATE
+  CHECKLIST
+  MEASUREMENT
+  INVOICE
+  INSPECTION
+  SIGNATURE
+  OTHER
+}
+
+enum EvidenceValidationStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+/// Evidência é entidade de primeira classe (não "attachments[]").
+/// Arquivo fica em storage privado; o caminho NUNCA é servido estaticamente.
+model Evidence {
+  id               String                   @id @default(uuid())
+  organizationId   String
+  type             EvidenceType             @default(DOCUMENT)
+  /// Caminho relativo dentro do UPLOADS_DIR (privado).
+  storagePath      String
+  fileName         String
+  mimeType         String
+  sizeBytes        Int
+  description      String?
+  /// Data do fato registrado (pode ser anterior ao upload).
+  eventDate        DateTime?
+  uploadedById     String
+  uploadedAt       DateTime                 @default(now())
+  validationStatus EvidenceValidationStatus @default(PENDING)
+  reviewedById     String?
+  reviewedAt       DateTime?
+  /// A evidência pode pender de várias entidades. FKs explícitas e nuláveis
+  /// em vez de par polimórfico (entityType, entityId) sem integridade.
+  actionId         String?
+  participationId  String?
+  occurrenceId     String?
+  drillId          String?
+  aepId            String?
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+
+  organization  Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  action        Action?              @relation(fields: [actionId], references: [id], onDelete: Cascade)
+  participation ParticipationRecord? @relation(fields: [participationId], references: [id], onDelete: Cascade)
+  occurrence    Occurrence?          @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
+  drill         EmergencyDrill?      @relation(fields: [drillId], references: [id], onDelete: Cascade)
+  aep           Aep?                 @relation(fields: [aepId], references: [id], onDelete: Cascade)
+  uploadedBy    User                 @relation("EvidenceUploader", fields: [uploadedById], references: [id])
+  reviewedBy    User?                @relation("EvidenceReviewer", fields: [reviewedById], references: [id])
+
+  @@index([organizationId])
+  @@index([actionId])
+  @@index([participationId])
+  @@index([occurrenceId])
+}
+
+// ============================================================
+// Mudança e auditoria
+// ============================================================
+
+enum ChangeEventType {
+  NEW_EQUIPMENT
+  PROCESS_CHANGE
+  ENVIRONMENT_CHANGE
+  JOB_CHANGE
+  NEW_ACTIVITY
+  CHEMICAL_CHANGE
+  WORK_SCHEDULE_CHANGE
+  ORGANIZATIONAL_CHANGE
+  ACCIDENT
+  DANGEROUS_EVENT
+  LEGAL_CHANGE
+  WORKER_REQUEST
+  CONTROL_IMPLEMENTED
+}
+
+model ChangeEvent {
+  id              String          @id @default(uuid())
+  organizationId  String
+  establishmentId String?
+  type            ChangeEventType
+  description     String
+  occurredAt      DateTime        @default(now())
+  reportedById    String
+  createdAt       DateTime        @default(now())
+
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  establishment Establishment? @relation(fields: [establishmentId], references: [id])
+  reportedBy    User           @relation("ChangeEventReporter", fields: [reportedById], references: [id])
+  actions       Action[]
+
+  @@index([organizationId, occurredAt])
+}
+
+/// Trilha de auditoria dos eventos críticos. Append-only.
+model AuditEvent {
+  id             String   @id @default(uuid())
+  organizationId String
+  actorId        String?
+  action         String
+  entityType     String
+  entityId       String
+  before         Json?
+  after          Json?
+  context        Json?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actor        User?        @relation(fields: [actorId], references: [id])
+
+  @@index([organizationId, createdAt])
+  @@index([entityType, entityId])
+}
+
+// ============================================================
+// Documentos do PGR — emissão datada e assinada (NR-1 1.5.7.2)
+// ============================================================
+
+enum PgrDocumentType {
+  INVENTORY
+  ACTION_PLAN
+  /// Documento dos critérios do GRO (1.5.4.4.2.2) — o terceiro documento
+  /// obrigatório, que o MTE lista ao lado do inventário e do plano de ação.
+  CRITERIA
+  AEP
+}
+
+/// Emissão de um documento do PGR: congela o estado do registro vivo num
+/// instante, com responsável e data. O banco continua sendo a fonte da
+/// verdade; o documento é a projeção assinada daquele momento.
+model PgrDocument {
+  id              String          @id @default(uuid())
+  organizationId  String
+  establishmentId String?
+  type            PgrDocumentType
+  version         Int
+  /// Snapshot do conteúdo emitido (o que foi assinado, não o estado de hoje).
+  content         Json
+  issuedAt        DateTime        @default(now())
+  issuedById      String
+  responsibleName         String
+  responsibleRole         String?
+  responsibleRegistration String?
+  /// Aceite eletrônico registrado no momento da emissão.
+  signatureStatement String
+  createdAt       DateTime        @default(now())
+
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  establishment Establishment? @relation(fields: [establishmentId], references: [id])
+  issuedBy      User           @relation("DocumentIssuer", fields: [issuedById], references: [id])
+
+  @@unique([organizationId, type, establishmentId, version])
+  @@index([organizationId, type, issuedAt])
+}
+
+// ============================================================
+// AEP — Avaliação Ergonômica Preliminar (NR-17 17.3.1)
+// Obrigatória para TODAS as organizações e situações de trabalho,
+// inclusive ME/EPP dispensadas de PGR. É por aqui que os fatores
+// psicossociais entram no GRO.
+// ============================================================
+
+enum AepMethod {
+  OBSERVATION
+  INTERVIEW
+  QUESTIONNAIRE
+  WORKSHOP
+  FOCUS_GROUP
+  COMBINED
+}
+
+enum AepStatus {
+  DRAFT
+  CONCLUDED
+}
+
+model Aep {
+  id              String    @id @default(uuid())
+  organizationId  String
+  establishmentId String
+  sectorId        String?
+  activityId      String?
+  /// Unidade de avaliação (atividade, posto, função, setor ou GES).
+  scopeDescription String
+  method          AepMethod @default(OBSERVATION)
+  /// Justificativa técnica do método — o MTE não impõe ferramenta, mas cobra
+  /// consistência e adequação ao contexto avaliado.
+  methodRationale String?
+  /// Quando houver questionário: registrar como o anonimato foi garantido.
+  anonymityMeasures String?
+  workersConsulted  Int?
+  findings        String?
+  status          AepStatus @default(DRAFT)
+  conductedById   String
+  conductedAt     DateTime  @default(now())
+  concludedAt     DateTime?
+  /// NR-17 17.3.2 — AET é condicional; registrar quando for necessária e por quê.
+  needsAet        Boolean   @default(false)
+  aetReason       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  establishment Establishment @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+  sector        Sector?       @relation(fields: [sectorId], references: [id])
+  activity      Activity?     @relation(fields: [activityId], references: [id])
+  conductedBy   User          @relation("AepConductor", fields: [conductedById], references: [id])
+  hazards       Hazard[]
+  evidences     Evidence[]
+
+  @@index([organizationId, status])
+  @@index([establishmentId])
+}
+
+// ============================================================
+// Participação e consulta aos trabalhadores (NR-1 1.5.3.3 e 1.5.5.3.2 "d")
+// ============================================================
+
+enum ParticipationType {
+  CONSULTATION
+  CIPA_MANIFESTATION
+  MEETING
+  RISK_COMMUNICATION
+  BASIC_TRAINING
+  WORKSHOP
+}
+
+/// Evidência de que os trabalhadores foram efetivamente ouvidos e informados.
+/// Na fiscalização, é o que demonstra participação — não basta o documento.
+model ParticipationRecord {
+  id              String            @id @default(uuid())
+  organizationId  String
+  establishmentId String?
+  type            ParticipationType
+  subject         String
+  description     String?
+  occurredAt      DateTime
+  participantsCount Int?
+  recordedById    String
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  establishment Establishment? @relation(fields: [establishmentId], references: [id])
+  recordedBy    User           @relation("ParticipationRecorder", fields: [recordedById], references: [id])
+  evidences     Evidence[]
+
+  @@index([organizationId, occurredAt])
+}
+
+// ============================================================
+// Levantamento preliminar de perigos e riscos (NR-1 1.5.4.2)
+// ============================================================
+
+enum SurveyTrigger {
+  BEFORE_START
+  EXISTING_ACTIVITIES
+  CHANGE_OR_NEW_PROCESS
+}
+
+enum SurveyOutcome {
+  /// 1.5.4.2.1.1 "a": foi possível evitar ou eliminar o perigo.
+  HAZARD_AVOIDED
+  /// 1.5.4.2.1.1 "b": risco evidente com medida imediata adotada.
+  IMMEDIATE_MEASURE
+  /// 1.5.4.2.1.3: sem medida imediata — vai para o plano de ação e o inventário.
+  DEFERRED_TO_ACTION_PLAN
+  /// 1.5.4.2.1.2: segue para o processo completo de identificação e avaliação.
+  ESCALATED_TO_ASSESSMENT
+}
+
+model PreliminarySurvey {
+  id              String        @id @default(uuid())
+  organizationId  String
+  establishmentId String
+  trigger         SurveyTrigger
+  description     String?
+  conductedById   String
+  conductedAt     DateTime      @default(now())
+  createdAt       DateTime      @default(now())
+
+  organization  Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  establishment Establishment           @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+  conductedBy   User                    @relation("SurveyConductor", fields: [conductedById], references: [id])
+  items         PreliminarySurveyItem[]
+
+  @@index([organizationId, conductedAt])
+}
+
+model PreliminarySurveyItem {
+  id          String        @id @default(uuid())
+  surveyId    String
+  activityId  String?
+  description String
+  outcome     SurveyOutcome
+  measureTaken String?
+  createdAt   DateTime      @default(now())
+
+  survey   PreliminarySurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  activity Activity?         @relation(fields: [activityId], references: [id])
+
+  @@index([surveyId])
+}
+
+// ============================================================
+// Ocorrências: análise de acidentes e doenças (NR-1 1.5.5.5)
+// Infração de grau 4 na NR-28 — o mais grave do capítulo 1.5.
+// ============================================================
+
+enum OccurrenceType {
+  ACCIDENT
+  OCCUPATIONAL_DISEASE
+  /// 1.5.5.5.1.1: evento perigoso que poderia ter tido consequências graves.
+  DANGEROUS_EVENT
+}
+
+model Occurrence {
+  id              String         @id @default(uuid())
+  organizationId  String
+  establishmentId String?
+  riskId          String?
+  type            OccurrenceType
+  occurredAt      DateTime
+  description     String
+  /// 1.5.5.5.2 "a": situações geradoras — atividade real, ambiente, materiais,
+  /// processo produtivo e ORGANIZAÇÃO DO TRABALHO.
+  generatingSituation String?
+  /// 1.5.5.5.2 "b": dados da organização, epidemiológicos e informações
+  /// prestadas pelos trabalhadores.
+  organizationalData  String?
+  /// 1.5.5.5.2 "c": evidências para revisar e aprimorar as medidas existentes.
+  preventionReview    String?
+  analyzedById    String?
+  analyzedAt      DateTime?
+  reportedById    String
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  establishment Establishment? @relation(fields: [establishmentId], references: [id])
+  risk          Risk?          @relation(fields: [riskId], references: [id])
+  reportedBy    User           @relation("OccurrenceReporter", fields: [reportedById], references: [id])
+  analyzedBy    User?          @relation("OccurrenceAnalyst", fields: [analyzedById], references: [id])
+  actions       Action[]
+  evidences     Evidence[]
+
+  @@index([organizationId, occurredAt])
+}
+
+// ============================================================
+// Preparação e resposta a emergências (NR-1 1.5.6)
+// ============================================================
+
+model EmergencyProcedure {
+  id              String   @id @default(uuid())
+  organizationId  String
+  establishmentId String
+  scenario        String
+  /// 1.5.6.2 "a": meios, responsáveis e recursos para primeiros socorros,
+  /// encaminhamento de acidentados e abandono do local.
+  firstAidMeans   String?
+  responsibles    String?
+  evacuationPlan  String?
+  /// 1.5.6.2 "b": medidas para emergências de grande magnitude, quando aplicável.
+  largeScaleMeasures String?
+  /// 1.5.6.3: periodicidade dos exercícios simulados, definida no procedimento.
+  drillFrequencyMonths Int?
+  archivedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization  Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  establishment Establishment    @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+  drills        EmergencyDrill[]
+
+  @@index([organizationId, archivedAt])
+}
+
+/// 1.5.6.3.1: devem ser geradas evidências do exercício simulado realizado.
+model EmergencyDrill {
+  id           String   @id @default(uuid())
+  procedureId  String
+  performedAt  DateTime
+  participants Int?
+  findings     String?
+  recordedById String
+  createdAt    DateTime @default(now())
+
+  procedure  EmergencyProcedure @relation(fields: [procedureId], references: [id], onDelete: Cascade)
+  recordedBy User               @relation("DrillRecorder", fields: [recordedById], references: [id])
+  evidences  Evidence[]
+
+  @@index([procedureId, performedAt])
+}
+
+// ============================================================
+// Terceiros (NR-1 1.5.8)
+// ============================================================
+
+enum ContractorRelation {
+  /// Somos a contratante e recebemos o inventário da contratada (1.5.8.1.1).
+  WE_HIRE
+  /// Somos a contratada e fornecemos nosso inventário à contratante.
+  WE_ARE_HIRED
+}
+
+model Contractor {
+  id              String             @id @default(uuid())
+  organizationId  String
+  establishmentId String?
+  name            String
+  taxId           String?
+  relation        ContractorRelation @default(WE_HIRE)
+  servicesScope   String?
+  /// 1.5.8.1.1: inventário e plano de ação recebidos da contratada.
+  documentsReceivedAt DateTime?
+  documentsNotes      String?
+  /// 1.5.8.2 e 1.5.8.3: informação recíproca dos riscos que impactam o outro.
+  risksInformedAt     DateTime?
+  /// 1.5.8.4: riscos de interação, tratados em conjunto sob coordenação da contratante.
+  interactionMeasures String?
+  archivedAt      DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  establishment Establishment? @relation(fields: [establishmentId], references: [id])
+
+  @@index([organizationId, archivedAt])
+}
+
+// Relações inversas dos novos modelos nos já existentes ficam declaradas
+// nos próprios modelos (Prisma exige os dois lados).
+
+// ============================================================
+// Canal de denúncia (Lei 14.457/2022, art. 23, II)
+// Anonimato REAL: relato anônimo não grava identidade nenhuma.
+// O acompanhamento é por protocolo + código de acesso (ADR-16).
+// Acesso exige o grant "ethics_committee" no Membership (ADR-17).
+// ============================================================
+
+enum ReportCategory {
+  HARASSMENT_MORAL
+  HARASSMENT_SEXUAL
+  DISCRIMINATION
+  MISCONDUCT
+  FRAUD_OR_MISUSE
+  DATA_LEAK
+  SAFETY_RISK
+  OTHER
+}
+
+enum ReportStatus {
+  RECEIVED
+  IN_ANALYSIS
+  AWAITING_INFO
+  RESOLVED
+  ARCHIVED
+}
+
+model EthicsReport {
+  id             String         @id @default(uuid())
+  organizationId String
+  /// Código público do protocolo, ex.: "CX-7232". Único por organização.
+  protocol       String
+  category       ReportCategory
+  description    String
+  /// Quando true, `reporterUserId` É NULO — não existe vínculo com pessoa.
+  isAnonymous    Boolean        @default(true)
+  reporterUserId String?
+  /// Hash do código de acompanhamento (bcrypt). O código em claro só existe
+  /// na tela, uma vez, para quem relatou.
+  accessCodeHash String
+  status         ReportStatus   @default(RECEIVED)
+  establishmentId String?
+  /// Ponte com o GRO: um relato pode virar perigo psicossocial na AEP.
+  linkedHazardId String?
+  resolutionNote String?
+  resolvedAt     DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  organization  Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  establishment Establishment?       @relation(fields: [establishmentId], references: [id])
+  reporter      User?                @relation("ReportReporter", fields: [reporterUserId], references: [id])
+  messages      EthicsReportMessage[]
+
+  @@unique([organizationId, protocol])
+  @@index([organizationId, status])
+}
+
+enum ReportAuthorSide {
+  REPORTER
+  COMMITTEE
+}
+
+model EthicsReportMessage {
+  id       String           @id @default(uuid())
+  reportId String
+  side     ReportAuthorSide
+  body     String
+  /// Só preenchido do lado do comitê. Do lado do denunciante fica nulo,
+  /// mesmo em relato identificado, para o histórico não virar rastro.
+  authorUserId String?
+  createdAt DateTime        @default(now())
+  readByCommitteeAt DateTime?
+  readByReporterAt  DateTime?
+
+  report EthicsReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  author User?        @relation("ReportMessageAuthor", fields: [authorUserId], references: [id])
+
+  @@index([reportId, createdAt])
+}
+
+// ============================================================
+// PARIDADE COM A PLATAFORMA DO CLIENTE (ADR-14)
+// Módulos de RH, engajamento e conformidade documental.
+// ============================================================
+
+/// Dados de pessoa dentro de UMA organização. Não vira campo em User porque
+/// a mesma pessoa pode ter matrícula e função diferentes em cada empresa.
+model EmployeeProfile {
+  id             String    @id @default(uuid())
+  organizationId String
+  userId         String
+  registration   String?
+  taxId          String?
+  phone          String?
+  jobRoleId      String?
+  admittedAt     DateTime?
+  dismissedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobRole      JobRole?     @relation(fields: [jobRoleId], references: [id])
+
+  /// Um CPF por empresa (só dígitos). NR-7 7.5.19.1 b.
+  @@unique([organizationId, taxId])
+  /// Uma matrícula por empresa: é a chave que casa o holerite do lote.
+  @@unique([organizationId, registration])
+  @@unique([organizationId, userId])
+  @@index([organizationId, dismissedAt])
+}
+
+// ---------- Ideias ----------
+
+enum IdeaStatus {
+  NEW
+  IN_ANALYSIS
+  IMPLEMENTED
+  REJECTED
+}
+
+model Idea {
+  id             String     @id @default(uuid())
+  organizationId String
+  authorUserId   String
+  title          String
+  description    String
+  status         IdeaStatus @default(NEW)
+  decisionNote   String?
+  decidedById    String?
+  decidedAt      DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  author       User         @relation("IdeaAuthor", fields: [authorUserId], references: [id])
+  decidedBy    User?        @relation("IdeaDecider", fields: [decidedById], references: [id])
+
+  @@index([organizationId, status])
+}
+
+// ---------- Mural de avisos ----------
+
+enum AnnouncementKind {
+  NOTICE
+  CAMPAIGN
+  TRAINING
+}
+
+model Announcement {
+  id             String           @id @default(uuid())
+  organizationId String
+  kind           AnnouncementKind @default(NOTICE)
+  title          String
+  body           String
+  happensAt      DateTime?
+  expiresAt      DateTime?
+  publishedById  String
+  createdAt      DateTime         @default(now())
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  publishedBy  User              @relation("AnnouncementAuthor", fields: [publishedById], references: [id])
+  reads        AnnouncementRead[]
+
+  @@index([organizationId, createdAt])
+}
+
+/// Confirmação de leitura por pessoa — é o que prova comunicação de risco
+/// (NR-1 1.5.3.3 "c") e capacitação sobre assédio (Lei 14.457, art. 23, I).
+model AnnouncementRead {
+  announcementId String
+  userId         String
+  readAt         DateTime @default(now())
+
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([announcementId, userId])
+}
+
+// ---------- Documentos de RH ----------
+
+enum HrDocumentKind {
+  CONTRACT
+  WARNING
+  NOTICE
+  RECEIPT
+  TERM
+  OTHER
+}
+
+model HrDocument {
+  id             String         @id @default(uuid())
+  organizationId String
+  kind           HrDocumentKind @default(OTHER)
+  title          String
+  description    String?
+  storagePath    String
+  fileName       String
+  mimeType       String
+  sizeBytes      Int
+  /// Documento que exige devolutiva: a pessoa precisa dar ciência.
+  requiresAck    Boolean        @default(false)
+  /// Nulo = documento geral, para toda a organização.
+  targetUserId   String?
+  publishedById  String
+  createdAt      DateTime       @default(now())
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  target       User?           @relation("HrDocumentTarget", fields: [targetUserId], references: [id])
+  publishedBy  User            @relation("HrDocumentAuthor", fields: [publishedById], references: [id])
+  acks         HrDocumentAck[]
+
+  @@index([organizationId, createdAt])
+}
+
+model HrDocumentAck {
+  documentId     String
+  userId         String
+  readAt         DateTime  @default(now())
+  acknowledgedAt DateTime?
+
+  document HrDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([documentId, userId])
+}
+
+// ---------- Holerites ----------
+
+model Payslip {
+  id             String   @id @default(uuid())
+  organizationId String
+  userId         String
+  referenceMonth Int
+  referenceYear  Int
+  storagePath    String
+  fileName       String
+  publishedById  String
+  publishedAt    DateTime @default(now())
+  viewedAt       DateTime?
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User              @relation("PayslipOwner", fields: [userId], references: [id], onDelete: Cascade)
+  publishedBy  User              @relation("PayslipPublisher", fields: [publishedById], references: [id])
+  questions    PayslipQuestion[]
+
+  @@unique([organizationId, userId, referenceYear, referenceMonth])
+  @@index([organizationId, referenceYear, referenceMonth])
+}
+
+model PayslipQuestion {
+  id           String    @id @default(uuid())
+  payslipId    String
+  askedById    String
+  body         String
+  answer       String?
+  answeredById String?
+  answeredAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  payslip    Payslip @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+  askedBy    User    @relation("PayslipAsker", fields: [askedById], references: [id])
+  answeredBy User?   @relation("PayslipAnswerer", fields: [answeredById], references: [id])
+
+  @@index([payslipId])
+}
+
+// ---------- Atestados ----------
+
+enum CertificateStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model MedicalCertificate {
+  id             String            @id @default(uuid())
+  organizationId String
+  userId         String
+  /// CID é dado de saúde: opcional, e a lista da UI existe para não exigir
+  /// que a pessoa saiba o código.
+  cid            String?
+  reason         String?
+  startDate      DateTime
+  days           Int
+  storagePath    String?
+  fileName       String?
+  status         CertificateStatus @default(PENDING)
+  rejectionReason String?
+  reviewedById   String?
+  reviewedAt     DateTime?
+  /// Recusa não lida é motivo de alerta: a pessoa pode não saber que faltou.
+  readByWorkerAt DateTime?
+  createdAt      DateTime          @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation("CertificateOwner", fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy   User?        @relation("CertificateReviewer", fields: [reviewedById], references: [id])
+
+  @@index([organizationId, status])
+}
+
+// ---------- Férias e licenças ----------
+
+enum LeaveKind {
+  VACATION
+  LEAVE
+  DAY_OFF
+}
+
+enum LeaveStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model LeaveRequest {
+  id             String      @id @default(uuid())
+  organizationId String
+  userId         String
+  kind           LeaveKind   @default(VACATION)
+  startDate      DateTime
+  endDate        DateTime
+  days           Int
+  note           String?
+  status         LeaveStatus @default(REQUESTED)
+  decisionNote   String?
+  decidedById    String?
+  decidedAt      DateTime?
+  createdAt      DateTime    @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation("LeaveOwner", fields: [userId], references: [id], onDelete: Cascade)
+  decidedBy    User?        @relation("LeaveDecider", fields: [decidedById], references: [id])
+
+  @@index([organizationId, status])
+}
+
+// ---------- Convocações ----------
+
+enum SummonAttendanceStatus {
+  INVITED
+  CONFIRMED
+  ATTENDED
+  ABSENT
+}
+
+model Summon {
+  id             String   @id @default(uuid())
+  organizationId String
+  title          String
+  description    String?
+  scheduledFor   DateTime
+  location       String?
+  createdById    String
+  createdAt      DateTime @default(now())
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User               @relation("SummonAuthor", fields: [createdById], references: [id])
+  attendances  SummonAttendance[]
+
+  @@index([organizationId, scheduledFor])
+}
+
+model SummonAttendance {
+  summonId    String
+  userId      String
+  status      SummonAttendanceStatus @default(INVITED)
+  confirmedAt DateTime?
+
+  summon Summon @relation(fields: [summonId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([summonId, userId])
+}
+
+// ---------- Treinamentos ----------
+
+model Training {
+  id             String    @id @default(uuid())
+  organizationId String
+  title          String
+  category       String     @default("GERAL")
+  summary        String?
+  durationMinutes Int       @default(30)
+  points         Int        @default(100)
+  videoUrl       String?
+  /// NR-1 1.7.1.2.2: quando a NR não fixa periodicidade, o prazo é do
+  /// empregador. Nulo = sem reciclagem obrigatória.
+  validityMonths Int?
+  archivedAt     DateTime?
+  createdById    String
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User                 @relation("TrainingAuthor", fields: [createdById], references: [id])
+  slides       TrainingSlide[]
+  questions    TrainingQuestion[]
+  enrollments  TrainingEnrollment[]
+  requirements JobRoleRequirement[]
+
+  @@index([organizationId, archivedAt])
+}
+
+model TrainingSlide {
+  id         String  @id @default(uuid())
+  trainingId String
+  order      Int
+  title      String?
+  body       String?
+  imagePath  String?
+
+  training Training @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+
+  @@unique([trainingId, order])
+}
+
+model TrainingQuestion {
+  id            String @id @default(uuid())
+  trainingId    String
+  order         Int
+  prompt        String
+  options       Json
+  correctIndex  Int
+
+  training Training @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+
+  @@unique([trainingId, order])
+}
+
+enum EnrollmentStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+}
+
+model TrainingEnrollment {
+  id              String           @id @default(uuid())
+  trainingId      String
+  userId          String
+  status          EnrollmentStatus @default(PENDING)
+  startedAt       DateTime?
+  completedAt     DateTime?
+  score           Int?
+  /// Código do certificado (NR-1 1.7.1.1) e vencimento derivado da validade.
+  certificateCode String?          @unique
+  expiresAt       DateTime?
+
+  training Training @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+  user     User     @relation("EnrollmentOwner", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([trainingId, userId])
+  @@index([userId, status])
+}
+
+// ---------- Saúde ocupacional e exigências por função ----------
+
+enum RequirementKind {
+  CERTIFICATE
+  EXAM
+  TRAINING
+}
+
+/// Regra por função: "Motorista exige CNH D/E, MOPP, ASO". É o motor que gera
+/// as pendências por pessoa.
+model JobRoleRequirement {
+  id             String          @id @default(uuid())
+  organizationId String
+  jobRoleId      String
+  kind           RequirementKind @default(CERTIFICATE)
+  name           String
+  description    String?
+  /// Quando a exigência é um treinamento do próprio portal.
+  trainingId     String?
+  validityMonths Int?
+  createdAt      DateTime        @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  jobRole      JobRole      @relation(fields: [jobRoleId], references: [id], onDelete: Cascade)
+  training     Training?    @relation(fields: [trainingId], references: [id])
+  certificates WorkerCertificate[]
+
+  @@index([organizationId, jobRoleId])
+}
+
+model WorkerCertificate {
+  id             String            @id @default(uuid())
+  organizationId String
+  userId         String
+  requirementId  String?
+  name           String
+  storagePath    String?
+  fileName       String?
+  issuedAt       DateTime?
+  expiresAt      DateTime?
+  status         CertificateStatus @default(PENDING)
+  reviewedById   String?
+  reviewedAt     DateTime?
+  createdAt      DateTime          @default(now())
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User                @relation("WorkerCertificateOwner", fields: [userId], references: [id], onDelete: Cascade)
+  requirement  JobRoleRequirement? @relation(fields: [requirementId], references: [id])
+  reviewedBy   User?               @relation("WorkerCertificateReviewer", fields: [reviewedById], references: [id])
+
+  @@index([organizationId, status])
+}
+
+enum ExamKind {
+  ADMISSIONAL
+  PERIODIC
+  RETURN_TO_WORK
+  ROLE_CHANGE
+  DISMISSAL
+}
+
+/// Exame ocupacional e ASO (NR-7). O portal acompanha prazo; o laudo é do médico.
+model OccupationalExam {
+  id             String   @id @default(uuid())
+  organizationId String
+  userId         String
+  kind           ExamKind @default(PERIODIC)
+  performedAt    DateTime?
+  dueAt          DateTime?
+  fit            Boolean?
+  storagePath    String?
+  fileName       String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation("ExamOwner", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, dueAt])
+}
+
+// ---------- Clima organizacional ----------
+
+enum SurveyStatus {
+  DRAFT
+  OPEN
+  CLOSED
+}
+
+/// Pesquisa de clima. Quando anônima, a resposta não guarda quem respondeu —
+/// mesmo princípio do canal de denúncia (ADR-16), e o que sustenta usar o
+/// resultado como insumo psicossocial da AEP sem expor ninguém.
+model ClimateSurvey {
+  id             String       @id @default(uuid())
+  organizationId String
+  title          String
+  description    String?
+  isAnonymous    Boolean      @default(true)
+  status         SurveyStatus @default(DRAFT)
+  opensAt        DateTime?
+  closesAt       DateTime?
+  createdById    String
+  createdAt      DateTime     @default(now())
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User              @relation("SurveyAuthor", fields: [createdById], references: [id])
+  questions    ClimateQuestion[]
+  responses    ClimateResponse[]
+
+  @@index([organizationId, status])
+}
+
+model ClimateQuestion {
+  id       String @id @default(uuid())
+  surveyId String
+  order    Int
+  prompt   String
+  /// Fator psicossocial de referência, quando a pergunta mira um deles.
+  factorId String?
+
+  survey  ClimateSurvey    @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  answers ClimateAnswer[]
+
+  @@unique([surveyId, order])
+}
+
+model ClimateResponse {
+  id          String   @id @default(uuid())
+  surveyId    String
+  /// Nulo quando a pesquisa é anônima — e aí não há como voltar à pessoa.
+  userId      String?
+  submittedAt DateTime @default(now())
+
+  survey  ClimateSurvey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  user    User?           @relation("SurveyRespondent", fields: [userId], references: [id])
+  answers ClimateAnswer[]
+
+  @@index([surveyId])
+}
+
+model ClimateAnswer {
+  id         String  @id @default(uuid())
+  responseId String
+  questionId String
+  score      Int?
+  text       String?
+
+  response ClimateResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  question ClimateQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([responseId])
+}
+
+// ---------- Avaliação 360 ----------
+
+model ReviewCycle {
+  id             String       @id @default(uuid())
+  organizationId String
+  title          String
+  status         SurveyStatus @default(DRAFT)
+  opensAt        DateTime?
+  closesAt       DateTime?
+  createdById    String
+  createdAt      DateTime     @default(now())
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User               @relation("ReviewCycleAuthor", fields: [createdById], references: [id])
+  assignments  ReviewAssignment[]
+
+  @@index([organizationId, status])
+}
+
+model ReviewAssignment {
+  id             String    @id @default(uuid())
+  cycleId        String
+  reviewerUserId String
+  revieweeUserId String
+  submittedAt    DateTime?
+
+  cycle    ReviewCycle    @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  reviewer User           @relation("Reviewer", fields: [reviewerUserId], references: [id], onDelete: Cascade)
+  reviewee User           @relation("Reviewee", fields: [revieweeUserId], references: [id], onDelete: Cascade)
+  answers  ReviewAnswer[]
+
+  @@unique([cycleId, reviewerUserId, revieweeUserId])
+  @@index([revieweeUserId])
+}
+
+model ReviewAnswer {
+  id           String  @id @default(uuid())
+  assignmentId String
+  competency   String
+  score        Int
+  comment      String?
+
+  assignment ReviewAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  @@index([assignmentId])
+}
+
+// ---------- Banco de horas ----------
+
+model TimeEntry {
+  id             String   @id @default(uuid())
+  organizationId String
+  userId         String
+  day            DateTime
+  in1            String?
+  out1           String?
+  in2            String?
+  out2           String?
+  /// Saldo do dia em minutos (positivo = crédito).
+  balanceMinutes Int      @default(0)
+  note           String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation("TimeEntryOwner", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId, day])
+  @@index([userId, day])
+}
+
+// ---------- Gamificação ----------
+
+model PointRule {
+  id             String   @id @default(uuid())
+  organizationId String
+  activity       String
+  points         Int
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, activity])
+}
+
+model PointEntry {
+  id             String   @id @default(uuid())
+  organizationId String
+  userId         String
+  activity       String
+  points         Int
+  note           String?
+  grantedById    String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation("PointOwner", fields: [userId], references: [id], onDelete: Cascade)
+  grantedBy    User?        @relation("PointGranter", fields: [grantedById], references: [id])
+
+  @@index([organizationId, userId])
+}
+
+model Reward {
+  id             String    @id @default(uuid())
+  organizationId String
+  name           String
+  description    String?
+  cost           Int
+  stock          Int?
+  archivedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  redemptions  RewardRedemption[]
+
+  @@index([organizationId, archivedAt])
+}
+
+enum RedemptionStatus {
+  REQUESTED
+  APPROVED
+  DELIVERED
+  REJECTED
+}
+
+model RewardRedemption {
+  id           String           @id @default(uuid())
+  rewardId     String
+  userId       String
+  status       RedemptionStatus @default(REQUESTED)
+  cost         Int
+  decidedById  String?
+  decidedAt    DateTime?
+  createdAt    DateTime         @default(now())
+
+  reward    Reward @relation(fields: [rewardId], references: [id], onDelete: Cascade)
+  user      User   @relation("RedemptionOwner", fields: [userId], references: [id], onDelete: Cascade)
+  decidedBy User?  @relation("RedemptionDecider", fields: [decidedById], references: [id])
+
+  @@index([rewardId, status])
+}
+
+// ---------- Banco de talentos ----------
+
+enum ReferralStatus {
+  RECEIVED
+  IN_PROCESS
+  HIRED
+  DISCARDED
+}
+
+model Referral {
+  id              String         @id @default(uuid())
+  organizationId  String
+  referrerUserId  String
+  candidateName   String
+  email           String?
+  phone           String?
+  position        String
+  linkedin        String?
+  note            String?
+  status          ReferralStatus @default(RECEIVED)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  referrer     User         @relation("ReferralAuthor", fields: [referrerUserId], references: [id])
+
+  @@index([organizationId, status])
+}
+
+// ---------- Onboarding ----------
+
+model OnboardingStep {
+  id             String   @id @default(uuid())
+  organizationId String
+  order          Int
+  title          String
+  description    String?
+  createdAt      DateTime @default(now())
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  progress     OnboardingProgress[]
+
+  @@unique([organizationId, order])
+}
+
+model OnboardingProgress {
+  stepId String
+  userId String
+  doneAt DateTime @default(now())
+
+  step OnboardingStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  user User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([stepId, userId])
 }
