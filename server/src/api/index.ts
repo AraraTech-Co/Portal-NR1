@@ -2,11 +2,13 @@ import { Router } from "express";
 import health from "./health";
 import authRoutes from "./auth.routes";
 import groRoutes from "./gro";
+import ethicsRoutes from "./ethics";
 
 const api = Router();
 
 api.use("/api", health);
 api.use(authRoutes);
 api.use(groRoutes);
+api.use(ethicsRoutes);
 
 export default api;

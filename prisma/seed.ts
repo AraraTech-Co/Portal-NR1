@@ -161,12 +161,12 @@ async function main() {
         organizationId: org.id,
       },
     },
-    update: { role: Role.ADMIN },
+    update: { role: Role.ADMIN, grants: ["ethics_committee"] },
     create: {
       userId: owner.id,
       organizationId: org.id,
       role: Role.ADMIN,
-      grants: [],
+      grants: ["ethics_committee"],
     },
   });
 

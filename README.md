@@ -123,6 +123,16 @@ Seed:
 | Terceiros | `GET/POST /api/contractors`, `GET/PATCH/DELETE …/:id`, `POST …/documents-received`, `POST …/risks-informed` |
 | Participação | `GET/POST /api/participations`, `GET/PATCH …/:id`, `POST …/evidences` |
 
+### Canal de denúncia (Lei 14.457 — `api/ethics/`)
+
+| Recurso | Rotas |
+|---------|--------|
+| Abrir / acompanhar | `POST /api/ethics-reports`, `POST …/track`, `POST …/messages` (público) |
+| Meta | `GET /api/ethics-reports/meta` |
+| Comitê | `GET /api/ethics-reports`, `GET/PATCH …/:id`, `POST …/:id/messages` |
+
+Comitê exige grant `ethics_committee` no Membership (ou MASTER). Relato anônimo não grava `reporterUserId`; `access_code` só na criação.
+
 `organizationId` sempre vem da sessão (nunca do body).  
 Completar ação exige ≥1 evidência; quem executou não valida; aprovar marca controle como implementado.  
 Documentos PGR são append-only (versão++) com responsável e declaração de assinatura.  

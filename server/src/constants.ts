@@ -28,6 +28,9 @@ import {
   OccurrenceType,
   ParticipationType,
   PgrDocumentType,
+  ReportAuthorSide,
+  ReportCategory,
+  ReportStatus,
   SurveyOutcome,
   SurveyTrigger,
 } from "@prisma/client";
@@ -243,6 +246,53 @@ export const PARTICIPATION_TYPES = ParticipationType;
 export const PARTICIPATION_TYPE_VALUES: readonly ParticipationType[] =
   Object.values(ParticipationType);
 
+// ─── Canal de denúncia (Lei 14.457/2022, art. 23, II) ─────────────────────────
+
+/**
+ * Grant no Membership que autoriza o comitê a listar/tratar relatos (ADR-17).
+ * MASTER da empresa também acessa o comitê.
+ */
+export const ETHICS_COMMITTEE_GRANT = "ethics_committee";
+
+/**
+ * Categoria do relato.
+ * - HARASSMENT_MORAL / HARASSMENT_SEXUAL: assédio
+ * - DISCRIMINATION: discriminação
+ * - MISCONDUCT: conduta inadequada
+ * - FRAUD_OR_MISUSE: fraude / mau uso
+ * - DATA_LEAK: vazamento de dados
+ * - SAFETY_RISK: risco de segurança (pode virar Hazard no GRO)
+ * - OTHER: outros
+ */
+export const REPORT_CATEGORIES = ReportCategory;
+
+export const REPORT_CATEGORY_VALUES: readonly ReportCategory[] =
+  Object.values(ReportCategory);
+
+/**
+ * Status do relato no fluxo do comitê.
+ * RECEIVED → IN_ANALYSIS → AWAITING_INFO → RESOLVED | ARCHIVED
+ */
+export const REPORT_STATUSES = ReportStatus;
+
+export const REPORT_STATUS_VALUES: readonly ReportStatus[] =
+  Object.values(ReportStatus);
+
+/** Lado da mensagem no histórico (ADR-16). */
+export const REPORT_AUTHOR_SIDES = ReportAuthorSide;
+
+/**
+ * Prefixo do protocolo público (ex.: CX-7232).
+ * O código de acesso em claro só é devolvido uma vez na criação.
+ */
+export const ETHICS_PROTOCOL_PREFIX = "CX";
+
+/** Tamanho do código de acompanhamento em claro (antes do bcrypt). */
+export const ETHICS_ACCESS_CODE_LENGTH = 10;
+
+/** Custo bcrypt do hash do código de acesso. */
+export const ETHICS_ACCESS_CODE_BCRYPT_ROUNDS = 10;
+
 // ─── Helpers de validação ────────────────────────────────────────────────────
 
 export function isSurveyTrigger(v: string): v is SurveyTrigger {
@@ -275,4 +325,12 @@ export function isContractorRelation(v: string): v is ContractorRelation {
 
 export function isParticipationType(v: string): v is ParticipationType {
   return (PARTICIPATION_TYPE_VALUES as readonly string[]).includes(v);
+}
+
+export function isReportCategory(v: string): v is ReportCategory {
+  return (REPORT_CATEGORY_VALUES as readonly string[]).includes(v);
+}
+
+export function isReportStatus(v: string): v is ReportStatus {
+  return (REPORT_STATUS_VALUES as readonly string[]).includes(v);
 }
