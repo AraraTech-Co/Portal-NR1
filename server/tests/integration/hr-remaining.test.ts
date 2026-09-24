@@ -183,7 +183,10 @@ describe("RH restante (compliance → onboarding)", () => {
     const step = await request(app)
       .post("/api/onboarding-steps")
       .set("Authorization", `Bearer ${token}`)
-      .send({ order: 1, title: "Ler política de SST" });
+      .send({
+        order: Date.now() % 100000,
+        title: "Ler política de SST",
+      });
     expect(step.status).toBe(201);
 
     const done = await request(app)
