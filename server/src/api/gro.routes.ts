@@ -3,6 +3,7 @@ import { verify } from "../model/lib/Auth";
 import workplace from "../controller/WorkplaceController";
 import risk from "../controller/RiskController";
 import actionEvidence from "../controller/ActionEvidenceController";
+import documents from "../controller/DocumentController";
 
 const router = Router();
 
@@ -77,7 +78,9 @@ router.delete("/api/hazards/:id", write, (req, res) =>
 router.get("/api/risks", read, (req, res) => risk.listRisks(req, res));
 router.post("/api/risks", write, (req, res) => risk.createRisk(req, res));
 router.patch("/api/risks/:id", write, (req, res) => risk.updateRisk(req, res));
-router.delete("/api/risks/:id", write, (req, res) => risk.archiveRisk(req, res));
+router.delete("/api/risks/:id", write, (req, res) =>
+  risk.archiveRisk(req, res),
+);
 
 router.get("/api/assessments", read, (req, res) =>
   risk.listAssessments(req, res),
@@ -106,6 +109,23 @@ router.post("/api/actions/:id/complete", write, (req, res) =>
 );
 router.post("/api/actions/:id/review", write, (req, res) =>
   actionEvidence.reviewAction(req, res),
+);
+
+// Inventário vivo + documentos PGR + mudanças
+router.get("/api/inventory", read, (req, res) =>
+  documents.getInventory(req, res),
+);
+router.get("/api/pgr-documents", read, (req, res) =>
+  documents.listDocuments(req, res),
+);
+router.post("/api/pgr-documents", write, (req, res) =>
+  documents.issueDocument(req, res),
+);
+router.get("/api/change-events", read, (req, res) =>
+  documents.listChangeEvents(req, res),
+);
+router.post("/api/change-events", write, (req, res) =>
+  documents.createChangeEvent(req, res),
 );
 
 export default router;

@@ -112,9 +112,13 @@ Seed:
 | Controles | `/api/controls` |
 | Ações | `/api/actions`, `POST …/:id/complete`, `POST …/:id/review` |
 | Evidências | `GET/POST /api/evidences` |
+| Inventário (vivo) | `GET /api/inventory` |
+| Documentos PGR | `GET/POST /api/pgr-documents` (INVENTORY, ACTION_PLAN, CRITERIA) |
+| Mudanças | `GET/POST /api/change-events` |
 
 `organizationId` sempre vem da sessão (nunca do body).  
-Completar ação exige ≥1 evidência; quem executou não valida; aprovar marca controle como implementado.
+Completar ação exige ≥1 evidência; quem executou não valida; aprovar marca controle como implementado.  
+Documentos PGR são append-only (versão++) com responsável e declaração de assinatura.
 
 ## Prisma
 
