@@ -25,7 +25,10 @@ export function EthicsReportPage() {
   const [result, setResult] = useState<{
     protocol: string;
     access_code: string;
+    is_anonymous: boolean;
   } | null>(null);
+  const [copiedKeys, setCopiedKeys] = useState(false);
+  const [copyError, setCopyError] = useState<string | null>(null);
 
   const [trackProtocol, setTrackProtocol] = useState("");
   const [trackCode, setTrackCode] = useState("");
@@ -71,7 +74,10 @@ export function EthicsReportPage() {
       setResult({
         protocol: data.report.protocol,
         access_code: data.access_code,
+        is_anonymous: isAnonymous,
       });
+      setCopiedKeys(false);
+      setCopyError(null);
       setDescription("");
       setIsAnonymous(true);
     } catch (err) {
@@ -97,6 +103,47 @@ export function EthicsReportPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  async function copyProtocolAndCode() {
+    if (!result) return;
+    setCopyError(null);
+    const text =
+      `Protocolo: ${result.protocol}\n` +
+      `Código de acesso: ${result.access_code}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedKeys(true);
+    } catch {
+      const ok = window.prompt(
+        "Copie o protocolo e o código (Ctrl+C) e guarde em local seguro:",
+        text,
+      );
+      if (ok !== null) {
+        setCopiedKeys(true);
+      } else {
+        setCopyError(
+          "É obrigatório copiar o protocolo e o código antes de continuar.",
+        );
+      }
+    }
+  }
+
+  function dismissResult(next: "track" | "new") {
+    if (result?.is_anonymous && !copiedKeys) {
+      setCopyError(
+        "Copie o protocolo e o código antes de sair — esta é a única forma de acompanhar a denúncia anônima.",
+      );
+      return;
+    }
+    if (next === "track" && result) {
+      setTrackProtocol(result.protocol);
+      setTrackCode(result.access_code);
+      setMode("track");
+    }
+    setResult(null);
+    setCopiedKeys(false);
+    setCopyError(null);
   }
 
   return (
@@ -131,9 +178,25 @@ export function EthicsReportPage() {
       {mode === "new" && result && (
         <section className="form-section" role="status">
           <h2>Denúncia registrada</h2>
-          <p className="muted">
-            Guarde o protocolo e o código — o código não será mostrado de novo.
-          </p>
+          {result.is_anonymous ? (
+            <>
+              <p className="form-error" role="alert">
+                Atenção: esta denúncia é anônima e <strong>não fica vinculada à
+                sua conta</strong>. Ela <strong>não aparecerá</strong> no seu
+                histórico nem em nenhum menu do portal.
+              </p>
+              <p>
+                A <strong>única forma</strong> de acompanhar o andamento é com
+                o protocolo e o código abaixo. Copie-os agora e guarde em local
+                seguro — o código <strong>não será mostrado de novo</strong>.
+              </p>
+            </>
+          ) : (
+            <p className="muted">
+              Guarde o protocolo e o código — o código não será mostrado de
+              novo. Esta denúncia ficou vinculada ao seu nome.
+            </p>
+          )}
           <p>
             <strong>Protocolo:</strong> {result.protocol}
           </p>
@@ -141,17 +204,32 @@ export function EthicsReportPage() {
             <strong>Código de acesso:</strong> {result.access_code}
           </p>
           <div className="form-actions">
+            <Button type="button" onClick={copyProtocolAndCode}>
+              {copiedKeys
+                ? "Protocolo e código copiados"
+                : "Copiar protocolo e código"}
+            </Button>
+          </div>
+          {copyError && <p className="form-error">{copyError}</p>}
+          {result.is_anonymous && !copiedKeys && (
+            <p className="form-hint">
+              Confirme a cópia para liberar as próximas ações.
+            </p>
+          )}
+          <div className="form-actions" style={{ marginTop: "0.75rem" }}>
             <Button
               type="button"
-              onClick={() => {
-                setResult(null);
-                setMode("track");
-                setTrackProtocol(result.protocol);
-              }}
+              disabled={result.is_anonymous && !copiedKeys}
+              onClick={() => dismissResult("track")}
             >
               Acompanhar este protocolo
             </Button>
-            <Button type="button" variant="secondary" onClick={() => setResult(null)}>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={result.is_anonymous && !copiedKeys}
+              onClick={() => dismissResult("new")}
+            >
               Nova denúncia
             </Button>
           </div>
