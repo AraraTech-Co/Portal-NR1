@@ -176,3 +176,7 @@ npm run db:generate
 ```
 
 Modelos de domínio serão adicionados em `prisma/schema.prisma` conforme a migração por módulos.
+
+## Licença
+
+Uso próprio permitido; **uso comercial não autorizado**. Ver [LICENSE](./LICENSE).

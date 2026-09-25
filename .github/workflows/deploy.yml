@@ -1,0 +1,404 @@
+# Deploy Portal NR-1 — imagem Docker Hub dockerflip747/portal-nr1:<versão> + :latest.
+# Schedule: terça 09:00 Brasília (12:00 UTC). Tags A.B.C.D (igual SGC).
+
+name: Deploy
+
+on:
+  schedule:
+    - cron: "0 12 * * 2"
+  workflow_dispatch:
+    inputs:
+      skip_build:
+        description: "Skip build — só pull/up da imagem :latest no Docker Hub"
+        required: false
+        type: boolean
+        default: false
+      standalone_target:
+        description: "Loja (all = bulk em todas as lojas, incl. americana)"
+        required: false
+        type: choice
+        options:
+          - all
+          - americana
+          - acesso-nutrition
+          - arara-vm
+          - bem-barato
+          - brand-lar
+          - casa-lar
+          - shopping-lar
+          - casa-park
+          - casa-rosa
+          - ki-barato
+          - mini-shopping
+          - mogi-mirim
+          - shopping-ap
+          - taquaral
+          - shopping-campinas
+          - shopping-itatiba
+          - shopping-sc
+          - ttmb-utilidades
+          - shopping-100
+        default: all
+      app_target:
+        description: "homologacao ou producao (release/bump só com all + producao)"
+        required: false
+        type: choice
+        options:
+          - homologacao
+          - producao
+        default: homologacao
+
+concurrency:
+  group: deploy-portal-nr1
+  cancel-in-progress: true
+
+env:
+  DOCKERHUB_IMAGE: dockerflip747/portal-nr1
+  EFF_SKIP_BUILD: ${{ github.event_name == 'schedule' && 'false' || (inputs.skip_build && 'true' || 'false') }}
+  EFF_STANDALONE_TARGET: ${{ github.event_name == 'schedule' && 'all' || (inputs.standalone_target || 'all') }}
+  EFF_APP_TARGET: ${{ github.event_name == 'schedule' && 'producao' || (inputs.app_target || 'homologacao') }}
+
+jobs:
+  authorize_producao:
+    name: Authorize producao deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check actor/ref for producao
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          ACTOR: ${{ github.actor }}
+          APP_TARGET: ${{ github.event_name == 'schedule' && 'producao' || inputs.app_target }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "schedule" ]; then
+            echo "OK: schedule (producao em master)"
+            exit 0
+          fi
+          if [ "${APP_TARGET:-}" != "producao" ]; then
+            echo "OK: homologacao — sem restrição de ator (app_target=${APP_TARGET:-})"
+            exit 0
+          fi
+          if [ "$REF" = "refs/heads/master" ]; then
+            echo "OK: producao a partir de master (ator=$ACTOR)"
+            exit 0
+          fi
+          case "$ACTOR" in
+            hengueier|cristiano-ararati)
+              echo "OK: producao fora de master autorizada para $ACTOR (ref=$REF)"
+              exit 0
+              ;;
+            *)
+              echo "::error::Deploy de producao fora de master so pode ser disparado por hengueier ou cristiano-ararati (ator=$ACTOR, ref=$REF)."
+              exit 1
+              ;;
+          esac
+
+  set_env:
+    name: Set environment
+    runs-on: ubuntu-latest
+    needs: [authorize_producao]
+    outputs:
+      environment: ${{ steps.resolve.outputs.environment }}
+      is_standalone_bulk: ${{ steps.resolve.outputs.is_standalone_bulk }}
+      standalone_targets: ${{ steps.resolve.outputs.standalone_targets }}
+      app_version: ${{ steps.version.outputs.version }}
+      nr1_image: ${{ steps.version.outputs.nr1_image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: resolve
+        name: Resolve lojas / GitHub Environments
+        env:
+          STANDALONE_TARGET: ${{ env.EFF_STANDALONE_TARGET }}
+          APP_TARGET: ${{ env.EFF_APP_TARGET }}
+        run: |
+          set -euo pipefail
+          # arara-vm → Environment "teste" (homolog dedicada); fora do bulk
+          BULK_JSON='["americana","acesso-nutrition","bem-barato","brand-lar","casa-lar","shopping-lar","casa-park","casa-rosa","ki-barato","mini-shopping","mogi-mirim","shopping-ap","taquaral","shopping-100","shopping-campinas","shopping-itatiba","shopping-sc","ttmb-utilidades"]'
+
+          map_env() {
+            case "$1" in
+              arara-vm) echo "teste" ;;
+              *) echo "$1" ;;
+            esac
+          }
+
+          if [ "$STANDALONE_TARGET" = "all" ]; then
+            echo "is_standalone_bulk=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "standalone_targets<<JSON"
+              echo "$BULK_JSON"
+              echo "JSON"
+            } >> "$GITHUB_OUTPUT"
+            echo "environment=americana" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          ENV_NAME="$(map_env "$STANDALONE_TARGET")"
+          if [ "$STANDALONE_TARGET" = "arara-vm" ] && [ "$APP_TARGET" = "producao" ]; then
+            echo "::error::arara-vm (Environment teste) so aceita app_target=homologacao."
+            exit 1
+          fi
+
+          echo "is_standalone_bulk=false" >> "$GITHUB_OUTPUT"
+          echo 'standalone_targets=[]' >> "$GITHUB_OUTPUT"
+          echo "environment=${ENV_NAME}" >> "$GITHUB_OUTPUT"
+
+      - id: version
+        name: Resolve app version and image tag
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "require('./package.json').version")
+          if [ -z "$VERSION" ]; then
+            echo "::error::Nao foi possivel ler version do package.json"
+            exit 1
+          fi
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Versao invalida (esperado A.B.C.D): $VERSION"
+            exit 1
+          fi
+          if [ "${{ env.EFF_SKIP_BUILD }}" = "true" ]; then
+            TAG="latest"
+          else
+            TAG="$VERSION"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "nr1_image=${{ env.DOCKERHUB_IMAGE }}:${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Versao=$VERSION imagem=${{ env.DOCKERHUB_IMAGE }}:${TAG}"
+
+  build_image:
+    name: Build and push Docker image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    needs: [set_env]
+    if: |
+      success()
+      && !(github.event_name == 'workflow_dispatch' && inputs.skip_build == true)
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ env.DOCKERHUB_IMAGE }}:${{ needs.set_env.outputs.app_version }}
+            ${{ env.DOCKERHUB_IMAGE }}:latest
+          build-args: |
+            DATABASE_URL=postgresql://placeholder:placeholder@localhost:5432/placeholder
+          cache-from: |
+            type=gha
+            type=registry,ref=${{ env.DOCKERHUB_IMAGE }}:buildcache
+          cache-to: |
+            type=gha,mode=max
+            type=registry,ref=${{ env.DOCKERHUB_IMAGE }}:buildcache,mode=max
+
+  deploy_single:
+    name: Deploy ${{ needs.set_env.outputs.environment }}
+    runs-on: ubuntu-latest
+    needs: [set_env, build_image]
+    if: |
+      always() && !cancelled()
+      && needs.set_env.result == 'success'
+      && (needs.build_image.result == 'success' || needs.build_image.result == 'skipped')
+      && needs.set_env.outputs.is_standalone_bulk != 'true'
+    environment: ${{ needs.set_env.outputs.environment }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to store
+        uses: ./.github/actions/deploy-store
+        with:
+          nr1_image: ${{ needs.set_env.outputs.nr1_image }}
+          ssh_key: ${{ secrets.SSH_KEY }}
+          remote_user: ${{ vars.REMOTE_USER }}
+          machine_ip: ${{ vars.MACHINE_IP || vars.IP_SRV }}
+          remote_dir: ${{ vars.REMOTE_DIR || '~/portal-nr1' }}
+          nr1_database_url: ${{ secrets.NR1_DATABASE_URL }}
+          nr1_auth_secret: ${{ secrets.NR1_AUTH_SECRET }}
+          nr1_public_url: ${{ vars.NR1_PUBLIC_URL }}
+          nr1_host_port: ${{ vars.NR1_HOST_PORT || '10000' }}
+          docker_network: ${{ vars.DOCKER_NETWORK || 'sgc-network' }}
+          dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
+          dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
+
+  deploy_bulk:
+    name: Deploy ${{ matrix.target_env }}
+    runs-on: ubuntu-latest
+    needs: [set_env, build_image]
+    if: |
+      always() && !cancelled()
+      && needs.set_env.result == 'success'
+      && (needs.build_image.result == 'success' || needs.build_image.result == 'skipped')
+      && needs.set_env.outputs.is_standalone_bulk == 'true'
+    environment: ${{ matrix.target_env }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        target_env: ${{ fromJson(needs.set_env.outputs.standalone_targets) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to store
+        uses: ./.github/actions/deploy-store
+        with:
+          nr1_image: ${{ needs.set_env.outputs.nr1_image }}
+          ssh_key: ${{ secrets.SSH_KEY }}
+          remote_user: ${{ vars.REMOTE_USER }}
+          machine_ip: ${{ vars.MACHINE_IP || vars.IP_SRV }}
+          remote_dir: ${{ vars.REMOTE_DIR || '~/portal-nr1' }}
+          nr1_database_url: ${{ secrets.NR1_DATABASE_URL }}
+          nr1_auth_secret: ${{ secrets.NR1_AUTH_SECRET }}
+          nr1_public_url: ${{ vars.NR1_PUBLIC_URL }}
+          nr1_host_port: ${{ vars.NR1_HOST_PORT || '10000' }}
+          docker_network: ${{ vars.DOCKER_NETWORK || 'sgc-network' }}
+          dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
+          dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
+
+  release_and_bump:
+    name: GitHub Release + version bump
+    runs-on: ubuntu-latest
+    needs: [set_env, build_image, deploy_single, deploy_bulk]
+    if: |
+      always() && !cancelled()
+      && needs.set_env.result == 'success'
+      && needs.build_image.result == 'success'
+      && needs.set_env.outputs.is_standalone_bulk == 'true'
+      && needs.deploy_bulk.result == 'success'
+      && !(github.event_name == 'workflow_dispatch' && inputs.skip_build == true)
+      && (
+        github.event_name == 'schedule'
+        || (
+          github.event_name == 'workflow_dispatch'
+          && github.ref == 'refs/heads/master'
+          && inputs.standalone_target == 'all'
+          && inputs.app_target == 'producao'
+        )
+      )
+    permissions:
+      contents: write
+    env:
+      BUMP_KIND: ${{ github.event_name == 'schedule' && 'feature' || 'fix' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_BOT_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Guard — release/bump somente em master
+        run: |
+          set -euo pipefail
+          BRANCH=$(git rev-parse --abbrev-ref HEAD)
+          if [ "$BRANCH" != "master" ]; then
+            echo "::error::Checkout nao esta em master (esta em '$BRANCH'). Abortando release/bump."
+            exit 1
+          fi
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.ref }}" != "refs/heads/master" ]; then
+            echo "::error::Dispare o deploy de producao a partir de master (ref atual: ${{ github.ref }})."
+            exit 1
+          fi
+          echo "OK: master @ $(git rev-parse --short HEAD)"
+
+      - name: Build changelog
+        env:
+          VERSION: ${{ needs.set_env.outputs.app_version }}
+        run: |
+          set -euo pipefail
+          PREV=$(git tag --list 'v*' --sort=-v:refname | head -1 || true)
+          if [ -n "$PREV" ]; then
+            git log --pretty=format:'- %s (%h)' "${PREV}..HEAD" | head -200 > /tmp/changelog.txt || true
+          else
+            git log --pretty=format:'- %s (%h)' -n 50 > /tmp/changelog.txt || true
+          fi
+          if [ ! -s /tmp/changelog.txt ]; then
+            echo "- Deploy v${VERSION}" > /tmp/changelog.txt
+          fi
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_BOT_TOKEN || secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.set_env.outputs.app_version }}
+        run: |
+          set -euo pipefail
+          TAG="v${VERSION}"
+          TARGET_SHA=$(git rev-parse HEAD)
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG ja existe — pulando create."
+            exit 0
+          fi
+          {
+            echo "## Portal NR-1 ${VERSION}"
+            echo
+            echo "Imagem: \`${{ env.DOCKERHUB_IMAGE }}:${VERSION}\` / \`:latest\`"
+            echo
+            echo "### Changes"
+            cat /tmp/changelog.txt
+          } > /tmp/release-notes.md
+          gh release create "$TAG" --title "Portal NR-1 ${VERSION}" --notes-file /tmp/release-notes.md --target "$TARGET_SHA"
+
+      - name: Bump package.json version
+        id: bump
+        env:
+          VERSION: ${{ needs.set_env.outputs.app_version }}
+        run: |
+          set -euo pipefail
+          echo "bump_kind=$BUMP_KIND version_atual=$VERSION"
+          IFS=. read -r A B C D <<< "$VERSION"
+          case "$BUMP_KIND" in
+            feature)
+              C=$((C + 1))
+              D=0
+              KIND="feature/C"
+              ;;
+            fix)
+              D=$((D + 1))
+              KIND="fix/D"
+              ;;
+            *)
+              echo "::error::BUMP_KIND invalido: '$BUMP_KIND'"
+              exit 1
+              ;;
+          esac
+          NEXT="${A}.${B}.${C}.${D}"
+          echo "Bump $KIND: $VERSION -> $NEXT"
+          NEXT="$NEXT" node -e '
+            const fs = require("fs");
+            const p = JSON.parse(fs.readFileSync("package.json", "utf8"));
+            p.version = process.env.NEXT;
+            fs.writeFileSync("package.json", JSON.stringify(p, null, 2) + "\n");
+            console.log("package.json ->", p.version);
+          '
+          echo "next=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "kind=$KIND" >> "$GITHUB_OUTPUT"
+
+      - name: Commit and push version bump
+        env:
+          NEXT: ${{ steps.bump.outputs.next }}
+        run: |
+          set -euo pipefail
+          BRANCH=$(git rev-parse --abbrev-ref HEAD)
+          if [ "$BRANCH" != "master" ]; then
+            echo "::error::Recusa de push: HEAD nao e master ('$BRANCH')."
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json
+          if git diff --cached --quiet; then
+            echo "Nenhuma mudanca no package.json"
+            exit 0
+          fi
+          git commit -m "chore(release): bump version to ${NEXT}"
+          git push origin HEAD:refs/heads/master

@@ -1,8 +1,9 @@
 {
   "name": "portal-nr1",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.0.0",
   "description": "Portal NR-1 — React + Express (scaffold)",
+  "license": "SEE LICENSE IN LICENSE",
   "scripts": {
     "setup": "npm install && npm run setup:server && npm run setup:client",
     "setup:server": "cd server && npm install",

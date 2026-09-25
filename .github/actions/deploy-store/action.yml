@@ -1,0 +1,140 @@
+name: Deploy store
+description: SSH + Docker Hub login + compose pull/up + health check em uma loja.
+
+inputs:
+  nr1_image:
+    required: true
+  ssh_key:
+    required: true
+  remote_user:
+    required: true
+  machine_ip:
+    required: true
+  remote_dir:
+    required: false
+    default: "~/portal-nr1"
+  nr1_database_url:
+    required: true
+  nr1_auth_secret:
+    required: true
+  nr1_public_url:
+    required: true
+  nr1_host_port:
+    required: false
+    default: "10000"
+  docker_network:
+    required: false
+    default: "sgc-network"
+  dockerhub_username:
+    required: true
+  dockerhub_token:
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: SSH config
+      shell: bash
+      env:
+        SSH_KEY: ${{ inputs.ssh_key }}
+        REMOTE_USER: ${{ inputs.remote_user }}
+        MACHINE_IP: ${{ inputs.machine_ip }}
+      run: |
+        set -euo pipefail
+        mkdir -p ~/.ssh
+        printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+        chmod 600 ~/.ssh/deploy_key
+        ssh-keyscan -H "$MACHINE_IP" >> ~/.ssh/known_hosts 2>/dev/null || true
+        cat >> ~/.ssh/config <<EOF
+        Host standalone
+          HostName ${MACHINE_IP}
+          User ${REMOTE_USER}
+          IdentityFile ~/.ssh/deploy_key
+          IdentitiesOnly yes
+          StrictHostKeyChecking accept-new
+        EOF
+
+    - name: Sync compose
+      shell: bash
+      env:
+        REMOTE_DIR: ${{ inputs.remote_dir }}
+      run: |
+        set -euo pipefail
+        ssh standalone \
+          REMOTE_DIR="$REMOTE_DIR" \
+          bash -s <<'REMOTE'
+        set -euo pipefail
+        mkdir -p "${REMOTE_DIR/#\~/$HOME}/deploy"
+        REMOTE
+        scp deploy/portal-nr1.compose.yml "standalone:${REMOTE_DIR}/deploy/portal-nr1.compose.yml"
+
+    - name: Docker Hub login on remote
+      shell: bash
+      env:
+        DOCKERHUB_USERNAME: ${{ inputs.dockerhub_username }}
+        DOCKERHUB_TOKEN: ${{ inputs.dockerhub_token }}
+      run: |
+        set -euo pipefail
+        printf '%s\n' "$DOCKERHUB_TOKEN" \
+          | ssh standalone "docker login --username '$DOCKERHUB_USERNAME' --password-stdin"
+
+    - name: Compose pull + up
+      shell: bash
+      env:
+        REMOTE_DIR: ${{ inputs.remote_dir }}
+        NR1_IMAGE: ${{ inputs.nr1_image }}
+        NR1_DATABASE_URL: ${{ inputs.nr1_database_url }}
+        NR1_AUTH_SECRET: ${{ inputs.nr1_auth_secret }}
+        NR1_PUBLIC_URL: ${{ inputs.nr1_public_url }}
+        NR1_HOST_PORT: ${{ inputs.nr1_host_port }}
+        DOCKER_NETWORK: ${{ inputs.docker_network }}
+      run: |
+        set -euo pipefail
+        ssh standalone \
+          REMOTE_DIR="$REMOTE_DIR" \
+          NR1_IMAGE="$NR1_IMAGE" \
+          NR1_DATABASE_URL="$NR1_DATABASE_URL" \
+          NR1_AUTH_SECRET="$NR1_AUTH_SECRET" \
+          NR1_PUBLIC_URL="$NR1_PUBLIC_URL" \
+          NR1_HOST_PORT="$NR1_HOST_PORT" \
+          DOCKER_NETWORK="$DOCKER_NETWORK" \
+          bash -s <<'REMOTE'
+        set -euo pipefail
+        cd "${REMOTE_DIR/#\~/$HOME}"
+        ENV_FILE=deploy/portal-nr1.env
+        umask 077
+        {
+          printf 'NR1_IMAGE=%s\n' "$NR1_IMAGE"
+          printf 'NR1_DATABASE_URL=%s\n' "$NR1_DATABASE_URL"
+          printf 'NR1_AUTH_SECRET=%s\n' "$NR1_AUTH_SECRET"
+          printf 'NR1_PUBLIC_URL=%s\n' "$NR1_PUBLIC_URL"
+          printf 'NR1_HOST_PORT=%s\n' "$NR1_HOST_PORT"
+          printf 'DOCKER_NETWORK=%s\n' "$DOCKER_NETWORK"
+        } > "$ENV_FILE"
+        docker compose --env-file "$ENV_FILE" -f deploy/portal-nr1.compose.yml pull
+        docker compose --env-file "$ENV_FILE" -f deploy/portal-nr1.compose.yml up -d --force-recreate --remove-orphans
+        REMOTE
+
+    - name: Health check
+      shell: bash
+      env:
+        NR1_HOST_PORT: ${{ inputs.nr1_host_port }}
+        NR1_IMAGE: ${{ inputs.nr1_image }}
+      run: |
+        set -euo pipefail
+        ok=0
+        for i in $(seq 1 36); do
+          if ssh standalone "curl -sf http://127.0.0.1:${NR1_HOST_PORT}/api/health >/dev/null"; then
+            ok=1
+            break
+          fi
+          sleep 5
+        done
+        if [ "$ok" != 1 ]; then
+          echo "::error::health falhou"
+          ssh standalone "docker logs --tail 80 arara-front-portal-nr1" || true
+          exit 1
+        fi
+        ssh standalone "curl -sf http://127.0.0.1:${NR1_HOST_PORT}/api/health"
+        echo
+        echo "Deploy OK (${NR1_IMAGE})"

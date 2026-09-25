@@ -1,16 +1,11 @@
-# Portal NR-1 na Americana — Postgres do cluster SGC (host :10000).
-# Preferir deploy/portal-nr1.compose.yml no CI; este arquivo mantém compat
-# com scripts/deploy-americana.sh (build local no host).
+# Portal NR-1 — imagem Docker Hub (CI / lojas standalone).
+# Vars: NR1_IMAGE, NR1_DATABASE_URL, NR1_AUTH_SECRET, NR1_PUBLIC_URL,
+#       NR1_HOST_PORT, DOCKER_NETWORK
 name: arara-nr1
 
 services:
   portal-nr1:
-    image: ${NR1_IMAGE:-arara-front-portal-nr1:americana}
-    build:
-      context: ../apps/portal-nr1
-      dockerfile: Dockerfile
-      args:
-        DATABASE_URL: ${NR1_DATABASE_URL:?defina NR1_DATABASE_URL}
+    image: ${NR1_IMAGE:?defina NR1_IMAGE}
     container_name: arara-front-portal-nr1
     restart: unless-stopped
     environment:
@@ -18,7 +13,7 @@ services:
       PORT: "8080"
       DATABASE_URL: ${NR1_DATABASE_URL:?defina NR1_DATABASE_URL}
       TOKEN_SECRET: ${NR1_AUTH_SECRET:?defina NR1_AUTH_SECRET}
-      CLIENT_ORIGIN: ${NR1_PUBLIC_URL:-https://colaborador.shoppingutilamericana.arara-tech.com}
+      CLIENT_ORIGIN: ${NR1_PUBLIC_URL:?defina NR1_PUBLIC_URL}
       CLIENT_DIST: /app/client/dist
       UPLOADS_DIR: /app/uploads
     volumes:

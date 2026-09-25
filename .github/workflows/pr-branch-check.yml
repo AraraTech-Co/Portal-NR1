@@ -1,0 +1,39 @@
+name: PR branch name check
+
+on:
+  pull_request:
+    branches: [desenvolvimento, master]
+
+jobs:
+  branch-governance:
+    name: Validate PR branch rules
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check head/base branch rules
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          PATTERN='^(fix|hotfix|perf|feature|feat|epic|recovery)/.+'
+
+          if [ "$BASE_REF" = "master" ]; then
+            if [ "$HEAD_REF" != "desenvolvimento" ]; then
+              echo "::error::PR para master so pode vir da branch 'desenvolvimento' (head atual: '$HEAD_REF')."
+              exit 1
+            fi
+            echo "PR master OK: head=desenvolvimento"
+            exit 0
+          fi
+
+          if [ "$BASE_REF" = "desenvolvimento" ]; then
+            if [[ ! "$HEAD_REF" =~ $PATTERN ]]; then
+              echo "::error::Branch '$HEAD_REF' invalida para desenvolvimento. Use um dos prefixos: fix/, hotfix/, perf/, feature/, feat/, epic/, recovery/ (ex.: feature/minha-tarefa)."
+              exit 1
+            fi
+            echo "PR desenvolvimento OK: $HEAD_REF"
+            exit 0
+          fi
+
+          echo "::error::Base '$BASE_REF' nao suportada por este check."
+          exit 1
