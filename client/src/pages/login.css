@@ -63,6 +63,10 @@
 
 .login-aside {
   position: relative;
+  overflow: hidden;
+}
+
+.login-aside-scene {
   background:
     linear-gradient(
       145deg,
@@ -70,17 +74,246 @@
       color-mix(in oklch, var(--primary) 70%, black) 55%,
       color-mix(in oklch, var(--primary) 55%, var(--ouro-solid)) 100%
     );
+}
+
+.login-aside-filters {
+  position: absolute;
+  width: 0;
+  height: 0;
   overflow: hidden;
+}
+
+.login-aside-water {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  filter: url(#login-water);
+  will-change: filter;
+}
+
+.login-aside-caustics {
+  position: absolute;
+  inset: -30%;
+  background:
+    radial-gradient(
+      ellipse 40% 18% at 20% 30%,
+      color-mix(in oklch, white 18%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 35% 14% at 70% 55%,
+      color-mix(in oklch, white 14%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 45% 16% at 45% 75%,
+      color-mix(in oklch, var(--ouro-solid) 12%, transparent),
+      transparent 72%
+    );
+  opacity: 0.6;
+  animation: login-water-flow 18s ease-in-out infinite;
+}
+
+.login-aside-surface {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  will-change: transform;
+  z-index: 1;
+}
+
+.login-aside-surface-ring {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--bubble-size, 18rem);
+  height: var(--bubble-size, 18rem);
+  margin-top: calc(var(--bubble-size, 18rem) / -2);
+  margin-left: calc(var(--bubble-size, 18rem) / -2);
+  border-radius: 50%;
+  border: none;
+  background: radial-gradient(
+    circle,
+    transparent 62%,
+    color-mix(in oklch, white 12%, transparent) 74%,
+    color-mix(in oklch, white 5%, transparent) 84%,
+    transparent 94%
+  );
+  opacity: 0;
+  animation: login-surface-ripple 7.5s cubic-bezier(0.22, 0.6, 0.3, 1) infinite;
+}
+
+.login-aside-surface-ring--a {
+  animation-delay: 0s;
+}
+
+.login-aside-surface-ring--b {
+  animation-delay: -2.5s;
+  background: radial-gradient(
+    circle,
+    transparent 62%,
+    color-mix(in oklch, white 9%, transparent) 76%,
+    transparent 92%
+  );
+}
+
+.login-aside-surface-ring--c {
+  animation-delay: -5s;
+  background: radial-gradient(
+    circle,
+    transparent 60%,
+    color-mix(in oklch, var(--ouro-solid) 8%, transparent) 75%,
+    transparent 92%
+  );
+}
+
+@keyframes login-surface-ripple {
+  0% {
+    transform: scale(1);
+    opacity: 0.32;
+  }
+  45% {
+    opacity: 0.14;
+  }
+  100% {
+    transform: scale(1.85);
+    opacity: 0;
+  }
+}
+
+.login-aside-waves {
+  position: absolute;
+  inset: -20%;
+  pointer-events: none;
+}
+
+.login-aside-wave {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid color-mix(in oklch, white 14%, transparent);
+  background: radial-gradient(
+    circle,
+    color-mix(in oklch, white 10%, transparent) 0%,
+    transparent 68%
+  );
+  opacity: 0.3;
+  animation: login-wave-breathe 14s ease-in-out infinite;
+}
+
+.login-aside-wave--a {
+  width: min(72vw, 38rem);
+  height: min(72vw, 38rem);
+  left: 8%;
+  top: 12%;
+  animation-duration: 16s;
+}
+
+.login-aside-wave--b {
+  width: min(58vw, 30rem);
+  height: min(58vw, 30rem);
+  right: -6%;
+  bottom: 8%;
+  opacity: 0.24;
+  animation-duration: 12s;
+  animation-delay: -4s;
+}
+
+.login-aside-wave--c {
+  width: min(90vw, 48rem);
+  height: min(90vw, 48rem);
+  left: 18%;
+  top: 28%;
+  opacity: 0.2;
+  border-color: color-mix(in oklch, white 10%, transparent);
+  animation-duration: 20s;
+  animation-delay: -8s;
+}
+
+@keyframes login-wave-breathe {
+  0%,
+  100% {
+    transform: scale(0.92) translate(0, 0);
+    opacity: 0.16;
+  }
+  50% {
+    transform: scale(1.08) translate(2%, -1.5%);
+    opacity: 0.34;
+  }
+}
+
+@keyframes login-water-flow {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(3%, -2%) scale(1.04);
+  }
 }
 
 .login-aside-mark {
   position: absolute;
-  inset: 18% 12% auto auto;
+  top: 0;
+  left: 0;
   width: min(42vw, 22rem);
   height: min(42vw, 22rem);
   border-radius: 50%;
-  border: 1.5rem solid color-mix(in oklch, var(--ouro-solid) 55%, transparent);
-  opacity: 0.55;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklch, white 40%, transparent);
+  background: transparent;
+  box-shadow:
+    0 0 1.8rem color-mix(in oklch, white 22%, transparent),
+    0 0 3.2rem color-mix(in oklch, white 10%, transparent),
+    0 0.4rem 1rem color-mix(in oklch, black 6%, transparent);
+  will-change: transform;
+  pointer-events: none;
+}
+
+.login-aside-mark-glass {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  opacity: 0.32;
+  background:
+    radial-gradient(
+      circle at 30% 22%,
+      color-mix(in oklch, white 90%, transparent) 0%,
+      color-mix(in oklch, white 35%, transparent) 6%,
+      color-mix(in oklch, white 8%, transparent) 14%,
+      transparent 28%
+    ),
+    radial-gradient(
+      circle at 70% 70%,
+      color-mix(in oklch, white 12%, transparent) 0%,
+      transparent 22%
+    ),
+    radial-gradient(
+      circle closest-side,
+      transparent 70%,
+      color-mix(in oklch, #7dd3fc 10%, transparent) 80%,
+      color-mix(in oklch, #f9a8d4 10%, transparent) 86%,
+      color-mix(in oklch, #fde68a 9%, transparent) 92%,
+      color-mix(in oklch, white 28%, transparent) 97%,
+      transparent 100%
+    );
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklch, white 45%, transparent),
+    inset 0 0 1.4rem color-mix(in oklch, white 8%, transparent);
+  animation: login-bubble-shimmer 9s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes login-bubble-shimmer {
+  0%,
+  100% {
+    filter: hue-rotate(0deg) saturate(1.05) brightness(1.08);
+  }
+  50% {
+    filter: hue-rotate(24deg) saturate(1.2) brightness(1.18);
+  }
 }
 
 @media (max-width: 760px) {
