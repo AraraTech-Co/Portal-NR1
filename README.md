@@ -1,181 +1,112 @@
-# Portal NR1
+<p align="center">
+  <img src="docs/portal-nr1-header.png" alt="Portal NR-1" width="100%" />
+</p>
 
-Nova versão do portal NR-1 (SST): React + Express, estrutura OOP inspirada no [portal-araratech](https://github.com/hengueier/portal-araratech).
+# Portal NR-1
 
-Este repositório começa como **esqueleto vazio**. O domínio de negócio será migrado por partes, **backend first**.
+Portal do colaborador para **SST** (NR-1), **GRO** e rotinas de RH: inventário de riscos, PGR, denúncia, avisos, holerites, atestados e mais — API Express + SPA React, empacotados numa imagem Docker única.
 
-## Estrutura
+Imagem pública no Docker Hub: [`dockerflip747/portal-nr1`](https://hub.docker.com/r/dockerflip747/portal-nr1).
 
-```text
-portal-nr1/
-  prisma/          # schema Prisma (sem modelos de domínio ainda)
-  server/          # Express + model/controller/api
-  client/          # React (Vite)
-```
+---
 
-Camada de dados no server:
+## Rodar com Docker
 
-- `server/src/model/schema/Model.ts` — classe base OOP (`create` / `read` / `update` / `delete`)
-- Entidades futuras em `server/src/model/schema/<Entity>/`
-- Controllers em `server/src/controller/`
-- Rotas em `server/src/api/`
+### 1. Pré-requisitos
 
-## Pré-requisitos
+- Docker + Docker Compose
+- PostgreSQL acessível (ex.: na mesma rede Docker do SGC)
+- Rede Docker externa (padrão `sgc-network`) — ajuste se a sua for outra
 
-- Node.js 20+
-- PostgreSQL (quando houver modelos)
-
-## Setup
+Crie a rede se ainda não existir:
 
 ```bash
-# raiz
-npm install
-npm run setup
+docker network create sgc-network
+```
 
-# env
+### 2. Arquivo de ambiente
+
+Na pasta do compose (ou use `deploy/portal-nr1.compose.yml` deste repo):
+
+```bash
+cat > portal-nr1.env <<'EOF'
+NR1_IMAGE=dockerflip747/portal-nr1:latest
+NR1_DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/portal_nr1
+NR1_AUTH_SECRET=troque-por-uma-string-longa-e-aleatoria
+NR1_PUBLIC_URL=https://seu-dominio.exemplo.com
+NR1_HOST_PORT=10000
+DOCKER_NETWORK=sgc-network
+EOF
+chmod 600 portal-nr1.env
+```
+
+| Variável | Obrigatória | Descrição |
+|----------|-------------|-----------|
+| `NR1_IMAGE` | sim | Tag da imagem (`:latest` ou `A.B.C.D`) |
+| `NR1_DATABASE_URL` | sim | Connection string Postgres (`portal_nr1`) |
+| `NR1_AUTH_SECRET` | sim | Segredo JWT (`TOKEN_SECRET` no container) |
+| `NR1_PUBLIC_URL` | sim | URL pública (origem CORS / `CLIENT_ORIGIN`) |
+| `NR1_HOST_PORT` | não | Porta no host (padrão `10000`) |
+| `DOCKER_NETWORK` | não | Rede Docker externa (padrão `sgc-network`) |
+
+O banco precisa existir antes do primeiro start (o container roda `prisma migrate deploy` na subida).
+
+### 3. Subir o container
+
+Com o compose deste repositório:
+
+```bash
+docker compose --env-file portal-nr1.env -f deploy/portal-nr1.compose.yml pull
+docker compose --env-file portal-nr1.env -f deploy/portal-nr1.compose.yml up -d
+```
+
+Ou só com `docker run` (sem o arquivo compose):
+
+```bash
+docker pull dockerflip747/portal-nr1:latest
+
+docker run -d \
+  --name arara-front-portal-nr1 \
+  --restart unless-stopped \
+  --network sgc-network \
+  -p 10000:8080 \
+  -e DATABASE_URL='postgresql://USER:PASSWORD@HOST:5432/portal_nr1' \
+  -e TOKEN_SECRET='troque-por-uma-string-longa-e-aleatoria' \
+  -e CLIENT_ORIGIN='https://seu-dominio.exemplo.com' \
+  -e CLIENT_DIST=/app/client/dist \
+  -e UPLOADS_DIR=/app/uploads \
+  -v nr1_uploads:/app/uploads \
+  dockerflip747/portal-nr1:latest
+```
+
+### 4. Conferir
+
+```bash
+curl -sf http://127.0.0.1:10000/api/health
+```
+
+A app escuta em **`:8080`** dentro do container; no host, a porta é a de `NR1_HOST_PORT` (padrão **10000**).
+
+---
+
+## Desenvolvimento local (opcional)
+
+```bash
+npm run setup
 cp .env.example .env
 cp server/.env.example server/.env
-
-# banco
 docker compose up -d postgres
 npm run db:migrate
 npm run db:seed
-```
-
-## Desenvolvimento
-
-```bash
-# sobe API + frontend
-npm run local:dev
-
-# só API
-npm run server
-
-# só frontend
-npm run client
-```
-
-- API: http://localhost:8080 — `GET /api/health`
-- Client: http://localhost:5173
-
-## Autenticação
-
-Hierarquia:
-
-```text
-Organization (empresa)
-  └── Account (várias)
-        └── User (vários) via AccountMembership
-```
-
-| Nível | Onde | Poder |
-|-------|------|--------|
-| **MASTER** | `Membership` na empresa | Controla **todas** as contas da org |
-| **OWNER** | `AccountMembership` | Responsável / acesso total **naquela** conta |
-| **ADMIN** / **USER** | `AccountMembership` | Acesso limitado à conta |
-
-`master` > `owner` > `admin` > `user` em `server/config/permissions.json`  
-(OWNER **não** tem `master: true`.)
-
-MASTER entra em qualquer conta da empresa (mesmo sem membership nela).
-
-O **schema Prisma** já inclui o domínio completo (SST/GRO, RH, saúde, engajamento).  
-O **módulo GRO** já tem API (estrutura operacional + perigo/risco/avaliação/controle/ação).  
-Classes OOP de RH/engajamento entram depois.
-
-```bash
-docker compose up -d postgres
-npx prisma db push   # ou migrate deploy
-npm run db:seed
-npm test
 npm run local:dev
 ```
 
-Seed:
+- API: http://localhost:8080  
+- Client: http://localhost:5173  
 
-- `master` / `admin123` — MASTER (Conta Matriz + Conta Filial)
-- `admin` / `admin123` — OWNER só da Conta Matriz
-- GRO demo: Planta → Produção → Usinagem → perigo/risco + matriz 5×5
+Seed: `master` / `admin123` (MASTER) · `admin` / `admin123` (OWNER).
 
-### API GRO (auth Bearer; escrita exige `sst`)
-
-| Recurso | Rotas |
-|---------|--------|
-| Estabelecimentos | `GET/POST /api/establishments`, `PATCH/DELETE …/:id` |
-| Setores | `/api/sectors` |
-| Funções (JobRole) | `/api/job-roles` |
-| Atividades | `/api/activities` |
-| Metodologias | `GET /api/methodologies` |
-| Perigos | `/api/hazards` |
-| Riscos | `/api/risks` |
-| Avaliações | `POST /api/assessments`, `POST …/:id/validate` |
-| Controles | `/api/controls` |
-| Ações | `/api/actions`, `POST …/:id/complete`, `POST …/:id/review` |
-| Evidências | `GET/POST /api/evidences` |
-| Inventário (vivo) | `GET /api/inventory` |
-| Documentos PGR | `GET/POST /api/pgr-documents` (INVENTORY, ACTION_PLAN, CRITERIA) |
-| Mudanças | `GET/POST /api/change-events` |
-| AEP | `GET/POST /api/aeps`, `GET/PATCH …/:id`, `POST …/conclude`, `…/hazards`, `…/evidences` |
-| Fatores psicossociais | `GET /api/psychosocial-factors` (catálogo orientativo) |
-| Levantamento preliminar | `GET/POST /api/preliminary-surveys`, `GET …/:id`, `POST …/:id/items` |
-| Ocorrências | `GET/POST /api/occurrences`, `GET/PATCH …/:id`, `POST …/analyze`, `…/actions`, `…/evidences` |
-| Emergências | `GET/POST /api/emergency-procedures`, `GET/PATCH/DELETE …/:id`, `POST …/drills`, `GET …/drills/:drillId`, `POST …/drills/:drillId/evidences` |
-| Terceiros | `GET/POST /api/contractors`, `GET/PATCH/DELETE …/:id`, `POST …/documents-received`, `POST …/risks-informed` |
-| Participação | `GET/POST /api/participations`, `GET/PATCH …/:id`, `POST …/evidences` |
-
-### Canal de denúncia (Lei 14.457 — `api/ethics/`)
-
-| Recurso | Rotas |
-|---------|--------|
-| Abrir / acompanhar | `POST /api/ethics-reports`, `POST …/track`, `POST …/messages` (público) |
-| Meta | `GET /api/ethics-reports/meta` |
-| Comitê | `GET /api/ethics-reports`, `GET/PATCH …/:id`, `POST …/:id/messages` |
-
-### RH (`api/hr/`)
-
-| Recurso | Rotas |
-|---------|--------|
-| Perfis | `GET/POST /api/employee-profiles`, `GET …/me`, `GET/PATCH/DELETE …/:id` |
-| Ideias | `GET/POST /api/ideas`, `GET/PATCH …/:id`, `POST …/decide` |
-| Avisos | `GET/POST /api/announcements`, `GET …/:id`, `POST …/read` |
-| Docs RH | `GET/POST /api/hr-documents`, `GET …/:id`, `POST …/ack` |
-| Holerites | `GET/POST /api/payslips`, `GET …/:id`, `POST …/questions`, `POST …/questions/:qid/answer` |
-| Atestados | `GET/POST /api/medical-certificates`, `POST …/review`, `POST …/read` |
-| Férias/licenças | `GET/POST /api/leaves`, `POST …/decide`, `POST …/cancel` |
-| Convocações | `GET/POST /api/summons`, `GET …/:id`, `POST …/invite`, `POST …/attendance` |
-| Treinamentos | `GET/POST /api/trainings`, `GET/DELETE …/:id`, `POST …/enroll|start|complete` |
-| Exigências / certs / ASO | `/api/job-role-requirements`, `/api/worker-certificates`, `/api/occupational-exams` |
-| Clima | `GET/POST /api/climate-surveys`, `…/open|close|respond` |
-| Avaliação 360 | `/api/review-cycles`, `/api/review-assignments/mine`, `…/submit` |
-| Ponto | `GET/POST /api/time-entries` |
-| Gamificação | `/api/point-rules`, `/api/point-entries`, `/api/points/balance`, `/api/rewards` |
-| Indicações | `GET/POST /api/referrals`, `PATCH …/:id` |
-| Onboarding | `GET/POST /api/onboarding-steps`, `POST …/complete` |
-
-Comitê exige MASTER da empresa ou permissão admin da conta (OWNER/ADMIN). Relato anônimo não grava `reporterUserId`; `access_code` só na criação.  
-Perfil RH: CPF só dígitos (11/14); matrícula/CPF/`user_id` únicos por org; `DELETE` = demissão (`dismissedAt`).  
-Ideia: autor edita só em `NEW`; decidir `IMPLEMENTED`/`REJECTED` exige `decision_note`.  
-Aviso: `POST …/read` registra ciência (prova de comunicação).
-
-`organizationId` sempre vem da sessão (nunca do body).
-Completar ação exige ≥1 evidência; quem executou não valida; aprovar marca controle como implementado.  
-Documentos PGR são append-only (versão++) com responsável e declaração de assinatura.  
-AEP: questionário exige anonimato; concluir sem fator exige `findings`; `needs_aet` exige motivo; fator vira Hazard PSYCHOSOCIAL no inventário.  
-Preliminar (1.5.4.2): `IMMEDIATE_MEASURE` exige `measure_taken`; `DEFERRED_TO_ACTION_PLAN` cria Hazard + Action; `ESCALATED_TO_ASSESSMENT` cria Hazard.  
-Ocorrência (1.5.5.5): análise exige os 3 campos da norma; se houver `risk_id`, marca reassessment; ações nascem com `sourceType=OCCURRENCE`.  
-Emergência (1.5.6): procedimento exige meios/responsáveis/evacuação; drill grava exercício; evidência do simulado em `…/drills/:id/evidences` (1.5.6.3.1).  
-Terceiros (1.5.8): `WE_HIRE` / `WE_ARE_HIRED`; `documents-received` (1.5.8.1.1); `risks-informed` + medidas de interação (1.5.8.2–4).  
-Participação (1.5.3.3): consulta/CIPA/reunião etc.; evidências anexas demonstram que os trabalhadores foram ouvidos.
-
-Constantes de domínio (enums, limites de upload, PGR obrigatório) ficam em `server/src/constants.ts`.
-
-## Prisma
-
-```bash
-npm run db:generate
-```
-
-Modelos de domínio serão adicionados em `prisma/schema.prisma` conforme a migração por módulos.
+---
 
 ## Licença
 
