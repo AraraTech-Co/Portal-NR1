@@ -1,0 +1,78 @@
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: var(--radius);
+  border: 1px solid;
+  padding: 0.15rem 0.45rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.chip-neutral {
+  background: var(--sem-neutral);
+  color: var(--sem-neutral-fg);
+  border-color: var(--sem-neutral-bd);
+}
+
+.chip-success {
+  background: var(--sem-success);
+  color: var(--sem-success-fg);
+  border-color: var(--sem-success-bd);
+}
+
+.chip-warning {
+  background: var(--sem-warning);
+  color: var(--sem-warning-fg);
+  border-color: var(--sem-warning-bd);
+}
+
+.chip-danger {
+  background: var(--sem-danger);
+  color: var(--sem-danger-fg);
+  border-color: var(--sem-danger-bd);
+}
+
+.chip-info {
+  background: var(--sem-info);
+  color: var(--sem-info-fg);
+  border-color: var(--sem-info-bd);
+}
+
+.chip-ouro {
+  background: var(--ouro);
+  color: var(--ouro-fg);
+  border-color: var(--ouro-bd);
+}
+
+.chip-risk-trivial {
+  background: var(--risk-trivial);
+  color: var(--risk-trivial-fg);
+  border-color: var(--risk-trivial-bd);
+}
+
+.chip-risk-tolerable {
+  background: var(--risk-tolerable);
+  color: var(--risk-tolerable-fg);
+  border-color: var(--risk-tolerable-bd);
+}
+
+.chip-risk-moderate {
+  background: var(--risk-moderate);
+  color: var(--risk-moderate-fg);
+  border-color: var(--risk-moderate-bd);
+}
+
+.chip-risk-substantial {
+  background: var(--risk-substantial);
+  color: var(--risk-substantial-fg);
+  border-color: var(--risk-substantial-bd);
+}
+
+.chip-risk-intolerable {
+  background: var(--risk-intolerable);
+  color: var(--risk-intolerable-fg);
+  border-color: var(--risk-intolerable-bd);
+}

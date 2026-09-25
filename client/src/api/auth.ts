@@ -1,16 +1,7 @@
-const TOKEN_KEY = "portal_nr1_token";
+import { request } from "./client";
+import { clearToken, getToken, setToken } from "./token";
 
-export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
-}
-
-export function setToken(token: string): void {
-  localStorage.setItem(TOKEN_KEY, token);
-}
-
-export function clearToken(): void {
-  localStorage.removeItem(TOKEN_KEY);
-}
+export { clearToken, getToken, setToken };
 
 export type SessionUser = {
   id: string;
@@ -21,30 +12,10 @@ export type SessionUser = {
   is_master: boolean;
   role: string;
   permission: string;
-  grants: string[];
   must_change_password: boolean;
   organization: { id: string; name: string };
   account: { id: string; name: string };
 };
-
-async function request<T>(
-  path: string,
-  options: RequestInit = {},
-): Promise<T> {
-  const headers = new Headers(options.headers);
-  headers.set("Content-Type", "application/json");
-  const token = getToken();
-  if (token) headers.set("Authorization", `Bearer ${token}`);
-
-  const res = await fetch(path, { ...options, headers });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(
-      (data as { message?: string }).message || `Erro ${res.status}`,
-    );
-  }
-  return data as T;
-}
 
 export async function login(loginId: string, password: string) {
   const data = await request<{ token: string; user: SessionUser }>(

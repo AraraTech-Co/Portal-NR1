@@ -152,7 +152,7 @@ Seed:
 | Indicações | `GET/POST /api/referrals`, `PATCH …/:id` |
 | Onboarding | `GET/POST /api/onboarding-steps`, `POST …/complete` |
 
-Comitê exige grant `ethics_committee` no Membership (ou MASTER). Relato anônimo não grava `reporterUserId`; `access_code` só na criação.  
+Comitê exige MASTER da empresa ou permissão admin da conta (OWNER/ADMIN). Relato anônimo não grava `reporterUserId`; `access_code` só na criação.  
 Perfil RH: CPF só dígitos (11/14); matrícula/CPF/`user_id` únicos por org; `DELETE` = demissão (`dismissedAt`).  
 Ideia: autor edita só em `NEW`; decidir `IMPLEMENTED`/`REJECTED` exige `decision_note`.  
 Aviso: `POST …/read` registra ciência (prova de comunicação).

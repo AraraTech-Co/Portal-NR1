@@ -1,0 +1,54 @@
+.home-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.75rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+
+.home-meta-label {
+  margin: 0 0 0.25rem;
+  font-size: 0.68rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+.home-meta-value {
+  margin: 0;
+  font-weight: 600;
+}
+
+.home-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.85rem;
+}
+
+.home-shortcut {
+  display: block;
+  padding: 1.1rem 1.15rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.home-shortcut:hover {
+  border-color: var(--primary);
+  background: color-mix(in oklch, var(--secondary) 55%, var(--card));
+}
+
+.home-shortcut h2 {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+  color: var(--primary);
+}
+
+.home-shortcut p {
+  margin: 0;
+  font-size: 0.875rem;
+}

@@ -1,0 +1,70 @@
+.form-grid {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.form-grid.cols-2 {
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.875rem;
+  font-weight: 550;
+}
+
+.form-field input,
+.form-field select,
+.form-field textarea {
+  border: 1px solid var(--input);
+  border-radius: var(--radius);
+  background: var(--card);
+  padding: 0.5rem 0.65rem;
+  font: inherit;
+  font-weight: 400;
+}
+
+.form-field textarea {
+  min-height: 5rem;
+  resize: vertical;
+}
+
+.form-hint {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--muted-foreground);
+}
+
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.form-error {
+  margin: 0;
+  color: var(--sem-danger-fg);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.form-section {
+  margin-bottom: 1.25rem;
+  padding: 1.1rem 1.15rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+
+.form-section h2 {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+}
+
+.form-section > .muted {
+  margin: 0 0 1rem;
+}

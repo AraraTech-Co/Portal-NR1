@@ -1,10 +1,10 @@
-import type { Response, NextFunction, Request } from "express";
-import { ETHICS_COMMITTEE_GRANT } from "../constants";
+import { can } from "./permissions";
 import type { AuthRequest } from "../types/auth";
+import type { Response, NextFunction, Request } from "express";
 
 /**
- * Exige autenticação + grant `ethics_committee` (ou MASTER da empresa).
- * Usar depois de `verify("user")`.
+ * Comitê de ética: MASTER da empresa ou papel efetivo com permissão admin
+ * (OWNER/ADMIN da conta).
  */
 export function requireEthicsCommittee(
   req: Request,
@@ -16,10 +16,7 @@ export function requireEthicsCommittee(
     res.status(401).json({ message: "Não autenticado." });
     return;
   }
-  if (
-    actor.isMaster ||
-    actor.grants.includes(ETHICS_COMMITTEE_GRANT)
-  ) {
+  if (actor.isMaster || can(actor.permission, "admin")) {
     next();
     return;
   }

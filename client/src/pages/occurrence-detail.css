@@ -1,0 +1,45 @@
+.occ-back {
+  margin: 0 0 0.75rem;
+  font-size: 0.875rem;
+}
+
+.occ-back a {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.occ-block {
+  margin-bottom: 1.25rem;
+  padding: 1.1rem 1.15rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+
+.occ-block h2 {
+  margin: 0 0 0.65rem;
+  font-size: 1.05rem;
+}
+
+.occ-block p {
+  margin: 0 0 0.5rem;
+}
+
+.occ-dl {
+  margin: 0;
+  display: grid;
+  gap: 0.85rem;
+}
+
+.occ-dl dt {
+  font-size: 0.7rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+}
+
+.occ-dl dd {
+  margin: 0.25rem 0 0;
+  white-space: pre-wrap;
+}

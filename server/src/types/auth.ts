@@ -12,7 +12,6 @@ export type Actor = {
   role: Role;
   /** Chave efetiva: master > owner > admin > user. */
   permission: string;
-  grants: string[];
   name: string;
   email: string | null;
   login: string;

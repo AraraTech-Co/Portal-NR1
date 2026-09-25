@@ -1,0 +1,91 @@
+.data-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.data-table th,
+.data-table td {
+  padding: 0.7rem 0.85rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.data-table th {
+  font-size: 0.7rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+  background: var(--muted);
+}
+
+.data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.data-table tbody tr.is-clickable {
+  cursor: pointer;
+}
+
+.data-table tbody tr.is-clickable:hover {
+  background: color-mix(in oklch, var(--secondary) 45%, var(--card));
+}
+
+.page-error {
+  margin: 0;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--sem-danger-bd);
+  background: var(--sem-danger);
+  color: var(--sem-danger-fg);
+}
+
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+
+.filter-toggle {
+  border: 1px solid var(--border);
+  background: transparent;
+  border-radius: var(--radius);
+  padding: 0.35rem 0.65rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted-foreground);
+}
+
+.filter-toggle.is-active {
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+  border-color: color-mix(in oklch, var(--primary) 35%, var(--border));
+}
+
+.filter-bar select {
+  border: 1px solid var(--input);
+  border-radius: var(--radius);
+  background: var(--card);
+  padding: 0.35rem 0.55rem;
+  font-size: 0.8rem;
+}
+
+.filter-meta {
+  margin: 0 0 1rem;
+  font-size: 0.875rem;
+}

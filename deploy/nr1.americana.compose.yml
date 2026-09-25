@@ -1,0 +1,36 @@
+# Portal NR-1 (Express + Vite) na Americana — Postgres do cluster SGC.
+# Porta host 10000 (nginx da VM faz proxy para o domínio colaborador.*).
+name: arara-nr1
+
+services:
+  portal-nr1:
+    image: arara-front-portal-nr1:americana
+    build:
+      context: ../apps/portal-nr1
+      dockerfile: Dockerfile
+      args:
+        DATABASE_URL: ${NR1_DATABASE_URL:?defina NR1_DATABASE_URL}
+    container_name: arara-front-portal-nr1
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "8080"
+      DATABASE_URL: ${NR1_DATABASE_URL:?defina NR1_DATABASE_URL}
+      TOKEN_SECRET: ${NR1_AUTH_SECRET:?defina NR1_AUTH_SECRET}
+      CLIENT_ORIGIN: ${NR1_PUBLIC_URL:-https://colaborador.shoppingutilamericana.arara-tech.com}
+      CLIENT_DIST: /app/client/dist
+      UPLOADS_DIR: /app/uploads
+    volumes:
+      - nr1_uploads:/app/uploads
+    ports:
+      - "10000:8080"
+    networks:
+      - sgc
+
+volumes:
+  nr1_uploads:
+
+networks:
+  sgc:
+    external: true
+    name: sgc-network

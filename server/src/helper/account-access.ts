@@ -71,7 +71,6 @@ export type ResolvedAccountAccess = {
   accountName: string;
   accountRole: AccountRole | null;
   orgRole: Role;
-  grants: string[];
   isMaster: boolean;
   user: {
     id: string;
@@ -139,7 +138,6 @@ export async function resolveAccountAccess(
     accountName: account.name,
     accountRole: link?.role ?? null,
     orgRole: orgMembership?.role ?? Role.COLABORADOR,
-    grants: orgMembership?.grants ?? [],
     isMaster: master,
     user,
   };

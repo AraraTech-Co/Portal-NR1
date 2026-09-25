@@ -1,0 +1,80 @@
+/*
+  Credencial Arara — ver DESIGN.md do portal antigo.
+  Fundo é papel quente; índigo + ouro; raio pequeno; sem sombra por padrão.
+*/
+
+:root {
+  --background: oklch(0.958 0.008 85);
+  --foreground: oklch(0.16 0.004 60);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.16 0.004 60);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.16 0.004 60);
+
+  --primary: oklch(0.395 0.183 274);
+  --primary-foreground: oklch(0.985 0.004 85);
+  --secondary: oklch(0.945 0.018 275);
+  --secondary-foreground: oklch(0.355 0.165 274);
+  --muted: oklch(0.945 0.006 85);
+  --muted-foreground: oklch(0.47 0.006 70);
+  --accent: oklch(0.915 0.032 275);
+  --accent-foreground: oklch(0.355 0.165 274);
+  --destructive: oklch(0.51 0.176 27);
+  --border: oklch(0.886 0.011 80);
+  --input: oklch(0.886 0.011 80);
+  --ring: oklch(0.474 0.213 273);
+
+  --ouro: oklch(0.955 0.038 88);
+  --ouro-fg: oklch(0.42 0.098 70);
+  --ouro-bd: oklch(0.876 0.089 88);
+  --ouro-solid: oklch(0.746 0.145 74);
+
+  --radius: 0.25rem;
+
+  --sem-success: oklch(0.945 0.033 158);
+  --sem-success-fg: oklch(0.437 0.085 158);
+  --sem-success-bd: oklch(0.872 0.062 158);
+  --sem-warning: oklch(0.956 0.041 82);
+  --sem-warning-fg: oklch(0.451 0.098 70);
+  --sem-warning-bd: oklch(0.879 0.079 82);
+  --sem-danger: oklch(0.944 0.028 25);
+  --sem-danger-fg: oklch(0.451 0.144 27);
+  --sem-danger-bd: oklch(0.877 0.055 25);
+  --sem-info: oklch(0.938 0.026 272);
+  --sem-info-fg: oklch(0.42 0.148 273);
+  --sem-info-bd: oklch(0.869 0.049 272);
+  --sem-neutral: oklch(0.941 0.006 85);
+  --sem-neutral-fg: oklch(0.44 0.006 70);
+  --sem-neutral-bd: oklch(0.882 0.011 80);
+
+  --risk-trivial: oklch(0.965 0 0);
+  --risk-trivial-fg: oklch(0.42 0 0);
+  --risk-trivial-bd: oklch(0.9 0 0);
+  --risk-tolerable: oklch(0.95 0.052 163);
+  --risk-tolerable-fg: oklch(0.39 0.115 163);
+  --risk-tolerable-bd: oklch(0.88 0.088 164);
+  --risk-moderate: oklch(0.962 0.059 96);
+  --risk-moderate-fg: oklch(0.44 0.128 62);
+  --risk-moderate-bd: oklch(0.9 0.115 96);
+  --risk-substantial: oklch(0.952 0.055 55);
+  --risk-substantial-fg: oklch(0.46 0.155 42);
+  --risk-substantial-bd: oklch(0.88 0.1 55);
+  --risk-intolerable: oklch(0.945 0.035 18);
+  --risk-intolerable-fg: oklch(0.45 0.18 26);
+  --risk-intolerable-bd: oklch(0.88 0.07 18);
+
+  --sidebar: oklch(0.168 0.024 274);
+  --sidebar-foreground: oklch(0.916 0.012 274);
+  --sidebar-primary: oklch(0.474 0.213 273);
+  --sidebar-primary-foreground: oklch(0.985 0.004 85);
+  --sidebar-accent: oklch(0.235 0.033 274);
+  --sidebar-accent-foreground: oklch(0.958 0.008 274);
+  --sidebar-border: oklch(0.268 0.03 274);
+  --sidebar-ring: oklch(0.474 0.213 273);
+
+  --font-sans: "Archivo", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    sans-serif;
+  --font-display: "Gabarito", "Archivo", ui-sans-serif, system-ui, sans-serif;
+
+  --sidebar-width: 16.5rem;
+}

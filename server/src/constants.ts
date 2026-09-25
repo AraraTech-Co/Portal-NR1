@@ -262,12 +262,6 @@ export const PARTICIPATION_TYPE_VALUES: readonly ParticipationType[] =
 // ─── Canal de denúncia (Lei 14.457/2022, art. 23, II) ─────────────────────────
 
 /**
- * Grant no Membership que autoriza o comitê a listar/tratar relatos (ADR-17).
- * MASTER da empresa também acessa o comitê.
- */
-export const ETHICS_COMMITTEE_GRANT = "ethics_committee";
-
-/**
  * Categoria do relato.
  * - HARASSMENT_MORAL / HARASSMENT_SEXUAL: assédio
  * - DISCRIMINATION: discriminação

@@ -23,7 +23,6 @@ function publicUser(actor: NonNullable<AuthRequest["actor"]>) {
     is_master: actor.isMaster,
     role: actor.role,
     permission: actor.permission,
-    grants: actor.grants,
     must_change_password: actor.mustChangePassword,
     organization: {
       id: actor.organizationId,
@@ -49,7 +48,6 @@ function sessionUserFromAccess(
     is_master: access.isMaster,
     role: access.orgRole,
     permission,
-    grants: access.grants,
     must_change_password: access.user.mustChangePassword,
     organization: {
       id: access.organizationId,

@@ -1,0 +1,22 @@
+.empty-state {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: color-mix(in oklch, var(--card) 70%, var(--background));
+  padding: 2.25rem 1.5rem;
+  text-align: center;
+}
+
+.empty-title {
+  margin: 0 0 0.35rem;
+  font-size: 1.1rem;
+  font-family: var(--font-display);
+}
+
+.empty-state .muted {
+  margin: 0 auto;
+  max-width: 28rem;
+}
+
+.empty-action {
+  margin-top: 1rem;
+}

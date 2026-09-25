@@ -122,7 +122,6 @@ export function verify(permission: string) {
         isMaster: access.isMaster,
         role: access.orgRole,
         permission: roleKey,
-        grants: access.grants,
         name: access.user.name,
         email: access.user.email,
         login: access.user.login,

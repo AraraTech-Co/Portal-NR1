@@ -183,8 +183,6 @@ model Membership {
   userId         String
   organizationId String
   role           Role     @default(COLABORADOR)
-  /// Grants por pessoa, ortogonais ao papel (ex.: "sensitive_data").
-  grants         String[] @default([])
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -1170,7 +1168,7 @@ model Contractor {
 // Canal de denúncia (Lei 14.457/2022, art. 23, II)
 // Anonimato REAL: relato anônimo não grava identidade nenhuma.
 // O acompanhamento é por protocolo + código de acesso (ADR-16).
-// Acesso exige o grant "ethics_committee" no Membership (ADR-17).
+// Acesso ao comitê: MASTER da empresa ou permissão admin da conta.
 // ============================================================
 
 enum ReportCategory {

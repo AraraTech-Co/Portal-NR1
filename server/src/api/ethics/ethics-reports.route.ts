@@ -22,7 +22,7 @@ router.post("/api/ethics-reports/messages", publicRoute, (req, res) =>
   ethics.addReporterMessage(req, res),
 );
 
-// Comitê (grant ethics_committee ou MASTER)
+// Comitê (MASTER ou permissão admin da conta)
 router.get("/api/ethics-reports", ...committee, (req, res) =>
   ethics.list(req, res),
 );

@@ -14,13 +14,11 @@ export class Membership extends Model<IMembership> {
         userId: string;
         organizationId: string;
         role: Role;
-        grants?: string[];
       }) => {
         return this.create.new({
           userId: input.userId,
           organizationId: input.organizationId,
           role: input.role,
-          grants: input.grants ?? [],
         } as Partial<IMembership>);
       },
     },
