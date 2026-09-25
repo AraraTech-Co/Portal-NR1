@@ -21,6 +21,8 @@ export type JoinRequest = {
   account_name: string;
   name: string;
   email: string;
+  registration: string | null;
+  is_external: boolean;
   created_at: string;
   invite_link_id: string | null;
   role_mode: "FIXED" | "ON_APPROVE";
@@ -98,7 +100,13 @@ export function fetchPublicInvite(token: string) {
 
 export function acceptPublicInvite(
   token: string,
-  input: { name: string; email: string; password: string },
+  input: {
+    name: string;
+    email: string;
+    password: string;
+    registration?: string;
+    is_external?: boolean;
+  },
 ) {
   return request<{
     ok: boolean;

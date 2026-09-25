@@ -1,9 +1,2 @@
 @import "./styles/tokens.css";
 @import "./styles/base.css";
-
-.boot-screen {
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
-  background: var(--background);
-}

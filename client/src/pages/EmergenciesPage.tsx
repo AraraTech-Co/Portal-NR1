@@ -11,11 +11,13 @@ import { fetchEstablishments, type Establishment } from "@/api/operation";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
 import { EmptyState } from "@/components/EmptyState";
+import { LoadingState } from "@/components/LoadingState";
 import { PageHeader } from "@/components/PageHeader";
+import { PeoplePicker } from "@/components/PeoplePicker";
 import { formatDay } from "@/lib/labels";
 import "@/components/data-table.css";
 import "@/components/form.css";
-
+import type { OrgMember } from "@/api/org-members";
 const DRILL_LABEL: Record<DrillStatus, string> = {
   NO_SCHEDULE: "Sem periodicidade",
   NEVER_DONE: "Nunca feito",
@@ -50,7 +52,9 @@ export function EmergenciesPage() {
   const [establishmentId, setEstablishmentId] = useState("");
   const [scenario, setScenario] = useState("");
   const [firstAidMeans, setFirstAidMeans] = useState("");
-  const [responsibles, setResponsibles] = useState("");
+  const [responsibleIds, setResponsibleIds] = useState<string[]>([]);
+  const [responsibleMembers, setResponsibleMembers] = useState<OrgMember[]>([]);
+  const [responsiblesExtra, setResponsiblesExtra] = useState("");
   const [evacuationPlan, setEvacuationPlan] = useState("");
   const [largeScaleMeasures, setLargeScaleMeasures] = useState("");
   const [saving, setSaving] = useState(false);
@@ -104,20 +108,30 @@ export function EmergenciesPage() {
       setFormError("Informe estabelecimento e cenário.");
       return;
     }
+    if (responsibleIds.length === 0 && !responsiblesExtra.trim()) {
+      setFormError("Selecione ao menos um responsável ou descreva o papel.");
+      return;
+    }
     setSaving(true);
     setFormError(null);
     try {
+      const fromPeople = responsibleMembers.map((m) => m.name).join(", ");
+      const responsibles = [fromPeople, responsiblesExtra.trim()]
+        .filter(Boolean)
+        .join(fromPeople && responsiblesExtra.trim() ? " — " : "");
       await createEmergencyProcedure({
         establishmentId,
         scenario: scenario.trim(),
         firstAidMeans: firstAidMeans.trim(),
-        responsibles: responsibles.trim(),
+        responsibles,
         evacuationPlan: evacuationPlan.trim(),
         largeScaleMeasures: largeScaleMeasures.trim() || undefined,
       });
       setScenario("");
       setFirstAidMeans("");
-      setResponsibles("");
+      setResponsibleIds([]);
+      setResponsibleMembers([]);
+      setResponsiblesExtra("");
       setEvacuationPlan("");
       setLargeScaleMeasures("");
       setShowForm(false);
@@ -226,15 +240,29 @@ export function EmergenciesPage() {
                 required
               />
             </label>
-            <label className="form-field">
-              Responsáveis
-              <textarea
-                value={responsibles}
-                onChange={(e) => setResponsibles(e.target.value)}
+            <div className="form-field">
+              <span>Responsáveis</span>
+              <PeoplePicker
+                mode="multiple"
+                value={responsibleIds}
                 disabled={saving}
                 required
+                onChange={(ids, members) => {
+                  setResponsibleIds(ids);
+                  setResponsibleMembers(members);
+                }}
               />
-            </label>
+              <p className="form-hint">
+                Selecione as pessoas cadastradas. Se precisar citar brigada ou
+                funções sem usuário, use o campo abaixo.
+              </p>
+              <input
+                value={responsiblesExtra}
+                onChange={(e) => setResponsiblesExtra(e.target.value)}
+                placeholder="Ex.: Brigada de incêndio do 2º turno"
+                disabled={saving}
+              />
+            </div>
             <label className="form-field">
               Plano de evacuação / abandono
               <textarea
@@ -262,7 +290,7 @@ export function EmergenciesPage() {
         </section>
       )}
 
-      {loading && <p className="muted">Carregando emergências…</p>}
+      {loading && <LoadingState label="Carregando emergências…" />}
       {!loading && error && (
         <p className="page-error" role="alert">
           {error}

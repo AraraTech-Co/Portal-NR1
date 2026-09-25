@@ -6,6 +6,16 @@ import "./home.css";
 
 const SHORTCUTS = [
   {
+    href: "/denuncia",
+    title: "Fazer denúncia",
+    desc: "Canal confidencial — anônimo por padrão.",
+  },
+  {
+    href: "/holerites",
+    title: "Holerites",
+    desc: "Seus contracheques e status de leitura.",
+  },
+  {
     href: "/inventario",
     title: "Inventário",
     desc: "Perigos, riscos e níveis validados.",

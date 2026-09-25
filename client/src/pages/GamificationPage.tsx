@@ -4,6 +4,7 @@ import { Chip } from "@/components/Chip";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
 import "@/components/data-table.css";
+import { LoadingState } from "@/components/LoadingState";
 
 export function GamificationPage() {
   const [balance, setBalance] = useState(0);
@@ -46,7 +47,7 @@ export function GamificationPage() {
           ) : undefined
         }
       />
-      {loading && <p className="muted">Carregando…</p>}
+      {loading && <LoadingState />}
       {!loading && error && (
         <p className="page-error" role="alert">
           {error}

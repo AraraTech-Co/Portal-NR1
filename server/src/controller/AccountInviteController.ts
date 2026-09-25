@@ -240,10 +240,12 @@ class AccountInviteController {
 
   async acceptPublic(req: Request, res: Response) {
     try {
-      const { name, email, password } = req.body as {
+      const { name, email, password, registration, is_external } = req.body as {
         name?: string;
         email?: string;
         password?: string;
+        registration?: string;
+        is_external?: boolean;
       };
       const link = await prisma.accountInviteLink.findUnique({
         where: { token: req.params.token },
@@ -265,6 +267,21 @@ class AccountInviteController {
       }
       if (!password || password.length < 8) {
         throw httpError(400, "A senha deve ter pelo menos 8 caracteres.");
+      }
+
+      const isExternal = is_external === true;
+      const cleanRegistration = blank(registration);
+      if (!isExternal && !cleanRegistration) {
+        throw httpError(
+          400,
+          "Informe o número de cadastro ou selecione Externo.",
+        );
+      }
+      if (isExternal && cleanRegistration) {
+        throw httpError(
+          400,
+          "Externo não deve informar número de cadastro.",
+        );
       }
 
       const existingMembership = await prisma.accountMembership.findFirst({
@@ -298,6 +315,37 @@ class AccountInviteController {
         throw httpError(409, "Já existe um pedido pendente com este e-mail.");
       }
 
+      if (cleanRegistration) {
+        const profileTaken = await prisma.employeeProfile.findFirst({
+          where: {
+            organizationId: link.account.organizationId,
+            registration: cleanRegistration,
+          },
+          select: { id: true },
+        });
+        if (profileTaken) {
+          throw httpError(
+            409,
+            "Este número de cadastro já está em uso nesta empresa.",
+          );
+        }
+        const pendingReg = await prisma.accountJoinRequest.findFirst({
+          where: {
+            status: "PENDING",
+            registration: cleanRegistration,
+            isExternal: false,
+            account: { organizationId: link.account.organizationId },
+          },
+          select: { id: true },
+        });
+        if (pendingReg) {
+          throw httpError(
+            409,
+            "Já existe um pedido pendente com este número de cadastro.",
+          );
+        }
+      }
+
       const passwordHash = await bcrypt.hash(password, 10);
       const request = await prisma.$transaction(async (tx) => {
         const fresh = await tx.accountInviteLink.findUnique({
@@ -313,6 +361,8 @@ class AccountInviteController {
             name: cleanName,
             email: cleanEmail,
             passwordHash,
+            registration: isExternal ? null : cleanRegistration,
+            isExternal,
             status: "PENDING",
           },
         });
@@ -390,6 +440,8 @@ class AccountInviteController {
             account_name: r.account.name,
             name: r.name,
             email: r.email,
+            registration: r.registration,
+            is_external: r.isExternal,
             created_at: r.createdAt,
             invite_link_id: r.inviteLinkId,
             role_mode: link?.roleMode ?? InviteRoleMode.ON_APPROVE,
@@ -499,10 +551,28 @@ class AccountInviteController {
           throw httpError(409, "Já existe um usuário com este e-mail.");
         }
 
-        const login = await allocateUniqueLogin(
-          loginCandidateFromEmail(request.email),
-          tx,
-        );
+        if (!request.isExternal && request.registration) {
+          const taken = await tx.employeeProfile.findFirst({
+            where: {
+              organizationId: request.account.organizationId,
+              registration: request.registration,
+            },
+            select: { id: true },
+          });
+          if (taken) {
+            throw httpError(
+              409,
+              "Este número de cadastro já está em uso nesta empresa.",
+            );
+          }
+        }
+
+        const loginBase =
+          !request.isExternal && request.registration
+            ? request.registration.toLowerCase().replace(/[^a-z0-9._-]/g, "") ||
+              loginCandidateFromEmail(request.email)
+            : loginCandidateFromEmail(request.email);
+        const login = await allocateUniqueLogin(loginBase, tx);
 
         const user = await tx.user.create({
           data: {
@@ -527,6 +597,14 @@ class AccountInviteController {
             userId: user.id,
             organizationId: request.account.organizationId,
             role: orgRole,
+          },
+        });
+
+        await tx.employeeProfile.create({
+          data: {
+            organizationId: request.account.organizationId,
+            userId: user.id,
+            registration: request.isExternal ? null : request.registration,
           },
         });
 

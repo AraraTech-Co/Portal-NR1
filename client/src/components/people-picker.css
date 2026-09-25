@@ -1,0 +1,39 @@
+.people-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.people-picker select {
+  border: 1px solid var(--input);
+  border-radius: var(--radius);
+  background: var(--card);
+  padding: 0.5rem 0.65rem;
+  font: inherit;
+  font-weight: 400;
+}
+
+.people-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 12rem;
+  overflow: auto;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--input);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+
+.people-picker-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.people-picker-option input {
+  margin: 0;
+}

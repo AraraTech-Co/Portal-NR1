@@ -4,7 +4,6 @@ import {
   answerPayslipQuestion,
   downloadPayslipFile,
   fetchOpenPayslipQuestions,
-  fetchPayslipRecipients,
   fetchPayslips,
   fileToBase64,
   publishPayslip,
@@ -15,7 +14,9 @@ import { useAuth } from "@/auth/AuthContext";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
 import { EmptyState } from "@/components/EmptyState";
+import { LoadingState } from "@/components/LoadingState";
 import { PageHeader } from "@/components/PageHeader";
+import { PeoplePicker } from "@/components/PeoplePicker";
 import { formatDay } from "@/lib/labels";
 import "@/components/data-table.css";
 import "@/components/form.css";
@@ -35,12 +36,13 @@ const MONTHS = [
   "Dezembro",
 ];
 
-function canPublish(permission: string): boolean {
+function canManagePayslips(permission: string, role: string | undefined): boolean {
   return (
     permission === "master" ||
     permission === "owner" ||
     permission === "admin" ||
-    permission === "rh"
+    permission === "rh" ||
+    role === "RH"
   );
 }
 
@@ -50,14 +52,12 @@ function competenceLabel(month: number, year: number): string {
 
 export function PayslipsPage() {
   const { user } = useAuth();
-  const isRh = canPublish(user?.permission ?? "user");
+  const isRh = canManagePayslips(user?.permission ?? "user", user?.role);
   const [rows, setRows] = useState<PayslipListItem[]>([]);
   const [openQs, setOpenQs] = useState<OpenPayslipQuestion[]>([]);
-  const [employees, setEmployees] = useState<
-    Array<{ userId: string; name: string }>
-  >([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [questionsError, setQuestionsError] = useState<string | null>(null);
 
   const now = useMemo(() => new Date(), []);
   const [userId, setUserId] = useState("");
@@ -71,21 +71,33 @@ export function PayslipsPage() {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [busyQ, setBusyQ] = useState<string | null>(null);
 
+  const mine = useMemo(
+    () => (user ? rows.filter((r) => r.userId === user.id) : []),
+    [rows, user],
+  );
+  const published = useMemo(
+    () => (user ? rows.filter((r) => r.userId !== user.id) : rows),
+    [rows, user],
+  );
+
   const reload = useCallback(async () => {
     const list = await fetchPayslips();
     setRows(list);
-    if (!isRh) return;
-    const [recipients, questions] = await Promise.all([
-      fetchPayslipRecipients(),
-      fetchOpenPayslipQuestions(),
-    ]);
-    setOpenQs(questions);
-    const withIds = recipients.map((r) => ({
-      userId: r.id,
-      name: r.name,
-    }));
-    setEmployees(withIds);
-    setUserId((current) => current || withIds[0]?.userId || "");
+    if (!isRh) {
+      setOpenQs([]);
+      setQuestionsError(null);
+      return;
+    }
+    try {
+      const questions = await fetchOpenPayslipQuestions();
+      setOpenQs(questions);
+      setQuestionsError(null);
+    } catch (err) {
+      setOpenQs([]);
+      setQuestionsError(
+        err instanceof Error ? err.message : "Falha ao carregar dúvidas",
+      );
+    }
   }, [isRh]);
 
   useEffect(() => {
@@ -166,13 +178,74 @@ export function PayslipsPage() {
     }
   }
 
+  function renderRow(r: PayslipListItem, showCollaborator: boolean) {
+    const isMine = Boolean(user && r.userId === user.id);
+    return (
+      <tr key={r.id}>
+        {showCollaborator && <td>{r.user.name}</td>}
+        <td>
+          <strong>
+            {competenceLabel(r.referenceMonth, r.referenceYear)}
+          </strong>
+        </td>
+        <td className="muted">{r.fileName}</td>
+        <td>
+          {r.viewedAt ? (
+            <Chip tone="success">Visto</Chip>
+          ) : (
+            <Chip tone="warning">Não visto</Chip>
+          )}
+          {r.open_questions > 0 ? (
+            <span style={{ marginLeft: "0.35rem" }}>
+              <Chip tone="info">
+                {r.open_questions} dúvida
+                {r.open_questions > 1 ? "s" : ""}
+              </Chip>
+            </span>
+          ) : r._count.questions > 0 ? (
+            <span style={{ marginLeft: "0.35rem" }}>
+              <Chip>{r._count.questions} dúvida(s)</Chip>
+            </span>
+          ) : null}
+        </td>
+        <td className="muted">
+          {formatDay(r.publishedAt)}
+          {showCollaborator ? (
+            <div className="muted">por {r.publishedBy.name}</div>
+          ) : null}
+        </td>
+        <td>
+          {isMine ? (
+            <div className="form-actions">
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={downloading === r.id}
+                onClick={() => onDownload(r)}
+              >
+                {downloading === r.id ? "…" : "Baixar"}
+              </Button>
+              <Link to={`/holerites/${r.id}`}>
+                <Button type="button" variant="ghost">
+                  Detalhe
+                </Button>
+              </Link>
+            </div>
+          ) : (
+            <span className="muted">Só o titular abre</span>
+          )}
+        </td>
+      </tr>
+    );
+  }
+
   return (
     <div>
       <PageHeader
         title="Holerites"
         description={
           isRh
-            ? "Publique contracheques e responda dúvidas. Só o colaborador abre o arquivo."
+            ? "Publique e acompanhe se o colaborador abriu. Só o titular baixa o arquivo."
             : "Consulte seus holerites e tire dúvidas com o RH."
         }
       />
@@ -199,23 +272,12 @@ export function PayslipsPage() {
             <div className="form-grid cols-2">
               <label className="form-field">
                 Colaborador
-                <select
+                <PeoplePicker
                   value={userId}
-                  onChange={(e) => setUserId(e.target.value)}
-                  disabled={publishing || employees.length === 0}
                   required
-                >
-                  <option value="">
-                    {employees.length === 0
-                      ? "Nenhum membro na organização"
-                      : "Selecione…"}
-                  </option>
-                  {employees.map((e) => (
-                    <option key={e.userId} value={e.userId}>
-                      {e.name}
-                    </option>
-                  ))}
-                </select>
+                  disabled={publishing}
+                  onChange={(id) => setUserId(id)}
+                />
               </label>
               <label className="form-field">
                 Arquivo (PDF ou imagem)
@@ -270,7 +332,12 @@ export function PayslipsPage() {
       {isRh && (
         <section className="form-section">
           <h2>Dúvidas em aberto</h2>
-          {openQs.length === 0 ? (
+          {questionsError && (
+            <p className="form-error" role="alert">
+              {questionsError}
+            </p>
+          )}
+          {!questionsError && openQs.length === 0 ? (
             <p className="muted">Nenhuma dúvida pendente.</p>
           ) : (
             openQs.map((q) => (
@@ -321,7 +388,7 @@ export function PayslipsPage() {
         </section>
       )}
 
-      {loading && <p className="muted">Carregando…</p>}
+      {loading && <LoadingState />}
       {!loading && error && (
         <p className="page-error" role="alert">
           {error}
@@ -338,78 +405,46 @@ export function PayslipsPage() {
         />
       )}
 
-      {!loading && !error && rows.length > 0 && (
+      {!loading && !error && mine.length > 0 && (
         <section className="form-section">
-          <h2>{isRh ? "Publicados (só o titular abre o arquivo)" : "Seus holerites"}</h2>
+          <h2>Meus holerites</h2>
+          <p className="muted">Só você pode baixar e abrir estes arquivos.</p>
           <div className="data-table-wrap">
             <table className="data-table">
               <thead>
                 <tr>
-                  {isRh && <th>Colaborador</th>}
                   <th>Competência</th>
                   <th>Arquivo</th>
                   <th>Situação</th>
                   <th>Publicado</th>
-                  {!isRh && <th></th>}
+                  <th></th>
                 </tr>
               </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id}>
-                    {isRh && <td>{r.user.name}</td>}
-                    <td>
-                      <strong>
-                        {competenceLabel(r.referenceMonth, r.referenceYear)}
-                      </strong>
-                    </td>
-                    <td className="muted">{r.fileName}</td>
-                    <td>
-                      {r.viewedAt ? (
-                        <Chip tone="success">Visto</Chip>
-                      ) : (
-                        <Chip tone="warning">Não visto</Chip>
-                      )}
-                      {r.open_questions > 0 ? (
-                        <span style={{ marginLeft: "0.35rem" }}>
-                          <Chip tone="info">
-                            {r.open_questions} dúvida
-                            {r.open_questions > 1 ? "s" : ""}
-                          </Chip>
-                        </span>
-                      ) : r._count.questions > 0 ? (
-                        <span style={{ marginLeft: "0.35rem" }}>
-                          <Chip>{r._count.questions} dúvida(s)</Chip>
-                        </span>
-                      ) : null}
-                    </td>
-                    <td className="muted">
-                      {formatDay(r.publishedAt)}
-                      {isRh ? (
-                        <div className="muted">por {r.publishedBy.name}</div>
-                      ) : null}
-                    </td>
-                    {!isRh && (
-                      <td>
-                        <div className="form-actions">
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            disabled={downloading === r.id}
-                            onClick={() => onDownload(r)}
-                          >
-                            {downloading === r.id ? "…" : "Baixar"}
-                          </Button>
-                          <Link to={`/holerites/${r.id}`}>
-                            <Button type="button" variant="ghost">
-                              Detalhe
-                            </Button>
-                          </Link>
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
+              <tbody>{mine.map((r) => renderRow(r, false))}</tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {!loading && !error && isRh && published.length > 0 && (
+        <section className="form-section">
+          <h2>Publicados na organização</h2>
+          <p className="muted">
+            Consulte se o colaborador já viu. O arquivo só abre para o titular.
+          </p>
+          <div className="data-table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Colaborador</th>
+                  <th>Competência</th>
+                  <th>Arquivo</th>
+                  <th>Situação</th>
+                  <th>Publicado</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>{published.map((r) => renderRow(r, true))}</tbody>
             </table>
           </div>
         </section>

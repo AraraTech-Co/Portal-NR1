@@ -19,6 +19,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
 import "@/components/form.css";
 import "./operation.css";
+import { LoadingState } from "@/components/LoadingState";
 
 function canEditOperation(permission: string): boolean {
   return (
@@ -244,7 +245,7 @@ export function OperationPage() {
     }
   }
 
-  if (loading) return <p className="muted">Carregando operação…</p>;
+  if (loading) return <LoadingState label="Carregando operação…" />;
   if (error) {
     return (
       <p className="page-error" role="alert">

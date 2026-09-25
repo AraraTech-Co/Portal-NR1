@@ -277,6 +277,10 @@ model AccountJoinRequest {
   name           String
   email          String
   passwordHash   String
+  /// Matrícula / nº de cadastro. Obrigatório se isExternal = false.
+  registration   String?
+  /// Terceiro / visitante sem matrícula da empresa.
+  isExternal     Boolean           @default(false)
   status         JoinRequestStatus @default(PENDING)
   /// Papéis definidos na aprovação.
   decidedRole    AccountRole?
@@ -291,6 +295,7 @@ model AccountJoinRequest {
 
   @@index([accountId, status])
   @@index([email])
+  @@index([accountId, registration])
 }
 
 /// Token de confirmação de e-mail (somente fluxo de Account OWNER).

@@ -43,6 +43,17 @@ describe("effectivePermission", () => {
     expect(effectivePermission(null, "OWNER")).toBe("owner");
   });
 
+  it("maps org RH/SST when account is USER", () => {
+    expect(effectivePermission("RH", "USER")).toBe("rh");
+    expect(effectivePermission("SST", "USER")).toBe("sst");
+    expect(effectivePermission("RH", null)).toBe("rh");
+  });
+
+  it("account OWNER/ADMIN still beat org RH", () => {
+    expect(effectivePermission("RH", "OWNER")).toBe("owner");
+    expect(effectivePermission("SST", "ADMIN")).toBe("admin");
+  });
+
   it("accountRoleToPermission maps correctly", () => {
     expect(accountRoleToPermission("OWNER")).toBe("owner");
     expect(accountRoleToPermission("ADMIN")).toBe("admin");

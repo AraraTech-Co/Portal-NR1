@@ -23,6 +23,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { formatDay } from "@/lib/labels";
 import "@/components/data-table.css";
 import "@/components/form.css";
+import { LoadingState } from "@/components/LoadingState";
 
 function inviteUrl(path: string): string {
   return `${window.location.origin}${path}`;
@@ -235,7 +236,7 @@ export function AccountPage() {
         </section>
       )}
 
-      {loading && <p className="muted">Carregando…</p>}
+      {loading && <LoadingState />}
       {!loading && error && (
         <p className="page-error" role="alert">
           {error}
@@ -305,6 +306,7 @@ export function AccountPage() {
                 <thead>
                   <tr>
                     <th>Pessoa</th>
+                    <th>Cadastro</th>
                     <th>Conta</th>
                     <th>Papéis</th>
                     <th>Pedido</th>
@@ -317,6 +319,11 @@ export function AccountPage() {
                       <td>
                         <strong>{r.name}</strong>
                         <div className="muted">{r.email}</div>
+                      </td>
+                      <td>
+                        {r.is_external
+                          ? "Externo"
+                          : (r.registration ?? "—")}
                       </td>
                       <td>
                         {r.account_name}

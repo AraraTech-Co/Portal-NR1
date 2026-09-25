@@ -8,6 +8,7 @@ import { Chip } from "@/components/Chip";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
 import "./inventory.css";
+import { LoadingState } from "@/components/LoadingState";
 
 type RiskTone =
   | "risk-trivial"
@@ -132,7 +133,7 @@ export function InventoryPage() {
         }
       />
 
-      {loading && <p className="muted">Carregando inventário…</p>}
+      {loading && <LoadingState label="Carregando inventário…" />}
 
       {!loading && error && (
         <p className="inventory-error" role="alert">

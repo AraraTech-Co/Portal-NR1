@@ -180,6 +180,13 @@ class EthicsController {
       }
 
       const anonymous = is_anonymous !== false;
+      if (!anonymous && !authReq.actor) {
+        res.status(401).json({
+          message:
+            "Para denúncia identificada, autentique-se no portal.",
+        });
+        return;
+      }
       const reporterUserId =
         !anonymous && authReq.actor ? authReq.actor.userId : null;
 

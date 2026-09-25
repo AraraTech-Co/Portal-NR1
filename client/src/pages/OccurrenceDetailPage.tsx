@@ -18,6 +18,7 @@ import {
 import "@/components/data-table.css";
 import "@/components/form.css";
 import "./occurrence-detail.css";
+import { LoadingState } from "@/components/LoadingState";
 
 export function OccurrenceDetailPage() {
   const { id } = useParams();
@@ -85,7 +86,7 @@ export function OccurrenceDetailPage() {
     }
   }
 
-  if (loading) return <p className="muted">Carregando ocorrência…</p>;
+  if (loading) return <LoadingState label="Carregando ocorrência…" />;
   if (error) {
     return (
       <p className="page-error" role="alert">

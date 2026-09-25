@@ -10,10 +10,11 @@ import { fetchEstablishments, type Establishment } from "@/api/operation";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
 import { EmptyState } from "@/components/EmptyState";
+import { LoadingState } from "@/components/LoadingState";
 import { PageHeader } from "@/components/PageHeader";
+import { PeoplePicker } from "@/components/PeoplePicker";
 import "@/components/data-table.css";
 import "@/components/form.css";
-
 const DEFAULT_STATEMENT =
   "Declaro, como responsável, que este documento reflete o gerenciamento de riscos ocupacionais da organização nesta data.";
 
@@ -32,6 +33,7 @@ export function DocumentsPage() {
 
   const [type, setType] = useState("INVENTORY");
   const [establishmentId, setEstablishmentId] = useState("");
+  const [responsibleUserId, setResponsibleUserId] = useState("");
   const [responsibleName, setResponsibleName] = useState("");
   const [responsibleRole, setResponsibleRole] = useState("");
   const [responsibleRegistration, setResponsibleRegistration] = useState("");
@@ -81,8 +83,8 @@ export function DocumentsPage() {
 
   async function onIssue(e: FormEvent) {
     e.preventDefault();
-    if (!responsibleName.trim()) {
-      setFormError("Informe o nome do responsável.");
+    if (!responsibleUserId || !responsibleName.trim()) {
+      setFormError("Selecione o responsável.");
       return;
     }
     setSaving(true);
@@ -96,6 +98,11 @@ export function DocumentsPage() {
         responsibleRegistration: responsibleRegistration.trim() || undefined,
         signatureStatement: statement.trim() || DEFAULT_STATEMENT,
       });
+      setResponsibleUserId("");
+      setResponsibleName("");
+      setResponsibleRole("");
+      setResponsibleRegistration("");
+      setStatement(DEFAULT_STATEMENT);
       await reload();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Falha ao emitir");
@@ -217,11 +224,20 @@ export function DocumentsPage() {
           <div className="form-grid cols-2">
             <label className="form-field">
               Responsável
-              <input
-                value={responsibleName}
-                onChange={(e) => setResponsibleName(e.target.value)}
-                disabled={saving}
+              <PeoplePicker
+                value={responsibleUserId}
                 required
+                disabled={saving}
+                onChange={(userId, member) => {
+                  setResponsibleUserId(userId);
+                  setResponsibleName(member?.name ?? "");
+                  if (member?.jobRoleName) {
+                    setResponsibleRole(member.jobRoleName);
+                  }
+                  if (member?.registration) {
+                    setResponsibleRegistration(member.registration);
+                  }
+                }}
               />
             </label>
             <label className="form-field">
@@ -259,7 +275,7 @@ export function DocumentsPage() {
         </form>
       </section>
 
-      {loading && <p className="muted">Carregando documentos…</p>}
+      {loading && <LoadingState label="Carregando documentos…" />}
       {!loading && error && (
         <p className="page-error" role="alert">
           {error}

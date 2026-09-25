@@ -14,6 +14,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { formatDay, OCCURRENCE_TYPE_LABEL } from "@/lib/labels";
 import "@/components/data-table.css";
 import "@/components/form.css";
+import { LoadingState } from "@/components/LoadingState";
 
 const TYPE_HINT: Record<string, string> = {
   ACCIDENT: "Alguém se machucou durante o trabalho, com ou sem afastamento.",
@@ -268,7 +269,7 @@ export function OccurrencesPage() {
         </p>
       )}
 
-      {loading && <p className="muted">Carregando ocorrências…</p>}
+      {loading && <LoadingState label="Carregando ocorrências…" />}
       {!loading && error && (
         <p className="page-error" role="alert">
           {error}

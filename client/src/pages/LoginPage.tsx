@@ -163,7 +163,12 @@ export function LoginPage() {
   }, []);
 
   if (!booting && user) {
-    return <Navigate to="/" replace />;
+    return (
+      <Navigate
+        to={user.must_change_password ? "/trocar-senha" : "/"}
+        replace
+      />
+    );
   }
 
   async function onSubmit(e: FormEvent) {

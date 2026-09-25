@@ -60,6 +60,17 @@ export function tokenExpiresAt(): Date {
   return new Date(Date.now() + TOKEN_DURATION_SEC * 1000);
 }
 
+/** Rotas liberadas enquanto mustChangePassword = true. */
+const ALLOWED_WHILE_MUST_CHANGE = new Set([
+  "GET /api/auth",
+  "DELETE /api/auth",
+  "POST /api/auth/password",
+]);
+
+function isAllowedWhileMustChangePassword(method: string, path: string): boolean {
+  return ALLOWED_WHILE_MUST_CHANGE.has(`${method.toUpperCase()} ${path}`);
+}
+
 /**
  * Bearer JWT + acesso à conta:
  * - MASTER da empresa → qualquer conta da org
@@ -133,6 +144,20 @@ export function verify(permission: string) {
       const authReq = req as AuthRequest;
       authReq.actor = actor;
       authReq.token = raw;
+
+      // Troca obrigatória: só sessão, logout e POST /api/auth/password.
+      if (
+        actor.mustChangePassword &&
+        permission !== "public" &&
+        !isAllowedWhileMustChangePassword(req.method, req.path)
+      ) {
+        res.status(403).json({
+          message: "É obrigatório alterar a senha antes de continuar.",
+          code: "MUST_CHANGE_PASSWORD",
+        });
+        return;
+      }
+
       next();
     } catch {
       res.status(401).json({ message: "Não autenticado." });

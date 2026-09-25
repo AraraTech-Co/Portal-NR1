@@ -94,11 +94,13 @@ class PayslipController {
         },
       });
       res.json({
-        payslips: rows.map((r) => ({
-          ...r,
-          open_questions: r.questions.length,
-          questions: undefined,
-        })),
+        payslips: rows.map((r) => {
+          const { storagePath: _storagePath, questions: _questions, ...rest } = r;
+          return {
+            ...rest,
+            open_questions: r.questions.length,
+          };
+        }),
       });
     } catch (err) {
       fail(res, err);

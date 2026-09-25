@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
 import { formatDay } from "@/lib/labels";
 import "@/components/data-table.css";
+import { LoadingState } from "@/components/LoadingState";
 
 export function HealthPage() {
   const [requirements, setRequirements] = useState<
@@ -61,7 +62,7 @@ export function HealthPage() {
         title="Saúde e exigências"
         description="Exigências por função, certificados e exames ocupacionais."
       />
-      {loading && <p className="muted">Carregando…</p>}
+      {loading && <LoadingState />}
       {!loading && error && (
         <p className="page-error" role="alert">
           {error}

@@ -11,6 +11,7 @@ import {
   isOverdue,
 } from "@/lib/labels";
 import "@/components/data-table.css";
+import { LoadingState } from "@/components/LoadingState";
 
 const STATUS_OPTIONS = Object.keys(ACTION_STATUS_LABEL);
 
@@ -157,7 +158,7 @@ export function ActionsPage() {
         </p>
       )}
 
-      {loading && <p className="muted">Carregando plano de ação…</p>}
+      {loading && <LoadingState label="Carregando plano de ação…" />}
       {!loading && error && (
         <p className="page-error" role="alert">
           {error}

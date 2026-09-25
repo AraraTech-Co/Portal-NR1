@@ -20,6 +20,17 @@ export const OCCURRENCE_TYPE_LABEL: Record<string, string> = {
   DANGEROUS_EVENT: "Quase aconteceu algo grave",
 };
 
+export const REPORT_CATEGORY_LABEL: Record<string, string> = {
+  HARASSMENT_MORAL: "Assédio moral",
+  HARASSMENT_SEXUAL: "Assédio sexual",
+  DISCRIMINATION: "Discriminação",
+  MISCONDUCT: "Conduta inadequada",
+  FRAUD_OR_MISUSE: "Fraude ou mau uso",
+  DATA_LEAK: "Vazamento de dados",
+  SAFETY_RISK: "Risco à segurança",
+  OTHER: "Outro",
+};
+
 export function formatDay(value: string | Date | null | undefined): string {
   if (!value) return "—";
   const d = typeof value === "string" ? new Date(value) : value;

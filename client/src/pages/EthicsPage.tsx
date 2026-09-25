@@ -9,8 +9,8 @@ export function EthicsPage() {
 
   return (
     <ListShell
-      title="Canal de denúncia"
-      description="Relatos recebidos pelo comitê de ética."
+      title="Comitê de ética"
+      description="Relatos recebidos pelo comitê. Colaboradores usam Fazer denúncia."
       loading={loading}
       error={error}
       empty={rows.length === 0}

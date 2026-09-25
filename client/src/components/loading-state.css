@@ -1,0 +1,52 @@
+.loading-state {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 1.25rem 0;
+}
+
+.loading-state--fullscreen {
+  min-height: 100vh;
+  justify-content: center;
+  padding: 0;
+  background: var(--background);
+}
+
+.loading-state-spinner {
+  width: 1.05rem;
+  height: 1.05rem;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid color-mix(in oklch, var(--primary) 22%, transparent);
+  border-top-color: var(--primary);
+  animation: loading-spin 0.75s linear infinite;
+}
+
+.loading-state-label {
+  margin: 0;
+  font-size: 0.925rem;
+}
+
+@keyframes loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-state-spinner {
+    animation: loading-pulse 1.2s ease-in-out infinite;
+    border-top-color: color-mix(in oklch, var(--primary) 22%, transparent);
+    border-color: var(--primary);
+  }
+
+  @keyframes loading-pulse {
+    0%,
+    100% {
+      opacity: 0.35;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+}

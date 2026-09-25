@@ -15,15 +15,20 @@ export function accountRoleToPermission(role: AccountRole): string {
 
 /**
  * Hierarquia:
- *   MASTER (empresa) > OWNER (conta) > ADMIN > USER
+ *   MASTER (empresa) > OWNER (conta) > ADMIN > RH/SST (papel na org) > USER
  * MASTER está no Membership da Organization — controla todas as contas dela.
+ * RH/SST no Membership passam a valer quando a conta não é OWNER/ADMIN.
  */
 export function effectivePermission(
   orgRole: Role | null | undefined,
   accountRole: AccountRole | null | undefined,
 ): string {
   if (orgRole === "MASTER") return "master";
-  if (accountRole) return accountRoleToPermission(accountRole);
+  if (accountRole === "OWNER") return "owner";
+  if (accountRole === "ADMIN") return "admin";
+  if (orgRole === "RH") return "rh";
+  if (orgRole === "SST") return "sst";
+  if (accountRole === "USER") return "user";
   return "user";
 }
 

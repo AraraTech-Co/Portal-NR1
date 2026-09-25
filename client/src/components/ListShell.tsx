@@ -1,5 +1,6 @@
 import { ReactNode } from "react";
 import { EmptyState } from "@/components/EmptyState";
+import { LoadingState } from "@/components/LoadingState";
 import { PageHeader } from "@/components/PageHeader";
 import "@/components/data-table.css";
 
@@ -32,7 +33,7 @@ export function ListShell({
     <div>
       <PageHeader title={title} description={description} actions={actions} />
       {before}
-      {loading && <p className="muted">Carregando…</p>}
+      {loading && <LoadingState />}
       {!loading && error && (
         <p className="page-error" role="alert">
           {error}

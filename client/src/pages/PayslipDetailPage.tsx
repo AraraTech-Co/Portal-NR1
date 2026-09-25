@@ -13,6 +13,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { formatDay } from "@/lib/labels";
 import "@/components/data-table.css";
 import "@/components/form.css";
+import { LoadingState } from "@/components/LoadingState";
 
 const MONTHS = [
   "Janeiro",
@@ -77,7 +78,7 @@ export function PayslipDetailPage() {
     }
   }
 
-  if (loading) return <p className="muted">Carregando…</p>;
+  if (loading) return <LoadingState />;
   if (error || !payslip) {
     return (
       <div>

@@ -1,4 +1,6 @@
 import { Request, Response } from "express";
+import bcrypt from "bcryptjs";
+import prisma from "../model/prisma";
 import { User } from "../model/schema/User/User";
 import { Token } from "../model/schema/Token/Token";
 import {
@@ -12,6 +14,9 @@ import {
 } from "../helper/account-access";
 import { effectivePermission } from "../helper/auth";
 import type { AuthRequest } from "../types/auth";
+
+/** Senhas provisórias da carga inicial — forçam troca no próximo acesso. */
+const PROVISIONAL_PASSWORDS = new Set(["123456"]);
 
 function publicUser(actor: NonNullable<AuthRequest["actor"]>) {
   return {
@@ -90,6 +95,16 @@ class AuthController {
       return;
     }
 
+    // Senha provisória da carga: marca troca obrigatória antes de emitir sessão.
+    let mustChange = user.mustChangePassword;
+    if (!mustChange && PROVISIONAL_PASSWORDS.has(password)) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { mustChangePassword: true },
+      });
+      mustChange = true;
+    }
+
     const accounts = await listAccessibleAccounts(user.id);
     if (accounts.length === 0) {
       res.status(403).json({ message: "Usuário sem conta acessível." });
@@ -125,9 +140,14 @@ class AuthController {
       expiresAt: tokenExpiresAt(),
     });
 
+    const sessionUser = sessionUserFromAccess({
+      ...access,
+      user: { ...access.user, mustChangePassword: mustChange },
+    });
+
     res.json({
       token: rawToken,
-      user: sessionUserFromAccess(access),
+      user: sessionUser,
       accounts,
     });
   }
@@ -144,6 +164,82 @@ class AuthController {
     res.json({
       user: publicUser(authReq.actor),
       accounts,
+    });
+  }
+
+  /**
+   * POST /api/auth/password — troca senha (libera mustChangePassword).
+   */
+  async changePassword(req: Request, res: Response) {
+    const authReq = req as AuthRequest;
+    if (!authReq.actor) {
+      res.status(401).json({ message: "Não autenticado." });
+      return;
+    }
+
+    const { current_password, new_password } = req.body as {
+      current_password?: string;
+      new_password?: string;
+    };
+
+    if (!current_password || !new_password) {
+      res.status(400).json({
+        message: "Informe current_password e new_password.",
+      });
+      return;
+    }
+    if (new_password.length < 8) {
+      res.status(400).json({
+        message: "A nova senha deve ter pelo menos 8 caracteres.",
+      });
+      return;
+    }
+    if (new_password === current_password) {
+      res.status(400).json({
+        message: "A nova senha deve ser diferente da atual.",
+      });
+      return;
+    }
+    if (PROVISIONAL_PASSWORDS.has(new_password)) {
+      res.status(400).json({
+        message: "Escolha uma senha diferente da provisória.",
+      });
+      return;
+    }
+
+    const users = new User();
+    const user = await users.read.one({ id: authReq.actor.userId });
+    if (!user) {
+      res.status(401).json({ message: "Não autenticado." });
+      return;
+    }
+
+    const ok = await users.custom.auth.verifyPassword(user, current_password);
+    if (!ok) {
+      res.status(401).json({ message: "Senha atual incorreta." });
+      return;
+    }
+
+    const passwordHash = await bcrypt.hash(new_password, 10);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash, mustChangePassword: false },
+    });
+
+    const access = await resolveAccountAccess(
+      authReq.actor.userId,
+      authReq.actor.accountId,
+    );
+    if (!access) {
+      res.status(403).json({ message: "Conta não permitida." });
+      return;
+    }
+
+    res.json({
+      user: sessionUserFromAccess({
+        ...access,
+        user: { ...access.user, mustChangePassword: false },
+      }),
     });
   }
 

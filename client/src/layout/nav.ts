@@ -48,7 +48,8 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     title: "Escuta e engajamento",
     items: [
-      { href: "/comite", label: "Canal de denúncia", moduleId: "comite" },
+      { href: "/denuncia", label: "Fazer denúncia", moduleId: "denuncia" },
+      { href: "/comite", label: "Comitê de ética", moduleId: "comite" },
       { href: "/clima", label: "Clima organizacional", moduleId: "clima" },
       { href: "/ideias", label: "Ideias", moduleId: "ideias" },
       { href: "/mural", label: "Mural de avisos", moduleId: "mural" },

@@ -4,6 +4,7 @@ import { acceptPublicInvite, fetchPublicInvite } from "@/api/invites";
 import { Button } from "@/components/Button";
 import "./login.css";
 import "@/components/form.css";
+import { LoadingState } from "@/components/LoadingState";
 
 export function ConvitePage() {
   const { token = "" } = useParams();
@@ -16,6 +17,8 @@ export function ConvitePage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [isExternal, setIsExternal] = useState(false);
+  const [registration, setRegistration] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -43,7 +46,18 @@ export function ConvitePage() {
     setSaving(true);
     setFormError(null);
     try {
-      await acceptPublicInvite(token, { name, email, password });
+      if (!isExternal && !registration.trim()) {
+        setFormError("Informe o número de cadastro ou selecione Externo.");
+        setSaving(false);
+        return;
+      }
+      await acceptPublicInvite(token, {
+        name,
+        email,
+        password,
+        registration: isExternal ? undefined : registration.trim(),
+        is_external: isExternal,
+      });
       setDone(true);
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Falha ao enviar");
@@ -67,7 +81,7 @@ export function ConvitePage() {
           </>
         )}
 
-        {!loadError && !meta && <p className="muted">Carregando convite…</p>}
+        {!loadError && !meta && <LoadingState label="Carregando convite…" />}
 
         {!loadError && meta && done && (
           <>
@@ -107,6 +121,32 @@ export function ConvitePage() {
                   autoComplete="email"
                 />
               </label>
+              <label
+                className="login-field"
+                style={{ flexDirection: "row", alignItems: "center", gap: "0.55rem" }}
+              >
+                <input
+                  type="checkbox"
+                  checked={isExternal}
+                  onChange={(e) => {
+                    setIsExternal(e.target.checked);
+                    if (e.target.checked) setRegistration("");
+                  }}
+                />
+                <span>Sou externo (sem número de cadastro)</span>
+              </label>
+              {!isExternal && (
+                <label className="login-field">
+                  Número de cadastro
+                  <input
+                    value={registration}
+                    onChange={(e) => setRegistration(e.target.value)}
+                    required
+                    autoComplete="off"
+                    placeholder="Ex.: 000056"
+                  />
+                </label>
+              )}
               <label className="login-field">
                 Senha
                 <input

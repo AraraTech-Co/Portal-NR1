@@ -29,6 +29,19 @@ export async function login(loginId: string, password: string) {
   return data;
 }
 
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+) {
+  return request<{ user: SessionUser }>("/api/auth/password", {
+    method: "POST",
+    body: JSON.stringify({
+      current_password: currentPassword,
+      new_password: newPassword,
+    }),
+  });
+}
+
 export async function fetchSession() {
   return request<{ user: SessionUser; accounts: unknown[] }>("/api/auth");
 }
