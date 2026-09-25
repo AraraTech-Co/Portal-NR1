@@ -222,7 +222,9 @@ export const fetchAnnouncements = () =>
     announcements: Array<{
       id: string;
       title: string;
-      publishedAt: string;
+      body: string;
+      kind: string;
+      createdAt: string;
       read_at: string | null;
       publishedBy: { name: string };
       _count: { reads: number };

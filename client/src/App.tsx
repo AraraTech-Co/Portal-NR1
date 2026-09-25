@@ -4,6 +4,7 @@ import { AppShell } from "@/layout/AppShell";
 import { AccountPage } from "@/pages/AccountPage";
 import { ActionsPage } from "@/pages/ActionsPage";
 import { AepPage } from "@/pages/AepPage";
+import { AnnouncementDetailPage } from "@/pages/AnnouncementDetailPage";
 import { AnnouncementsPage } from "@/pages/AnnouncementsPage";
 import { ChangePasswordPage } from "@/pages/ChangePasswordPage";
 import { ClimatePage } from "@/pages/ClimatePage";
@@ -92,6 +93,7 @@ function AppRoutes() {
             <Route path="clima" element={<ClimatePage />} />
             <Route path="ideias" element={<IdeasPage />} />
             <Route path="mural" element={<AnnouncementsPage />} />
+            <Route path="mural/:id" element={<AnnouncementDetailPage />} />
             <Route path="gamificacao" element={<GamificationPage />} />
             <Route path="convocacoes" element={<SummonsPage />} />
             <Route path="conta" element={<AccountPage />} />

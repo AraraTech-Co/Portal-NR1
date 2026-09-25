@@ -31,6 +31,12 @@ export const REPORT_CATEGORY_LABEL: Record<string, string> = {
   OTHER: "Outro",
 };
 
+export const ANNOUNCEMENT_KIND_LABEL: Record<string, string> = {
+  NOTICE: "Aviso",
+  CAMPAIGN: "Campanha",
+  TRAINING: "Treinamento",
+};
+
 export function formatDay(value: string | Date | null | undefined): string {
   if (!value) return "—";
   const d = typeof value === "string" ? new Date(value) : value;

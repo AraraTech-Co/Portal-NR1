@@ -11,6 +11,11 @@ const SHORTCUTS = [
     desc: "Canal confidencial — anônimo por padrão.",
   },
   {
+    href: "/mural",
+    title: "Mural de avisos",
+    desc: "Comunicados e campanhas da empresa.",
+  },
+  {
     href: "/holerites",
     title: "Holerites",
     desc: "Seus contracheques e status de leitura.",
@@ -24,11 +29,6 @@ const SHORTCUTS = [
     href: "/acoes",
     title: "Ações",
     desc: "Plano de ação e acompanhamentos.",
-  },
-  {
-    href: "/ocorrencias",
-    title: "Ocorrências",
-    desc: "Registros e investigações.",
   },
 ] as const;
 
