@@ -47,6 +47,7 @@ export function LoginPage() {
     const surface = surfaceRef.current;
     if (!aside || !mark || !surface) return;
 
+    const surfaceEl = surface;
     let rafId = 0;
     let lastTime = performance.now();
 
@@ -144,8 +145,8 @@ export function LoginPage() {
       cy = motion.y + size / 2;
 
       markEl.style.transform = `translate(${motion.x}px, ${motion.y}px)`;
-      surface.style.transform = `translate(${cx}px, ${cy}px)`;
-      surface.style.setProperty("--bubble-size", `${size}px`);
+      surfaceEl.style.transform = `translate(${cx}px, ${cy}px)`;
+      surfaceEl.style.setProperty("--bubble-size", `${size}px`);
 
       rafId = requestAnimationFrame(tick);
     }
