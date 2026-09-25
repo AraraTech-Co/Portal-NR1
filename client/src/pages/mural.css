@@ -1,0 +1,58 @@
+.mural-row.is-open {
+  background: color-mix(in oklch, var(--secondary) 35%, var(--card));
+}
+
+.mural-row td:last-child {
+  width: 2rem;
+  text-align: center;
+  color: var(--muted-foreground);
+}
+
+.mural-chevron {
+  display: inline-block;
+  transition: transform 0.22s ease;
+  font-size: 0.75rem;
+}
+
+.mural-row.is-open .mural-chevron {
+  transform: rotate(180deg);
+}
+
+.mural-expand > td {
+  padding: 0 !important;
+  border-bottom: 1px solid var(--border);
+}
+
+.mural-expand-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.28s ease;
+}
+
+.mural-expand-panel.is-open {
+  grid-template-rows: 1fr;
+}
+
+.mural-expand-clip {
+  overflow: hidden;
+  min-height: 0;
+}
+
+.mural-expand-body {
+  padding: 0 0.85rem 1rem;
+}
+
+.mural-expand-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.65rem;
+}
+
+.mural-expand-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.85rem;
+}
