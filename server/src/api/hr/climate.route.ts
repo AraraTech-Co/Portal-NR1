@@ -1,6 +1,9 @@
 import { Router } from "express";
 import climate from "../../controller/ClimateController";
-import { read, writeRh } from "./middleware";
+import { moduleRead, moduleWrite } from "./middleware";
+
+const read = moduleRead("clima");
+const writeRh = moduleWrite("clima");
 
 const router = Router();
 

@@ -1,7 +1,10 @@
 import { Router } from "express";
 import risk from "../../controller/RiskController";
 import actionEvidence from "../../controller/ActionEvidenceController";
-import { read, write } from "./middleware";
+import { moduleRead, moduleWrite } from "./middleware";
+
+const read = moduleRead("acoes");
+const write = moduleWrite("acoes");
 
 const router = Router();
 

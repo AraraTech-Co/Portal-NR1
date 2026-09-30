@@ -6,18 +6,21 @@ export function accountRoleToPermission(role: AccountRole): string {
     case "OWNER":
       return "owner";
     case "ADMIN":
-      return "admin";
+      return "adm_loja";
     case "USER":
     default:
-      return "user";
+      return "colaborador";
   }
 }
 
 /**
- * Hierarquia:
- *   MASTER (empresa) > OWNER (conta) > ADMIN > RH/SST (papel na org) > USER
- * MASTER está no Membership da Organization — controla todas as contas dela.
- * RH/SST no Membership passam a valer quando a conta não é OWNER/ADMIN.
+ * Hierarquia de tenancy + papel operacional:
+ *   MASTER (empresa) > OWNER (conta) > AccountRole.ADMIN → adm_loja
+ *   > RH / SST / SUPERVISOR / GERENTE / ADM_LOJA (Membership)
+ *   > Role.ADMIN legado → gerente
+ *   > COLABORADOR / USER → colaborador
+ *
+ * Na matriz de módulos, OWNER usa a coluna Master; AccountRole.ADMIN usa ADM loja.
  */
 export function effectivePermission(
   orgRole: Role | null | undefined,
@@ -25,11 +28,15 @@ export function effectivePermission(
 ): string {
   if (orgRole === "MASTER") return "master";
   if (accountRole === "OWNER") return "owner";
-  if (accountRole === "ADMIN") return "admin";
+  if (accountRole === "ADMIN") return "adm_loja";
   if (orgRole === "RH") return "rh";
   if (orgRole === "SST") return "sst";
-  if (accountRole === "USER") return "user";
-  return "user";
+  if (orgRole === "SUPERVISOR") return "supervisor";
+  if (orgRole === "GERENTE") return "gerente";
+  if (orgRole === "ADM_LOJA") return "adm_loja";
+  if (orgRole === "ADMIN") return "gerente";
+  if (accountRole === "USER") return "colaborador";
+  return "colaborador";
 }
 
 export function isOrgMaster(orgRole: Role | null | undefined): boolean {

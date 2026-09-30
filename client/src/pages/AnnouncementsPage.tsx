@@ -7,7 +7,6 @@ import {
   type AnnouncementKind,
   type AnnouncementListItem,
 } from "@/api/announcements";
-import { useAuth } from "@/auth/AuthContext";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
 import { EmptyState } from "@/components/EmptyState";
@@ -15,30 +14,14 @@ import { LoadingState } from "@/components/LoadingState";
 import { MarkdownBody } from "@/components/MarkdownBody";
 import { PageHeader } from "@/components/PageHeader";
 import { ANNOUNCEMENT_KIND_LABEL, formatDay } from "@/lib/labels";
+import { useModuleAccess } from "@/lib/module-access";
 import "@/components/data-table.css";
 import "@/components/form.css";
 import "./mural.css";
 
-function canPublishAnnouncements(
-  permission: string,
-  role: string | undefined,
-): boolean {
-  return (
-    permission === "master" ||
-    permission === "owner" ||
-    permission === "admin" ||
-    permission === "rh" ||
-    role === "RH"
-  );
-}
-
 export function AnnouncementsPage() {
-  const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
-  const canPublish = canPublishAnnouncements(
-    user?.permission ?? "user",
-    user?.role,
-  );
+  const { canWrite: canPublish } = useModuleAccess("mural");
   const [rows, setRows] = useState<AnnouncementListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

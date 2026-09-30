@@ -3,7 +3,7 @@ import prisma from "../model/prisma";
 import { HrDocument } from "../model/schema/HrDocument/HrDocument";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
-import { can } from "../helper/permissions";
+import { canWriteModule } from "../helper/module-access";
 import {
   assertSize,
   buildPrivateStoragePath,
@@ -26,7 +26,7 @@ function blank(v?: string | null) {
 }
 
 function isRh(req: AuthRequest): boolean {
-  return Boolean(req.actor && can(req.actor.permission, "rh"));
+  return Boolean(req.actor && canWriteModule(req.actor.permission, "documentos_rh"));
 }
 
 class HrDocumentController {

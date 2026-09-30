@@ -1,6 +1,9 @@
 import { Router } from "express";
 import onboarding from "../../controller/OnboardingController";
-import { read, writeRh } from "./middleware";
+import { moduleRead, moduleWrite } from "./middleware";
+
+const read = moduleRead("onboarding");
+const writeRh = moduleWrite("onboarding");
 
 const router = Router();
 

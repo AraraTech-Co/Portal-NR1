@@ -34,6 +34,8 @@ describe("auth API", () => {
     expect(res.body.user.permission).toBe("owner");
     expect(res.body.user.is_master).toBe(false);
     expect(res.body.user.account_role).toBe("OWNER");
+    expect(res.body.user.modules.conta).toBe("write");
+    expect(res.body.user.modules.holerites).toBe("write");
     expect(res.body.accounts).toHaveLength(1);
     expect(res.body.accounts[0].name).toBe("Conta Matriz");
   });

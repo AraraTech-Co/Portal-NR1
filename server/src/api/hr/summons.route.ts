@@ -1,6 +1,9 @@
 import { Router } from "express";
 import summons from "../../controller/SummonController";
-import { read, writeRh } from "./middleware";
+import { moduleRead, moduleWrite } from "./middleware";
+
+const read = moduleRead("convocacoes");
+const writeRh = moduleWrite("convocacoes");
 
 const router = Router();
 

@@ -1,6 +1,9 @@
 import { Router } from "express";
 import announcements from "../../controller/AnnouncementController";
-import { read, writeRh } from "./middleware";
+import { moduleRead, moduleWrite } from "./middleware";
+
+const read = moduleRead("mural");
+const writeRh = moduleWrite("mural");
 
 const router = Router();
 

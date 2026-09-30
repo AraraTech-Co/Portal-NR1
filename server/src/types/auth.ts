@@ -10,7 +10,7 @@ export type Actor = {
   isMaster: boolean;
   /** Papel na Organization (MASTER = empresa; demais = operacional). */
   role: Role;
-  /** Chave efetiva: master > owner > admin > user. */
+  /** Chave efetiva na matriz de módulos (master, owner, sst, rh, …). */
   permission: string;
   name: string;
   email: string | null;

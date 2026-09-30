@@ -1,6 +1,9 @@
 import { Router } from "express";
 import participation from "../../controller/ParticipationController";
-import { read, write } from "./middleware";
+import { moduleRead, moduleWrite } from "./middleware";
+
+const read = moduleRead("participacao");
+const write = moduleWrite("participacao");
 
 const router = Router();
 

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
 import { NAV_GROUPS, type NavGroup } from "./nav";
+import { canReadModule } from "@/lib/module-access";
 import "./sidebar.css";
 
 const COLLAPSED_KEY = "nr1.nav.collapsed";
@@ -102,7 +103,12 @@ export function Sidebar({ mobileOpen, onCloseMobile }: Props) {
       </Link>
 
       {NAV_GROUPS.map((group: NavGroup) => {
-        const hasActive = group.items.some((item) => isActive(item.href));
+        const visibleItems = group.items.filter((item) =>
+          canReadModule(user?.modules, item.moduleId),
+        );
+        if (visibleItems.length === 0) return null;
+
+        const hasActive = visibleItems.some((item) => isActive(item.href));
         const isOpen = hasActive || !collapsed.includes(group.title);
         const panelId = `nav-${group.title.replace(/\s+/g, "-").toLowerCase()}`;
 
@@ -123,7 +129,7 @@ export function Sidebar({ mobileOpen, onCloseMobile }: Props) {
             </button>
             {isOpen && (
               <ul id={panelId} className="sidebar-list">
-                {group.items.map((item) => {
+                {visibleItems.map((item) => {
                   const active = isActive(item.href);
                   return (
                     <li key={item.href}>

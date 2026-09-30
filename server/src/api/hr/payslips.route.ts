@@ -1,6 +1,9 @@
 import { Router } from "express";
 import payslips from "../../controller/PayslipController";
-import { read, writeRh } from "./middleware";
+import { moduleRead, moduleWrite } from "./middleware";
+
+const read = moduleRead("holerites");
+const writeRh = moduleWrite("holerites");
 
 const router = Router();
 

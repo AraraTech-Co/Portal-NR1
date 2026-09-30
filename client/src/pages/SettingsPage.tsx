@@ -1,6 +1,7 @@
 import { useAuth } from "@/auth/AuthContext";
 import { Chip } from "@/components/Chip";
 import { PageHeader } from "@/components/PageHeader";
+import { PERMISSION_LABEL } from "@/lib/labels";
 import "@/components/data-table.css";
 
 export function SettingsPage() {
@@ -29,7 +30,9 @@ export function SettingsPage() {
                 <tr>
                   <th>Permissão</th>
                   <td>
-                    <Chip>{user.permission}</Chip>
+                    <Chip>
+                      {PERMISSION_LABEL[user.permission] ?? user.permission}
+                    </Chip>
                   </td>
                 </tr>
                 <tr>
@@ -46,9 +49,8 @@ export function SettingsPage() {
             </table>
           </div>
           <p className="muted" style={{ marginTop: "1rem" }}>
-            Cadastros avançados (usuários, papéis e metodologias) entram nas
-            próximas iterações. Por enquanto use Conta para trocar a conta
-            ativa.
+            Os módulos visíveis no menu seguem a matriz L / L/E / X do papel
+            efetivo. Cadastros avançados de metodologias entram depois.
           </p>
         </section>
       )}

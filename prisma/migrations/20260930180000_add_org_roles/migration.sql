@@ -1,0 +1,4 @@
+-- Novos papéis operacionais (matriz NR-1: Supervisor, Gerentes, ADM loja).
+ALTER TYPE "Role" ADD VALUE IF NOT EXISTS 'SUPERVISOR';
+ALTER TYPE "Role" ADD VALUE IF NOT EXISTS 'GERENTE';
+ALTER TYPE "Role" ADD VALUE IF NOT EXISTS 'ADM_LOJA';

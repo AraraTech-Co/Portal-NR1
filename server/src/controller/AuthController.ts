@@ -13,6 +13,7 @@ import {
   resolveAccountAccess,
 } from "../helper/account-access";
 import { effectivePermission } from "../helper/auth";
+import { modulesForRole } from "../helper/module-access";
 import type { AuthRequest } from "../types/auth";
 
 /** Senhas provisórias da carga inicial — forçam troca no próximo acesso. */
@@ -29,6 +30,7 @@ function publicUser(actor: NonNullable<AuthRequest["actor"]>) {
     role: actor.role,
     permission: actor.permission,
     must_change_password: actor.mustChangePassword,
+    modules: modulesForRole(actor.permission),
     organization: {
       id: actor.organizationId,
       name: actor.organizationName,
@@ -54,6 +56,7 @@ function sessionUserFromAccess(
     role: access.orgRole,
     permission,
     must_change_password: access.user.mustChangePassword,
+    modules: modulesForRole(permission),
     organization: {
       id: access.organizationId,
       name: access.organizationName,

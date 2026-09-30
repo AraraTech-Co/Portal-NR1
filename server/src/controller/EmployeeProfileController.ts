@@ -6,7 +6,7 @@ import { JobRole } from "../model/schema/JobRole/JobRole";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
 import { normalizeTaxIdDigits } from "../constants";
-import { can } from "../helper/permissions";
+import { canWriteModule } from "../helper/module-access";
 import type { AuthRequest } from "../types/auth";
 
 function fail(res: Response, err: unknown) {
@@ -26,7 +26,7 @@ function blank(v?: string | null) {
 }
 
 function isRh(req: AuthRequest): boolean {
-  return Boolean(req.actor && can(req.actor.permission, "rh"));
+  return Boolean(req.actor && canWriteModule(req.actor.permission, "colaboradores"));
 }
 
 class EmployeeProfileController {

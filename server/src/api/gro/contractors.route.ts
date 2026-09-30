@@ -1,6 +1,9 @@
 import { Router } from "express";
 import contractor from "../../controller/ContractorController";
-import { read, write } from "./middleware";
+import { moduleRead, moduleWrite } from "./middleware";
+
+const read = moduleRead("terceiros");
+const write = moduleWrite("terceiros");
 
 const router = Router();
 

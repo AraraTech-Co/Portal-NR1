@@ -1,6 +1,9 @@
 import { Router } from "express";
 import survey from "../../controller/PreliminarySurveyController";
-import { read, write } from "./middleware";
+import { moduleRead, moduleWrite } from "./middleware";
+
+const read = moduleRead("inventario");
+const write = moduleWrite("inventario");
 
 const router = Router();
 

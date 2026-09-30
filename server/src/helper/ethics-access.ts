@@ -1,10 +1,9 @@
-import { can } from "./permissions";
+import { canReadModule } from "./module-access";
 import type { AuthRequest } from "../types/auth";
 import type { Response, NextFunction, Request } from "express";
 
 /**
- * Comitê de ética: MASTER da empresa ou papel efetivo com permissão admin
- * (OWNER/ADMIN da conta).
+ * Comitê de ética: quem tem L ou L/E no módulo `comite` (Master/Owner/RH no sheet).
  */
 export function requireEthicsCommittee(
   req: Request,
@@ -16,7 +15,7 @@ export function requireEthicsCommittee(
     res.status(401).json({ message: "Não autenticado." });
     return;
   }
-  if (actor.isMaster || can(actor.permission, "admin")) {
+  if (canReadModule(actor.permission, "comite")) {
     next();
     return;
   }

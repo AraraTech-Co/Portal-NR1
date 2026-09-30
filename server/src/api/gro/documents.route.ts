@@ -1,6 +1,9 @@
 import { Router } from "express";
 import documents from "../../controller/DocumentController";
-import { read, write } from "./middleware";
+import { moduleRead, moduleWrite } from "./middleware";
+
+const read = moduleRead("documentos_pgr");
+const write = moduleWrite("documentos_pgr");
 
 const router = Router();
 

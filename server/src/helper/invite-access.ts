@@ -1,5 +1,5 @@
 import { AccountRole, Role } from "@prisma/client";
-import { can } from "./permissions";
+import { canWriteModule } from "./module-access";
 import type { Actor } from "../types/auth";
 
 const ACCOUNT_RANK: Record<AccountRole, number> = {
@@ -8,25 +8,31 @@ const ACCOUNT_RANK: Record<AccountRole, number> = {
   OWNER: 3,
 };
 
+/** Ordem: COLABORADOR < SUPERVISOR < ADM_LOJA < GERENTE < RH/SST < ADMIN < MASTER */
 const ORG_RANK: Record<Role, number> = {
   COLABORADOR: 1,
-  RH: 2,
-  SST: 3,
-  ADMIN: 4,
-  MASTER: 5,
+  SUPERVISOR: 2,
+  ADM_LOJA: 3,
+  GERENTE: 4,
+  RH: 5,
+  SST: 5,
+  ADMIN: 6,
+  MASTER: 7,
 };
 
 export function canManageInviteLinks(actor: Actor): boolean {
-  return actor.isMaster || can(actor.permission, "admin");
+  return canWriteModule(actor.permission, "conta");
 }
 
 /** Quem pode aprovar/recusar pedidos de entrada. */
 export function canDecideJoinRequests(actor: Actor): boolean {
-  if (actor.isMaster || can(actor.permission, "admin")) return true;
+  if (canWriteModule(actor.permission, "conta")) return true;
   return (
     actor.role === Role.ADMIN ||
     actor.role === Role.RH ||
-    actor.role === Role.SST
+    actor.role === Role.SST ||
+    actor.role === Role.GERENTE ||
+    actor.role === Role.ADM_LOJA
   );
 }
 
@@ -62,8 +68,9 @@ export function canAssignOrgRole(actor: Actor, target: Role): boolean {
 export function accountRoleToOrgRole(role: AccountRole): Role {
   switch (role) {
     case AccountRole.OWNER:
-    case AccountRole.ADMIN:
       return Role.ADMIN;
+    case AccountRole.ADMIN:
+      return Role.ADM_LOJA;
     default:
       return Role.COLABORADOR;
   }

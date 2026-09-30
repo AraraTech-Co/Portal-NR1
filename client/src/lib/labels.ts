@@ -37,6 +37,32 @@ export const ANNOUNCEMENT_KIND_LABEL: Record<string, string> = {
   TRAINING: "Treinamento",
 };
 
+/** Papéis de organização (Membership.role). */
+export const ORG_ROLE_LABEL: Record<string, string> = {
+  MASTER: "Master",
+  ADMIN: "Admin (legado)",
+  SST: "Técnico SST",
+  RH: "RH",
+  GERENTE: "Gerente",
+  ADM_LOJA: "ADM loja",
+  SUPERVISOR: "Supervisor",
+  COLABORADOR: "Colaborador",
+};
+
+/** Chaves efetivas de permissão (sessão). */
+export const PERMISSION_LABEL: Record<string, string> = {
+  master: "Master",
+  owner: "Owner",
+  adm_loja: "ADM loja",
+  admin: "Admin",
+  sst: "Técnico SST",
+  rh: "RH",
+  supervisor: "Supervisor",
+  gerente: "Gerente",
+  colaborador: "Colaborador",
+  user: "Colaborador",
+};
+
 export function formatDay(value: string | Date | null | undefined): string {
   if (!value) return "—";
   const d = typeof value === "string" ? new Date(value) : value;

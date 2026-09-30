@@ -1,7 +1,11 @@
-import { verify } from "../../model/lib/Auth";
+import { verifyModule } from "../../model/lib/Auth";
 
-/** Leitura — qualquer usuário autenticado na conta. */
-export const read = verify("user");
+/** Leitura (L ou L/E) no módulo. */
+export function moduleRead(moduleId: string) {
+  return verifyModule(moduleId, "read");
+}
 
-/** Escrita SST — exige permissão `sst` (OWNER/ADMIN/SST). */
-export const write = verify("sst");
+/** Escrita (L/E) no módulo. */
+export function moduleWrite(moduleId: string) {
+  return verifyModule(moduleId, "write");
+}

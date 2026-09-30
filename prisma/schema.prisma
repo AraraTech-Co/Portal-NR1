@@ -97,12 +97,15 @@ model User {
 }
 
 /// MASTER = papel na *empresa* (Organization): acima de OWNER, controla todas as contas.
-/// Demais = papel operacional (SST/RH) na organização.
+/// Demais = papéis operacionais (SST/RH/gestão de loja) na organização.
 enum Role {
   MASTER
   ADMIN
   SST
   RH
+  GERENTE
+  ADM_LOJA
+  SUPERVISOR
   COLABORADOR
 }
 

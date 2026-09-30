@@ -13,22 +13,13 @@ import {
   type JobRole,
   type Sector,
 } from "@/api/operation";
-import { useAuth } from "@/auth/AuthContext";
 import { Button } from "@/components/Button";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
+import { useModuleAccess } from "@/lib/module-access";
 import "@/components/form.css";
 import "./operation.css";
 import { LoadingState } from "@/components/LoadingState";
-
-function canEditOperation(permission: string): boolean {
-  return (
-    permission === "master" ||
-    permission === "owner" ||
-    permission === "admin" ||
-    permission === "sst"
-  );
-}
 
 function Column({
   title,
@@ -132,8 +123,7 @@ function QuickAdd({
 }
 
 export function OperationPage() {
-  const { user } = useAuth();
-  const canEdit = canEditOperation(user?.permission ?? "user");
+  const { canWrite: canEdit } = useModuleAccess("operacao");
 
   const [establishments, setEstablishments] = useState<Establishment[]>([]);
   const [sectors, setSectors] = useState<Sector[]>([]);

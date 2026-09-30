@@ -20,7 +20,7 @@ import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
-import { formatDay } from "@/lib/labels";
+import { formatDay, ORG_ROLE_LABEL } from "@/lib/labels";
 import "@/components/data-table.css";
 import "@/components/form.css";
 import { LoadingState } from "@/components/LoadingState";
@@ -371,7 +371,7 @@ export function AccountPage() {
                             >
                               {assignable.org_roles.map((role) => (
                                 <option key={role} value={role}>
-                                  {role}
+                                  {ORG_ROLE_LABEL[role] ?? role}
                                 </option>
                               ))}
                             </select>
@@ -474,7 +474,7 @@ export function AccountPage() {
                   >
                     {assignable.org_roles.map((role) => (
                       <option key={role} value={role}>
-                        {role}
+                        {ORG_ROLE_LABEL[role] ?? role}
                       </option>
                     ))}
                   </select>

@@ -1,7 +1,11 @@
-import { verify } from "../../model/lib/Auth";
+import { verifyModule } from "../../model/lib/Auth";
 
-/** Qualquer usuário autenticado. */
-export const read = verify("user");
+/** Leitura (L ou L/E) no módulo. */
+export function moduleRead(moduleId: string) {
+  return verifyModule(moduleId, "read");
+}
 
-/** Escrita de RH (OWNER/ADMIN/RH/MASTER). */
-export const writeRh = verify("rh");
+/** Escrita (L/E) no módulo. */
+export function moduleWrite(moduleId: string) {
+  return verifyModule(moduleId, "write");
+}

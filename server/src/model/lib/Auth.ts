@@ -5,6 +5,11 @@ import { Token } from "../schema/Token/Token";
 import { resolveAccountAccess } from "../../helper/account-access";
 import { effectivePermission } from "../../helper/auth";
 import { can } from "../../helper/permissions";
+import {
+  canReadModule,
+  canWriteModule,
+  type AccessLevel,
+} from "../../helper/module-access";
 import type { AuthRequest, Actor } from "../../types/auth";
 
 const TOKEN_DURATION_SEC = 60 * 60 * 8; // 8h
@@ -71,94 +76,140 @@ function isAllowedWhileMustChangePassword(method: string, path: string): boolean
   return ALLOWED_WHILE_MUST_CHANGE.has(`${method.toUpperCase()} ${path}`);
 }
 
+type Gate =
+  | { kind: "public" }
+  | { kind: "legacy"; permission: string }
+  | { kind: "module"; moduleId: string; level: AccessLevel };
+
+async function authenticate(
+  req: Request,
+  res: Response,
+  gate: Gate,
+): Promise<boolean> {
+  const header = req.headers.authorization;
+
+  if (!header) {
+    if (gate.kind === "public") return true;
+    res.status(401).json({ message: "Não autenticado." });
+    return false;
+  }
+
+  const [type, raw] = header.split(" ");
+  if (type !== "Bearer" || !raw) {
+    res.status(401).json({ message: "Cabeçalho de autorização inválido." });
+    return false;
+  }
+
+  const payload = verifyJwt(raw);
+  const tokens = new Token();
+  const stored = await tokens.read.one({ tokenHash: hashToken(raw) });
+  if (!stored || stored.expiresAt < new Date()) {
+    res.status(401).json({ message: "Sessão expirada ou inválida." });
+    return false;
+  }
+
+  const access = await resolveAccountAccess(payload.userId, payload.accountId);
+
+  if (
+    !access ||
+    access.organizationId !== payload.organizationId ||
+    !access.user.active
+  ) {
+    res.status(401).json({ message: "Acesso negado." });
+    return false;
+  }
+
+  const roleKey = effectivePermission(access.orgRole, access.accountRole);
+
+  if (gate.kind === "legacy" && gate.permission !== "public") {
+    if (!can(roleKey, gate.permission)) {
+      res.status(403).json({
+        message: "Você não tem permissão para esta ação.",
+      });
+      return false;
+    }
+  }
+
+  if (gate.kind === "module") {
+    const ok =
+      gate.level === "write"
+        ? canWriteModule(roleKey, gate.moduleId)
+        : canReadModule(roleKey, gate.moduleId);
+    if (!ok) {
+      res.status(403).json({
+        message: "Você não tem permissão para este módulo.",
+      });
+      return false;
+    }
+  }
+
+  const actor: Actor = {
+    userId: access.user.id,
+    organizationId: access.organizationId,
+    accountId: access.accountId,
+    accountRole: access.accountRole,
+    isMaster: access.isMaster,
+    role: access.orgRole,
+    permission: roleKey,
+    name: access.user.name,
+    email: access.user.email,
+    login: access.user.login,
+    mustChangePassword: access.user.mustChangePassword,
+    organizationName: access.organizationName,
+    accountName: access.accountName,
+  };
+
+  const authReq = req as AuthRequest;
+  authReq.actor = actor;
+  authReq.token = raw;
+
+  if (
+    actor.mustChangePassword &&
+    gate.kind !== "public" &&
+    !isAllowedWhileMustChangePassword(req.method, req.path)
+  ) {
+    res.status(403).json({
+      message: "É obrigatório alterar a senha antes de continuar.",
+      code: "MUST_CHANGE_PASSWORD",
+    });
+    return false;
+  }
+
+  return true;
+}
+
 /**
- * Bearer JWT + acesso à conta:
- * - MASTER da empresa → qualquer conta da org
- * - senão → AccountMembership (OWNER > ADMIN > USER)
- *
- * Hierarquia na matriz: master > owner > admin > user
+ * Bearer JWT + acesso à conta.
+ * `permission` legado: public | user | sst | rh | admin | master | owner.
  */
 export function verify(permission: string) {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const header = req.headers.authorization;
+      const gate: Gate =
+        permission === "public"
+          ? { kind: "public" }
+          : { kind: "legacy", permission };
+      const ok = await authenticate(req, res, gate);
+      if (ok) next();
+    } catch {
+      res.status(401).json({ message: "Não autenticado." });
+    }
+  };
+}
 
-      if (!header) {
-        if (permission === "public") return next();
-        res.status(401).json({ message: "Não autenticado." });
-        return;
-      }
-
-      const [type, raw] = header.split(" ");
-      if (type !== "Bearer" || !raw) {
-        res.status(401).json({ message: "Cabeçalho de autorização inválido." });
-        return;
-      }
-
-      const payload = verifyJwt(raw);
-      const tokens = new Token();
-      const stored = await tokens.read.one({ tokenHash: hashToken(raw) });
-      if (!stored || stored.expiresAt < new Date()) {
-        res.status(401).json({ message: "Sessão expirada ou inválida." });
-        return;
-      }
-
-      const access = await resolveAccountAccess(
-        payload.userId,
-        payload.accountId,
-      );
-
-      if (
-        !access ||
-        access.organizationId !== payload.organizationId ||
-        !access.user.active
-      ) {
-        res.status(401).json({ message: "Acesso negado." });
-        return;
-      }
-
-      const roleKey = effectivePermission(access.orgRole, access.accountRole);
-      if (permission !== "public" && !can(roleKey, permission)) {
-        res.status(403).json({
-          message: "Você não tem permissão para esta ação.",
-        });
-        return;
-      }
-
-      const actor: Actor = {
-        userId: access.user.id,
-        organizationId: access.organizationId,
-        accountId: access.accountId,
-        accountRole: access.accountRole,
-        isMaster: access.isMaster,
-        role: access.orgRole,
-        permission: roleKey,
-        name: access.user.name,
-        email: access.user.email,
-        login: access.user.login,
-        mustChangePassword: access.user.mustChangePassword,
-        organizationName: access.organizationName,
-        accountName: access.accountName,
-      };
-
-      const authReq = req as AuthRequest;
-      authReq.actor = actor;
-      authReq.token = raw;
-
-      // Troca obrigatória: só sessão, logout e POST /api/auth/password.
-      if (
-        actor.mustChangePassword &&
-        permission !== "public" &&
-        !isAllowedWhileMustChangePassword(req.method, req.path)
-      ) {
-        res.status(403).json({
-          message: "É obrigatório alterar a senha antes de continuar.",
-          code: "MUST_CHANGE_PASSWORD",
-        });
-        return;
-      }
-
-      next();
+/**
+ * Autentica e exige nível read|write no módulo da matriz NR-1.
+ * `read` cobre L e L/E; `write` exige L/E.
+ */
+export function verifyModule(moduleId: string, level: "read" | "write") {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const ok = await authenticate(req, res, {
+        kind: "module",
+        moduleId,
+        level,
+      });
+      if (ok) next();
     } catch {
       res.status(401).json({ message: "Não autenticado." });
     }

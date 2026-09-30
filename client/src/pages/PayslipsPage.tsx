@@ -18,6 +18,7 @@ import { LoadingState } from "@/components/LoadingState";
 import { PageHeader } from "@/components/PageHeader";
 import { PeoplePicker } from "@/components/PeoplePicker";
 import { formatDay } from "@/lib/labels";
+import { useModuleAccess } from "@/lib/module-access";
 import "@/components/data-table.css";
 import "@/components/form.css";
 
@@ -36,23 +37,13 @@ const MONTHS = [
   "Dezembro",
 ];
 
-function canManagePayslips(permission: string, role: string | undefined): boolean {
-  return (
-    permission === "master" ||
-    permission === "owner" ||
-    permission === "admin" ||
-    permission === "rh" ||
-    role === "RH"
-  );
-}
-
 function competenceLabel(month: number, year: number): string {
   return `${MONTHS[month - 1] ?? month}/${year}`;
 }
 
 export function PayslipsPage() {
   const { user } = useAuth();
-  const isRh = canManagePayslips(user?.permission ?? "user", user?.role);
+  const { canWrite: isRh } = useModuleAccess("holerites");
   const [rows, setRows] = useState<PayslipListItem[]>([]);
   const [openQs, setOpenQs] = useState<OpenPayslipQuestion[]>([]);
   const [loading, setLoading] = useState(true);

@@ -3,6 +3,8 @@ import { clearToken, getToken, setToken } from "./token";
 
 export { clearToken, getToken, setToken };
 
+export type ModuleAccessLevel = "read" | "write";
+
 export type SessionUser = {
   id: string;
   login: string;
@@ -13,6 +15,8 @@ export type SessionUser = {
   role: string;
   permission: string;
   must_change_password: boolean;
+  /** Módulos visíveis: read | write (omite none / X). */
+  modules: Record<string, ModuleAccessLevel>;
   organization: { id: string; name: string };
   account: { id: string; name: string };
 };

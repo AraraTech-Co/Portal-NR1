@@ -1,6 +1,9 @@
 import { Router } from "express";
 import profiles from "../../controller/EmployeeProfileController";
-import { read, writeRh } from "./middleware";
+import { moduleRead, moduleWrite } from "./middleware";
+
+const read = moduleRead("colaboradores");
+const writeRh = moduleWrite("colaboradores");
 
 const router = Router();
 

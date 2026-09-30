@@ -1,6 +1,9 @@
 import { Router } from "express";
 import workplace from "../../controller/WorkplaceController";
-import { read, write } from "./middleware";
+import { moduleRead, moduleWrite } from "./middleware";
+
+const read = moduleRead("operacao");
+const write = moduleWrite("operacao");
 
 const router = Router();
 

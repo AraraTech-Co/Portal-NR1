@@ -1,6 +1,9 @@
 import { Router } from "express";
 import occurrence from "../../controller/OccurrenceController";
-import { read, write } from "./middleware";
+import { moduleRead, moduleWrite } from "./middleware";
+
+const read = moduleRead("ocorrencias");
+const write = moduleWrite("ocorrencias");
 
 const router = Router();
 

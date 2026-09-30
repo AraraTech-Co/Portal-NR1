@@ -1,6 +1,9 @@
 import { Router } from "express";
 import compliance from "../../controller/ComplianceController";
-import { read, writeRh } from "./middleware";
+import { moduleRead, moduleWrite } from "./middleware";
+
+const read = moduleRead("saude");
+const writeRh = moduleWrite("saude");
 
 const router = Router();
 

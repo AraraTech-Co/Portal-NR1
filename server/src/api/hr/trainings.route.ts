@@ -1,6 +1,9 @@
 import { Router } from "express";
 import trainings from "../../controller/TrainingController";
-import { read, writeRh } from "./middleware";
+import { moduleRead, moduleWrite } from "./middleware";
+
+const read = moduleRead("treinamentos");
+const writeRh = moduleWrite("treinamentos");
 
 const router = Router();
 

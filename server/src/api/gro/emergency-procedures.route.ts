@@ -1,6 +1,9 @@
 import { Router } from "express";
 import emergency from "../../controller/EmergencyController";
-import { read, write } from "./middleware";
+import { moduleRead, moduleWrite } from "./middleware";
+
+const read = moduleRead("emergencias");
+const write = moduleWrite("emergencias");
 
 const router = Router();
 

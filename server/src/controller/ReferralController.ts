@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import prisma from "../model/prisma";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
-import { can } from "../helper/permissions";
+import { canWriteModule } from "../helper/module-access";
 import {
   REFERRAL_STATUSES,
   REFERRAL_STATUS_VALUES,
@@ -19,7 +19,7 @@ function blank(v?: string | null) {
 }
 
 function isRh(req: AuthRequest) {
-  return Boolean(req.actor && can(req.actor.permission, "rh"));
+  return Boolean(req.actor && canWriteModule(req.actor.permission, "talentos"));
 }
 
 class ReferralController {

@@ -1,6 +1,9 @@
 import { Router } from "express";
 import game from "../../controller/GamificationController";
-import { read, writeRh } from "./middleware";
+import { moduleRead, moduleWrite } from "./middleware";
+
+const read = moduleRead("gamificacao");
+const writeRh = moduleWrite("gamificacao");
 
 const router = Router();
 

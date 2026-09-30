@@ -1,10 +1,10 @@
 import { Router } from "express";
-import { verify } from "../../model/lib/Auth";
+import { verify, verifyModule } from "../../model/lib/Auth";
 import invites from "../../controller/AccountInviteController";
 
 const router = Router();
 
-const manage = verify("user");
+const manage = verifyModule("conta", "read");
 const publicRoute = verify("public");
 
 router.get("/api/invite-links", manage, (req, res) =>

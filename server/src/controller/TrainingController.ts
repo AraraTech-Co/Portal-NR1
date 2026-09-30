@@ -4,7 +4,7 @@ import prisma from "../model/prisma";
 import { Training } from "../model/schema/Training/Training";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
-import { can } from "../helper/permissions";
+import { canWriteModule } from "../helper/module-access";
 import { ENROLLMENT_STATUSES } from "../constants";
 import type { AuthRequest } from "../types/auth";
 
@@ -18,7 +18,7 @@ function blank(v?: string | null) {
 }
 
 function isRh(req: AuthRequest): boolean {
-  return Boolean(req.actor && can(req.actor.permission, "rh"));
+  return Boolean(req.actor && canWriteModule(req.actor.permission, "treinamentos"));
 }
 
 class TrainingController {

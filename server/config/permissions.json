@@ -7,6 +7,14 @@
     "user": true,
     "master": false
   },
+  "adm_loja": {
+    "owner": false,
+    "admin": false,
+    "sst": true,
+    "rh": true,
+    "user": true,
+    "master": false
+  },
   "admin": {
     "owner": false,
     "admin": true,
@@ -28,6 +36,30 @@
     "admin": false,
     "sst": false,
     "rh": true,
+    "user": true,
+    "master": false
+  },
+  "supervisor": {
+    "owner": false,
+    "admin": false,
+    "sst": true,
+    "rh": false,
+    "user": true,
+    "master": false
+  },
+  "gerente": {
+    "owner": false,
+    "admin": false,
+    "sst": true,
+    "rh": false,
+    "user": true,
+    "master": false
+  },
+  "colaborador": {
+    "owner": false,
+    "admin": false,
+    "sst": false,
+    "rh": false,
     "user": true,
     "master": false
   },

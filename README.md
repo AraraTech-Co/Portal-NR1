@@ -108,6 +108,26 @@ Seed: `master` / `admin123` (MASTER) · `admin` / `admin123` (OWNER).
 
 ---
 
+## Papéis e matriz de módulos
+
+Acesso por módulo usa L / L/E / X (ver [`server/config/module-access.json`](./server/config/module-access.json)):
+
+| Nível | Significado |
+|-------|-------------|
+| `write` (L/E) | Lê e cria/edita no módulo |
+| `read` (L) | Só leitura (menu visível) |
+| `none` (X) | Sem acesso — módulo oculto no menu e bloqueado na API |
+
+Papéis de organização (`Role`): `MASTER`, `ADMIN` (legado→gerente), `SST` (técnico), `RH`, `GERENTE`, `ADM_LOJA`, `SUPERVISOR`, `COLABORADOR`.
+
+Papéis de conta (`AccountRole`): `OWNER` (matriz = Master), `ADMIN` (matriz = ADM loja), `USER`.
+
+A sessão inclui `user.modules` (`moduleId` → `read`|`write`). Rotas de domínio usam `verifyModule(moduleId, "read"|"write")`.
+
+Exceções self-service (fora da célula literal do sheet): pedido de férias e lançamento de ponto em `read`; denúncia anônima permanece pública; comitê exige módulo `comite`.
+
+---
+
 ## Licença
 
 Uso próprio permitido; **uso comercial não autorizado**. Ver [LICENSE](./LICENSE).

@@ -38,9 +38,14 @@ function mapOrgRole(role: string): string {
     case "MASTER":
       return "MASTER";
     case "ADMINISTRADOR_GERAL":
+      return "ADMIN";
     case "GERENTE_ADMINISTRATIVO":
     case "GERENTE_LOJA":
-      return "ADMIN";
+      return "GERENTE";
+    case "SUPERVISOR":
+      return "SUPERVISOR";
+    case "ADM_LOJA":
+      return "ADM_LOJA";
     case "SST":
       return "SST";
     case "RH":

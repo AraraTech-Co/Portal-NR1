@@ -1,6 +1,9 @@
 import { Router } from "express";
 import aep from "../../controller/AepController";
-import { read, write } from "./middleware";
+import { moduleRead, moduleWrite } from "./middleware";
+
+const read = moduleRead("aep");
+const write = moduleWrite("aep");
 
 const router = Router();
 
