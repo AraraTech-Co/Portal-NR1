@@ -24,6 +24,7 @@ import { formatDay, ORG_ROLE_LABEL } from "@/lib/labels";
 import "@/components/data-table.css";
 import "@/components/form.css";
 import { LoadingState } from "@/components/LoadingState";
+import { ConsultaAcessos } from "./ConsultaAcessos";
 
 function inviteUrl(path: string): string {
   return `${window.location.origin}${path}`;
@@ -567,6 +568,8 @@ export function AccountPage() {
           )}
         </section>
       )}
+
+      {canManage && <ConsultaAcessos />}
     </div>
   );
 }

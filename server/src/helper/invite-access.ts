@@ -11,6 +11,8 @@ const ACCOUNT_RANK: Record<AccountRole, number> = {
 /** Ordem: COLABORADOR < SUPERVISOR < ADM_LOJA < GERENTE < RH/SST < ADMIN < MASTER */
 const ORG_RANK: Record<Role, number> = {
   COLABORADOR: 1,
+  /** Fora da hierarquia: quem atribui é quem cuida de Conta e usuários. */
+  FISCAL: 1,
   SUPERVISOR: 2,
   ADM_LOJA: 3,
   GERENTE: 4,
@@ -52,8 +54,11 @@ export function assignableAccountRoles(actor: Actor): AccountRole[] {
 export function assignableOrgRoles(actor: Actor): Role[] {
   const ceiling = ORG_RANK[actor.role] ?? ORG_RANK.COLABORADOR;
   const below = (Object.keys(ORG_RANK) as Role[]).filter(
-    (r) => ORG_RANK[r] < ceiling && r !== Role.MASTER,
+    (r) => ORG_RANK[r] < ceiling && r !== Role.MASTER && r !== Role.FISCAL,
   );
+  // Pela planilha de acessos, só Master e RH cuidam de Conta e usuários —
+  // são eles que dão acesso a alguém de fora. [S7-A]
+  if (canWriteModule(actor.permission, "conta")) below.push(Role.FISCAL);
   return below.length > 0 ? below : [Role.COLABORADOR];
 }
 

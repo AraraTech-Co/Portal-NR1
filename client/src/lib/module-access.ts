@@ -33,3 +33,8 @@ export function useModuleAccess(moduleId: string) {
     canWrite: level === "write",
   };
 }
+
+/** Papel só de consulta (fiscal): lê, nunca grava. */
+export function isReadOnlyPermission(permission: string | undefined): boolean {
+  return permission === "fiscal";
+}

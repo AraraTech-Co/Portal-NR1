@@ -9,6 +9,9 @@ const router = Router();
 
 router.get("/api/trainings", read, (req, res) => trainings.list(req, res));
 router.post("/api/trainings", writeRh, (req, res) => trainings.create(req, res));
+router.get("/api/trainings/:id/enrollments", read, (req, res) =>
+  trainings.listEnrollments(req, res),
+);
 router.get("/api/trainings/:id", read, (req, res) => trainings.get(req, res));
 router.delete("/api/trainings/:id", writeRh, (req, res) =>
   trainings.archive(req, res),

@@ -3,7 +3,7 @@ import prisma from "../model/prisma";
 import { Summon } from "../model/schema/Summon/Summon";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
-import { canManageModule } from "../helper/module-access";
+import { canManageModule, canSeeAllInModule } from "../helper/module-access";
 import {
   SUMMON_ATTENDANCE_STATUSES,
   SUMMON_ATTENDANCE_STATUS_VALUES,
@@ -24,6 +24,11 @@ function isRh(req: AuthRequest): boolean {
   return Boolean(req.actor && canManageModule(req.actor.permission, "convocacoes"));
 }
 
+/** Vê a convocação de todos: quem administra, ou a consulta (fiscal). [S7-A] */
+function seesAll(req: AuthRequest): boolean {
+  return Boolean(req.actor && canSeeAllInModule(req.actor.permission, "convocacoes"));
+}
+
 class SummonController {
   async list(req: Request, res: Response) {
     try {
@@ -34,7 +39,7 @@ class SummonController {
       const rows = await prisma.summon.findMany({
         where: {
           organizationId: orgId,
-          ...(!isRh(auth)
+          ...(!seesAll(auth)
             ? { attendances: { some: { userId } } }
             : {}),
         },
@@ -78,7 +83,7 @@ class SummonController {
         return;
       }
       if (
-        !isRh(auth) &&
+        !seesAll(auth) &&
         !summon.attendances.some((a) => a.userId === actorUserId(auth))
       ) {
         res.status(403).json({ message: "Sem permissão." });

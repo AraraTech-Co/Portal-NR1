@@ -78,5 +78,13 @@
     "rh": true,
     "user": true,
     "master": true
+  },
+  "fiscal": {
+    "owner": false,
+    "admin": false,
+    "sst": false,
+    "rh": false,
+    "user": true,
+    "master": false
   }
 }

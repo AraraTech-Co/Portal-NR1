@@ -4,7 +4,7 @@ import prisma from "../model/prisma";
 import { Training } from "../model/schema/Training/Training";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
-import { canManageModule } from "../helper/module-access";
+import { canManageModule, canSeeAllInModule } from "../helper/module-access";
 import { ENROLLMENT_STATUSES } from "../constants";
 import type { AuthRequest } from "../types/auth";
 
@@ -82,6 +82,46 @@ class TrainingController {
           enrollments: undefined,
         },
       });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
+  /**
+   * Quem fez o treinamento, quando, com que nota e qual certificado. Para
+   * quem cuida dos treinamentos e para a fiscalização. [S5-J] [S7-G]
+   */
+  async listEnrollments(req: Request, res: Response) {
+    try {
+      const auth = req as AuthRequest;
+      if (!auth.actor || !canSeeAllInModule(auth.actor.permission, "treinamentos")) {
+        res.status(403).json({ message: "Sem permissão para ver quem fez o treinamento." });
+        return;
+      }
+      const orgId = actorOrgId(auth);
+      const training = await prisma.training.findFirst({
+        where: { id: req.params.id, organizationId: orgId },
+        select: { id: true, title: true, validityMonths: true },
+      });
+      if (!training) {
+        res.status(404).json({ message: "Treinamento não encontrado." });
+        return;
+      }
+      const rows = await prisma.trainingEnrollment.findMany({
+        where: { trainingId: training.id },
+        orderBy: [{ completedAt: "desc" }, { startedAt: "desc" }],
+        select: {
+          id: true,
+          status: true,
+          startedAt: true,
+          completedAt: true,
+          score: true,
+          certificateCode: true,
+          expiresAt: true,
+          user: { select: { id: true, name: true } },
+        },
+      });
+      res.json({ training, enrollments: rows });
     } catch (err) {
       fail(res, err);
     }

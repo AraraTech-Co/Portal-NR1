@@ -9,7 +9,9 @@ import {
   canManageModule,
   canReadModule,
   canWriteModule,
+  isReadOnlyRole,
 } from "../../helper/module-access";
+import { writeAudit } from "../../helper/audit";
 import type { AuthRequest, Actor } from "../../types/auth";
 
 const TOKEN_DURATION_SEC = 60 * 60 * 8; // 8h
@@ -74,6 +76,40 @@ const ALLOWED_WHILE_MUST_CHANGE = new Set([
 
 function isAllowedWhileMustChangePassword(method: string, path: string): boolean {
   return ALLOWED_WHILE_MUST_CHANGE.has(`${method.toUpperCase()} ${path}`);
+}
+
+/** O que um papel só de consulta pode mandar além de GET: sair e trocar a própria senha. */
+const ALLOWED_FOR_READ_ONLY = new Set(["DELETE /api/auth", "POST /api/auth/password"]);
+
+/**
+ * Papel só de consulta (o fiscal): nada grava, em rota nenhuma — inclusive as
+ * que o colaborador usa para o próprio registro (dar ciência, se inscrever em
+ * treinamento). E cada tela que ele abre fica na trilha de auditoria, para a
+ * empresa saber o que foi consultado. [S7-A]
+ */
+function guardReadOnly(req: Request, res: Response, actor: Actor): boolean {
+  if (!isReadOnlyRole(actor.permission)) return true;
+  const method = req.method.toUpperCase();
+  if (method === "GET" || method === "HEAD") {
+    if (method === "GET" && !req.path.startsWith("/api/auth")) {
+      writeAudit({
+        organizationId: actor.organizationId,
+        actorId: actor.userId,
+        action: "consulta.view",
+        entityType: "route",
+        entityId: req.path,
+      }).catch(() => {
+        /* a trilha não derruba a consulta */
+      });
+    }
+    return true;
+  }
+  if (ALLOWED_FOR_READ_ONLY.has(`${method} ${req.path}`)) return true;
+  res.status(403).json({
+    message: "Acesso só de consulta: este usuário não grava nada no portal.",
+    code: "READ_ONLY",
+  });
+  return false;
 }
 
 /**
@@ -184,7 +220,7 @@ async function authenticate(
     return false;
   }
 
-  return true;
+  return guardReadOnly(req, res, actor);
 }
 
 /**

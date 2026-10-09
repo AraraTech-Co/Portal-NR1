@@ -107,6 +107,8 @@ enum Role {
   ADM_LOJA
   SUPERVISOR
   COLABORADOR
+  /// Consulta: vê o que a fiscalização pede, nunca grava. [S7-A]
+  FISCAL
 }
 
 /// Papéis de acesso à conta (Organization → Account → User).

@@ -2,7 +2,11 @@ import { Request, Response } from "express";
 import prisma from "../model/prisma";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
-import { canManageModule } from "../helper/module-access";
+import {
+  canManageModule,
+  canSeeAllInModule,
+  isReadOnlyRole,
+} from "../helper/module-access";
 import {
   assertSize,
   buildPrivateStoragePath,
@@ -33,6 +37,10 @@ function isRh(req: AuthRequest) {
 }
 
 /** Exigências por função + certificados do trabalhador + exames (ASO). */
+function seesAll(req: AuthRequest): boolean {
+  return Boolean(req.actor && canSeeAllInModule(req.actor.permission, "saude"));
+}
+
 class ComplianceController {
   async listRequirements(req: Request, res: Response) {
     try {
@@ -120,14 +128,15 @@ class ComplianceController {
       const rows = await prisma.workerCertificate.findMany({
         where: {
           organizationId: orgId,
-          ...(!isRh(auth) ? { userId } : {}),
-          ...(req.query.user_id && isRh(auth)
+          ...(!seesAll(auth) ? { userId } : {}),
+          ...(req.query.user_id && seesAll(auth)
             ? { userId: String(req.query.user_id) }
             : {}),
         },
         orderBy: { createdAt: "desc" },
+        include: { user: { select: { id: true, name: true } } },
       });
-      res.json({ certificates: rows });
+      res.json({ certificates: rows.map(({ storagePath: _interno, ...c }) => c) });
     } catch (err) {
       fail(res, err);
     }
@@ -229,11 +238,19 @@ class ComplianceController {
       const rows = await prisma.occupationalExam.findMany({
         where: {
           organizationId: orgId,
-          ...(!isRh(auth) ? { userId } : {}),
+          ...(!seesAll(auth) ? { userId } : {}),
         },
         orderBy: { createdAt: "desc" },
+        include: { user: { select: { id: true, name: true } } },
       });
-      res.json({ exams: rows });
+      // A consulta acompanha prazo (em dia ou vencido), não resultado: sem
+      // apto/inapto e sem o arquivo do ASO. [S7-A]
+      const auditor = Boolean(auth.actor && isReadOnlyRole(auth.actor.permission));
+      res.json({
+        exams: rows.map(({ storagePath: _interno, ...e }) =>
+          auditor ? { ...e, fit: null, fileName: null } : e,
+        ),
+      });
     } catch (err) {
       fail(res, err);
     }

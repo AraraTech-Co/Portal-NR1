@@ -79,6 +79,7 @@ export const ORG_ROLE_LABEL: Record<string, string> = {
   ADM_LOJA: "ADM loja",
   SUPERVISOR: "Supervisor",
   COLABORADOR: "Colaborador",
+  FISCAL: "Fiscal (só consulta)",
 };
 
 /** Chaves efetivas de permissão (sessão). */
@@ -92,6 +93,7 @@ export const PERMISSION_LABEL: Record<string, string> = {
   supervisor: "Supervisor",
   gerente: "Gerente",
   colaborador: "Colaborador",
+  fiscal: "Fiscal (só consulta)",
   user: "Colaborador",
 };
 
@@ -118,6 +120,12 @@ function calendarDay(value: string | Date | null | undefined): CalendarDay | nul
     ? { year: d.getUTCFullYear(), month: d.getUTCMonth(), day: d.getUTCDate() }
     : { year: d.getFullYear(), month: d.getMonth(), day: d.getDate() };
 }
+
+export const ENROLLMENT_STATUS_LABEL: Record<string, string> = {
+  PENDING: "Inscrito",
+  IN_PROGRESS: "Em andamento",
+  COMPLETED: "Concluído",
+};
 
 export function formatDay(value: string | Date | null | undefined): string {
   const c = calendarDay(value);
