@@ -6,9 +6,9 @@ import { resolveAccountAccess } from "../../helper/account-access";
 import { effectivePermission } from "../../helper/auth";
 import { can } from "../../helper/permissions";
 import {
+  canManageModule,
   canReadModule,
   canWriteModule,
-  type AccessLevel,
 } from "../../helper/module-access";
 import type { AuthRequest, Actor } from "../../types/auth";
 
@@ -76,10 +76,17 @@ function isAllowedWhileMustChangePassword(method: string, path: string): boolean
   return ALLOWED_WHILE_MUST_CHANGE.has(`${method.toUpperCase()} ${path}`);
 }
 
+/**
+ * `read` cobre L e L/E. `write` exige L/E. `manage` exige L/E E que a escrita
+ * não seja apenas sobre o próprio registro — é o que separa o RH do
+ * colaborador em atestados, onde os dois escrevem.
+ */
+export type ModuleGateLevel = "read" | "write" | "manage";
+
 type Gate =
   | { kind: "public" }
   | { kind: "legacy"; permission: string }
-  | { kind: "module"; moduleId: string; level: AccessLevel };
+  | { kind: "module"; moduleId: string; level: ModuleGateLevel };
 
 async function authenticate(
   req: Request,
@@ -132,9 +139,11 @@ async function authenticate(
 
   if (gate.kind === "module") {
     const ok =
-      gate.level === "write"
-        ? canWriteModule(roleKey, gate.moduleId)
-        : canReadModule(roleKey, gate.moduleId);
+      gate.level === "manage"
+        ? canManageModule(roleKey, gate.moduleId)
+        : gate.level === "write"
+          ? canWriteModule(roleKey, gate.moduleId)
+          : canReadModule(roleKey, gate.moduleId);
     if (!ok) {
       res.status(403).json({
         message: "Você não tem permissão para este módulo.",
@@ -198,10 +207,11 @@ export function verify(permission: string) {
 }
 
 /**
- * Autentica e exige nível read|write no módulo da matriz NR-1.
- * `read` cobre L e L/E; `write` exige L/E.
+ * Autentica e exige nível no módulo da matriz NR-1.
+ * `read` cobre L e L/E; `write` exige L/E; `manage` exige decidir sobre o
+ * registro de outra pessoa (ver `canManageModule`).
  */
-export function verifyModule(moduleId: string, level: "read" | "write") {
+export function verifyModule(moduleId: string, level: ModuleGateLevel) {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
       const ok = await authenticate(req, res, {

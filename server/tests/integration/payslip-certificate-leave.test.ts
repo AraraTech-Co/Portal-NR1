@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import request from "supertest";
 import { createApp } from "../../src/app";
 import type { Express } from "express";
+import { holerite } from "../helpers/pdf";
 
 async function login(app: Express) {
   const res = await request(app)
@@ -33,8 +34,10 @@ describe("Payslips, certificates, leaves", () => {
         reference_year: 2026,
         file_name: "holerite-09.pdf",
         mime_type: "application/pdf",
+        // O documento é conferido contra o cadastro: precisa ser da pessoa.
+        content_base64: holerite("MAT-001", "Owner Conta Matriz", "SETEMBRO/2026"),
       });
-    expect([201, 409]).toContain(created.status);
+    expect([200, 201]).toContain(created.status);
     const payslipId =
       created.status === 201
         ? created.body.payslip.id
@@ -74,15 +77,29 @@ describe("Payslips, certificates, leaves", () => {
     expect(created.status).toBe(201);
     const id = created.body.certificate.id;
 
-    const reject = await request(app)
+    // Quem enviou não decide sobre o próprio atestado. [S4-J]
+    const self = await request(app)
       .post(`/api/medical-certificates/${id}/review`)
       .set("Authorization", `Bearer ${token}`)
+      .send({ status: "APPROVED" });
+    expect(self.status).toBe(403);
+
+    // Outra pessoa com poder de decisão revisa.
+    const reviewer = await request(app)
+      .post("/api/auth")
+      .send({ login: "master", password: "admin123" });
+    expect(reviewer.status).toBe(200);
+    const reviewerToken = reviewer.body.token as string;
+
+    const reject = await request(app)
+      .post(`/api/medical-certificates/${id}/review`)
+      .set("Authorization", `Bearer ${reviewerToken}`)
       .send({ status: "REJECTED" });
     expect(reject.status).toBe(400);
 
     const ok = await request(app)
       .post(`/api/medical-certificates/${id}/review`)
-      .set("Authorization", `Bearer ${token}`)
+      .set("Authorization", `Bearer ${reviewerToken}`)
       .send({ status: "APPROVED" });
     expect(ok.status).toBe(200);
     expect(ok.body.certificate.status).toBe("APPROVED");

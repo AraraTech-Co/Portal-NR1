@@ -7,6 +7,8 @@ import { Payslip } from "../model/schema/Payslip/Payslip";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
 import { canWriteModule } from "../helper/module-access";
+import { checkPayslip } from "../helper/payslip-check";
+import { extractPdfText } from "../helper/pdf-text";
 import {
   assertSize,
   buildPrivateStoragePath,
@@ -283,6 +285,48 @@ class PayslipController {
 
       const data = Buffer.from(content_base64, "base64");
       assertSize(data.length || 0);
+
+      /*
+        Confere o DOCUMENTO antes de publicar: o nome do arquivo e a escolha da
+        pessoa na tela não provam de quem é o holerite. Três travas lidas do
+        PDF — matrícula, nome e competência — e a admissão como confirmação.
+        [S5-G]
+      */
+      const destinatario = await prisma.user.findFirst({
+        where: { id: user_id },
+        select: {
+          name: true,
+          employeeProfiles: {
+            where: { organizationId: orgId },
+            select: { registration: true, admittedAt: true },
+            take: 1,
+          },
+        },
+      });
+      const ficha = destinatario?.employeeProfiles?.[0];
+      if (!destinatario || !ficha?.registration) {
+        res.status(422).json({
+          message:
+            "Sem matrícula no cadastro não dá para conferir o holerite. Complete o cadastro do colaborador antes de publicar.",
+        });
+        return;
+      }
+
+      const conferencia = checkPayslip(await extractPdfText(data), {
+        registration: ficha.registration,
+        name: destinatario.name,
+        referenceMonth: reference_month,
+        referenceYear: reference_year,
+        admittedAt: ficha.admittedAt ?? null,
+      });
+      if (!conferencia.ok) {
+        res.status(422).json({
+          message: "O documento não confere com a pessoa escolhida.",
+          reasons: conferencia.blockers,
+        });
+        return;
+      }
+
       const { storagePath, absolutePath } = buildPrivateStoragePath(
         orgId,
         "payslips",
@@ -342,6 +386,7 @@ class PayslipController {
       }
 
       res.status(existing ? 200 : 201).json({
+        warnings: conferencia.warnings,
         payslip,
         replaced: Boolean(existing),
       });

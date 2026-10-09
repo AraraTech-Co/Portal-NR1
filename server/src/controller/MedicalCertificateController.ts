@@ -3,7 +3,7 @@ import prisma from "../model/prisma";
 import { MedicalCertificate } from "../model/schema/MedicalCertificate/MedicalCertificate";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
-import { canWriteModule } from "../helper/module-access";
+import { canManageModule } from "../helper/module-access";
 import {
   assertSize,
   buildPrivateStoragePath,
@@ -25,8 +25,12 @@ function blank(v?: string | null) {
   return v && v.trim() !== "" ? v.trim() : null;
 }
 
+/**
+ * Quem cuida do atestado DOS OUTROS. Não é "quem pode escrever": o colaborador
+ * escreve para enviar o próprio atestado, e isso não o torna RH. [S4-A] [S4-J]
+ */
 function isRh(req: AuthRequest): boolean {
-  return Boolean(req.actor && canWriteModule(req.actor.permission, "atestados"));
+  return Boolean(req.actor && canManageModule(req.actor.permission, "atestados"));
 }
 
 class MedicalCertificateController {
@@ -131,6 +135,17 @@ class MedicalCertificateController {
       }
       if (current.status !== CERTIFICATE_STATUSES.PENDING) {
         res.status(409).json({ message: "Atestado já revisado." });
+        return;
+      }
+      /*
+        Separação de funções: quem enviou não decide sobre o próprio atestado,
+        mesmo sendo do RH. Abonar a própria falta tira do documento o valor de
+        controle — para a folha e para a fiscalização. [S4-J]
+      */
+      if (current.userId === reviewerId) {
+        res.status(403).json({
+          message: "O próprio atestado é decidido por outra pessoa do RH.",
+        });
         return;
       }
 
