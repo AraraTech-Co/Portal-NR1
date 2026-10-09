@@ -271,6 +271,130 @@ class RiskController {
     }
   }
 
+  /**
+   * Histórico de um risco: de onde ele vem, todas as avaliações (inclusive as
+   * substituídas, com quem avaliou e quem validou), os controles e as ações.
+   * É o que a fiscalização pede: quem mudou o quê e quando. [S2-N]
+   */
+  async riskHistory(req: Request, res: Response) {
+    try {
+      const orgId = actorOrgId(req as AuthRequest);
+      const risk = await prisma.risk.findFirst({
+        where: { id: req.params.id, organizationId: orgId },
+        include: {
+          hazard: {
+            include: {
+              activity: { include: { sector: true, establishment: true } },
+            },
+          },
+          assessments: {
+            orderBy: { assessedAt: "desc" },
+            include: {
+              assessor: { select: { id: true, name: true } },
+              validatedBy: { select: { id: true, name: true } },
+              methodologyVersion: {
+                select: { version: true, methodology: { select: { name: true } } },
+              },
+            },
+          },
+          controls: {
+            orderBy: { createdAt: "desc" },
+            include: {
+              actions: {
+                orderBy: { createdAt: "desc" },
+                select: {
+                  id: true,
+                  title: true,
+                  status: true,
+                  dueDate: true,
+                  completedAt: true,
+                  validatedAt: true,
+                },
+              },
+            },
+          },
+          actions: {
+            orderBy: { createdAt: "desc" },
+            select: {
+              id: true,
+              title: true,
+              status: true,
+              priority: true,
+              dueDate: true,
+              completedAt: true,
+              validatedAt: true,
+              controlId: true,
+              assignee: { select: { id: true, name: true } },
+            },
+          },
+        },
+      });
+      if (!risk) {
+        res.status(404).json({ message: "Risco não encontrado." });
+        return;
+      }
+
+      // Mudanças registradas na trilha para o risco, o perigo e a atividade.
+      const changes = await prisma.auditEvent.findMany({
+        where: {
+          organizationId: orgId,
+          entityId: { in: [risk.id, risk.hazardId, risk.hazard.activityId] },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+        select: {
+          id: true,
+          action: true,
+          entityType: true,
+          before: true,
+          after: true,
+          createdAt: true,
+          actor: { select: { id: true, name: true } },
+        },
+      });
+
+      res.json({
+        risk: {
+          id: risk.id,
+          description: risk.description,
+          needsReassessment: risk.needsReassessment,
+          reassessmentReason: risk.reassessmentReason,
+          createdAt: risk.createdAt,
+          hazard: {
+            id: risk.hazard.id,
+            description: risk.hazard.description,
+            category: risk.hazard.category,
+            activity: risk.hazard.activity.name,
+            sector: risk.hazard.activity.sector.name,
+            establishment: risk.hazard.activity.establishment.name,
+          },
+        },
+        assessments: risk.assessments.map((a) => ({
+          id: a.id,
+          severity: a.severity,
+          probability: a.probability,
+          level: a.resultingLevel,
+          status: a.status,
+          severityReason: a.severityReason,
+          probabilityReason: a.probabilityReason,
+          controlsConsidered: a.controlsConsidered,
+          assessedAt: a.assessedAt,
+          expiresAt: a.expiresAt,
+          validatedAt: a.validatedAt,
+          supersededAt: a.supersededAt,
+          assessor: a.assessor,
+          validatedBy: a.validatedBy,
+          methodology: `${a.methodologyVersion.methodology.name} v${a.methodologyVersion.version}`,
+        })),
+        controls: risk.controls,
+        actions: risk.actions,
+        changes,
+      });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
   async createAssessment(req: Request, res: Response) {
     try {
       const orgId = actorOrgId(req as AuthRequest);
