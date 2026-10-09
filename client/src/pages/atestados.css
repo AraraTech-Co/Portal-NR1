@@ -1,0 +1,21 @@
+.atestado-actions {
+  margin-top: 0;
+}
+
+.atestado-actions .btn {
+  white-space: nowrap;
+}
+
+.atestado-motivo {
+  margin-top: 0.3rem;
+  font-size: 0.85rem;
+  color: var(--sem-danger-fg);
+  max-width: 28ch;
+}
+
+.atestado-recusa {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+  min-width: 16rem;
+}

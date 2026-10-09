@@ -19,6 +19,9 @@ router.post("/api/medical-certificates", write, (req, res) =>
 router.post("/api/medical-certificates/:id/review", manage, (req, res) =>
   certificates.review(req, res),
 );
+router.get("/api/medical-certificates/:id/file", read, (req, res) =>
+  certificates.file(req, res),
+);
 router.post("/api/medical-certificates/:id/read", read, (req, res) =>
   certificates.markRead(req, res),
 );

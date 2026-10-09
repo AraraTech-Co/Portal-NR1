@@ -143,6 +143,9 @@ export const fetchWorkerCertificates = () =>
       status: string;
       expiresAt: string | null;
       userId: string;
+      fileName: string | null;
+      has_file: boolean;
+      user?: { id: string; name: string };
     }>;
   }>("/api/worker-certificates").then((d) => d.certificates);
 
@@ -155,19 +158,57 @@ export const fetchOccupationalExams = () =>
       dueAt: string | null;
       fit: boolean | null;
       userId: string;
+      user?: { id: string; name: string };
     }>;
   }>("/api/occupational-exams").then((d) => d.exams);
 
+export type MedicalCertificateRow = {
+  id: string;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  startDate: string;
+  days: number;
+  cid: string | null;
+  reason: string | null;
+  fileName: string | null;
+  has_file: boolean;
+  rejectionReason: string | null;
+  reviewedAt: string | null;
+  readByWorkerAt: string | null;
+  createdAt: string;
+  user: { id: string; name: string };
+  reviewedBy: { id: string; name: string } | null;
+};
+
 export const fetchMedicalCertificates = () =>
-  request<{
-    certificates: Array<{
-      id: string;
-      status: string;
-      startDate: string;
-      days: number;
-      user: { name: string };
-    }>;
-  }>("/api/medical-certificates").then((d) => d.certificates);
+  request<{ certificates: MedicalCertificateRow[] }>("/api/medical-certificates").then(
+    (d) => d.certificates,
+  );
+
+export const sendMedicalCertificate = (input: {
+  start_date: string;
+  days: number;
+  reason?: string;
+  cid?: string;
+  file_name?: string;
+  mime_type?: string;
+  content_base64?: string;
+}) =>
+  request<{ certificate: MedicalCertificateRow }>("/api/medical-certificates", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+
+export const reviewMedicalCertificate = (
+  id: string,
+  input: { status: "APPROVED" | "REJECTED"; rejection_reason?: string },
+) =>
+  request<{ certificate: MedicalCertificateRow }>(`/api/medical-certificates/${id}/review`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+
+export const markMedicalCertificateRead = (id: string) =>
+  request(`/api/medical-certificates/${id}/read`, { method: "POST" });
 
 export const fetchTrainings = () =>
   request<{

@@ -21,6 +21,7 @@ import {
   isExamKind,
   isRequirementKind,
 } from "../constants";
+import { sendPrivateFile } from "../helper/send-private-file";
 import type { AuthRequest } from "../types/auth";
 
 function fail(res: Response, err: unknown) {
@@ -136,7 +137,9 @@ class ComplianceController {
         orderBy: { createdAt: "desc" },
         include: { user: { select: { id: true, name: true } } },
       });
-      res.json({ certificates: rows.map(({ storagePath: _interno, ...c }) => c) });
+      res.json({
+        certificates: rows.map(({ storagePath, ...c }) => ({ ...c, has_file: Boolean(storagePath) })),
+      });
     } catch (err) {
       fail(res, err);
     }
@@ -190,7 +193,30 @@ class ComplianceController {
           status: CERTIFICATE_STATUSES.PENDING,
         },
       });
-      res.status(201).json({ certificate });
+      const { storagePath: _interno, ...created } = certificate;
+      res.status(201).json({ certificate: { ...created, has_file: Boolean(storagePath) } });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
+  /**
+   * Arquivo do certificado: para quem é dono, quem cuida de Saúde e a
+   * consulta (fiscal). Certificado de curso não é dado de saúde. [S5-K]
+   */
+  async certificateFile(req: Request, res: Response) {
+    try {
+      const auth = req as AuthRequest;
+      const orgId = actorOrgId(auth);
+      const certificate = await prisma.workerCertificate.findFirst({
+        where: { id: req.params.id, organizationId: orgId },
+        select: { userId: true, storagePath: true, fileName: true },
+      });
+      if (!certificate || (!seesAll(auth) && certificate.userId !== actorUserId(auth))) {
+        res.status(404).json({ message: "Certificado não encontrado." });
+        return;
+      }
+      sendPrivateFile(res, certificate, "Este certificado foi registrado sem arquivo.");
     } catch (err) {
       fail(res, err);
     }
