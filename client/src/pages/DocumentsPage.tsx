@@ -1,4 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   fetchPgrDocuments,
   issuePgrDocument,
@@ -40,6 +41,7 @@ export function DocumentsPage() {
   const [statement, setStatement] = useState(DEFAULT_STATEMENT);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [issued, setIssued] = useState<PgrDocument | null>(null);
 
   const reload = useCallback(async () => {
     const [docs, est] = await Promise.all([
@@ -89,8 +91,9 @@ export function DocumentsPage() {
     }
     setSaving(true);
     setFormError(null);
+    setIssued(null);
     try {
-      await issuePgrDocument({
+      const { document: created } = await issuePgrDocument({
         type,
         establishmentId: establishmentId || undefined,
         responsibleName: responsibleName.trim(),
@@ -103,6 +106,7 @@ export function DocumentsPage() {
       setResponsibleRole("");
       setResponsibleRegistration("");
       setStatement(DEFAULT_STATEMENT);
+      setIssued(created);
       await reload();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Falha ao emitir");
@@ -143,6 +147,7 @@ export function DocumentsPage() {
                 <th>Situação</th>
                 <th>Última versão</th>
                 <th>Emitido em</th>
+                <th aria-label="Abrir" />
               </tr>
             </thead>
             <tbody>
@@ -171,6 +176,11 @@ export function DocumentsPage() {
                     </td>
                     <td className="muted">
                       {latest ? formatDateTime(latest.issuedAt) : "—"}
+                    </td>
+                    <td>
+                      {latest && (
+                        <Link to={`/documentos/${latest.id}`}>Abrir</Link>
+                      )}
                     </td>
                   </tr>
                 );
@@ -267,6 +277,12 @@ export function DocumentsPage() {
             />
           </label>
           {formError && <p className="form-error">{formError}</p>}
+          {issued && (
+            <p className="muted" role="status">
+              {PGR_TYPE_LABEL[issued.type] ?? issued.type} v{issued.version} emitido.{" "}
+              <Link to={`/documentos/${issued.id}`}>Abrir o documento</Link>
+            </p>
+          )}
           <div className="form-actions">
             <Button type="submit" disabled={saving}>
               {saving ? "Emitindo…" : "Emitir documento"}
@@ -300,6 +316,7 @@ export function DocumentsPage() {
                   <th>Versão</th>
                   <th>Responsável</th>
                   <th>Emitido em</th>
+                  <th aria-label="Abrir" />
                 </tr>
               </thead>
               <tbody>
@@ -314,6 +331,9 @@ export function DocumentsPage() {
                       ) : null}
                     </td>
                     <td className="muted">{formatDateTime(d.issuedAt)}</td>
+                    <td>
+                      <Link to={`/documentos/${d.id}`}>Abrir</Link>
+                    </td>
                   </tr>
                 ))}
               </tbody>
