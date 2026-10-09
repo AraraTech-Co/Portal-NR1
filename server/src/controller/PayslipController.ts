@@ -1,6 +1,5 @@
 import { Prisma } from "@prisma/client";
 import fs from "fs";
-import path from "path";
 import { Request, Response } from "express";
 import prisma from "../model/prisma";
 import { Payslip } from "../model/schema/Payslip/Payslip";
@@ -12,7 +11,7 @@ import { extractPdfText } from "../helper/pdf-text";
 import {
   assertSize,
   buildPrivateStoragePath,
-  uploadsRoot,
+  resolveStoragePath,
   writeEvidenceFile,
 } from "../helper/uploads";
 import type { AuthRequest } from "../types/auth";
@@ -30,15 +29,6 @@ function fail(res: Response, err: unknown) {
 
 function isRh(req: AuthRequest): boolean {
   return Boolean(req.actor && canManageModule(req.actor.permission, "holerites"));
-}
-
-function absoluteStoragePath(storagePath: string): string {
-  const root = path.resolve(uploadsRoot());
-  const abs = path.resolve(root, storagePath);
-  if (!abs.startsWith(root + path.sep) && abs !== root) {
-    throw Object.assign(new Error("Caminho inválido."), { status: 400 });
-  }
-  return abs;
 }
 
 class PayslipController {
@@ -169,7 +159,7 @@ class PayslipController {
         });
         return;
       }
-      const abs = absoluteStoragePath(payslip.storagePath);
+      const abs = resolveStoragePath(payslip.storagePath);
       if (!fs.existsSync(abs)) {
         res.status(404).json({ message: "Arquivo não encontrado." });
         return;
@@ -345,7 +335,7 @@ class PayslipController {
 
       let payslip;
       if (existing) {
-        const oldAbs = absoluteStoragePath(existing.storagePath);
+        const oldAbs = resolveStoragePath(existing.storagePath);
         payslip = await prisma.payslip.update({
           where: { id: existing.id },
           data: {

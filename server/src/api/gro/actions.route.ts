@@ -20,6 +20,9 @@ router.post("/api/actions/:id/review", write, (req, res) =>
 router.get("/api/evidences", read, (req, res) =>
   actionEvidence.listEvidences(req, res),
 );
+router.get("/api/evidences/:id/file", read, (req, res) =>
+  actionEvidence.evidenceFile(req, res),
+);
 router.post("/api/evidences", write, (req, res) =>
   actionEvidence.createEvidence(req, res),
 );

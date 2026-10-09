@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { fetchActions, type ActionRow } from "@/api/actions";
 import { useAuth } from "@/auth/AuthContext";
 import { Chip } from "@/components/Chip";
@@ -12,6 +12,9 @@ import {
 } from "@/lib/labels";
 import "@/components/data-table.css";
 import { LoadingState } from "@/components/LoadingState";
+import { useModuleAccess } from "@/lib/module-access";
+import { ActionEvidencePanel } from "./ActionEvidencePanel";
+import "./actions.css";
 
 const STATUS_OPTIONS = Object.keys(ACTION_STATUS_LABEL);
 
@@ -57,6 +60,8 @@ export function ActionsPage() {
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [highPriority, setHighPriority] = useState(false);
   const [status, setStatus] = useState("");
+  const [openId, setOpenId] = useState<string | null>(null);
+  const { canWrite: canReview } = useModuleAccess("acoes");
 
   useEffect(() => {
     let cancelled = false;
@@ -193,7 +198,7 @@ export function ActionsPage() {
       )}
 
       {!loading && !error && filtered.length > 0 && (
-        <div className="data-table-wrap">
+        <div className="data-table-wrap actions-table-wrap">
           <table className="data-table">
             <thead>
               <tr>
@@ -207,8 +212,23 @@ export function ActionsPage() {
             <tbody>
               {filtered.map((a) => {
                 const overdue = isOverdue(a.dueDate, a.status);
+                const open = openId === a.id;
+                const toggle = () => setOpenId(open ? null : a.id);
                 return (
-                  <tr key={a.id}>
+                  <Fragment key={a.id}>
+                  <tr
+                    className={`action-row is-clickable${open ? " is-open" : ""}`}
+                    onClick={toggle}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        toggle();
+                      }
+                    }}
+                    tabIndex={0}
+                    role="button"
+                    aria-expanded={open}
+                  >
                     <td>
                       <strong>{a.title}</strong>
                       {a.description && (
@@ -244,6 +264,23 @@ export function ActionsPage() {
                           : a.sourceType}
                     </td>
                   </tr>
+                  {open && (
+                    <tr className="action-expand">
+                      <td colSpan={5}>
+                        <ActionEvidencePanel
+                          action={a}
+                          userId={user?.id}
+                          canReview={canReview}
+                          onReviewed={(updated) =>
+                            setActions((prev) =>
+                              prev.map((x) => (x.id === updated.id ? { ...x, ...updated } : x)),
+                            )
+                          }
+                        />
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 );
               })}
             </tbody>

@@ -1,0 +1,165 @@
+.action-row.is-open {
+  background: color-mix(in oklch, var(--secondary) 35%, var(--card));
+}
+
+.action-expand > td {
+  padding: 0 !important;
+  background: var(--card);
+}
+
+/*
+  A tabela rola na horizontal no celular. O painel usa a largura VISÍVEL da
+  caixa (100cqw) e fica preso à esquerda, como no mural. [S4-H]
+*/
+.actions-table-wrap {
+  container-type: inline-size;
+}
+
+.action-panel {
+  position: sticky;
+  left: 0;
+  box-sizing: border-box;
+  width: 100cqw;
+  max-width: 100%;
+  padding: 0.85rem 0.85rem 1.1rem;
+  display: grid;
+  gap: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.action-panel-description {
+  margin: 0;
+  max-width: 70ch;
+}
+
+.action-panel-title {
+  margin: 0.25rem 0 0;
+  font-size: 0.75rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+}
+
+.action-panel-note {
+  margin: 0;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--sem-neutral-bd);
+  border-radius: var(--radius);
+  background: var(--sem-neutral);
+  color: var(--sem-neutral-fg);
+  max-width: 70ch;
+}
+
+.action-panel-note.is-danger {
+  border-color: var(--sem-danger-bd);
+  background: var(--sem-danger);
+  color: var(--sem-danger-fg);
+}
+
+.action-panel-note.is-success {
+  border-color: var(--sem-success-bd);
+  background: var(--sem-success);
+  color: var(--sem-success-fg);
+}
+
+.evidence-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.evidence-item {
+  display: grid;
+  grid-template-columns: 8.5rem minmax(0, 1fr);
+  gap: 0.85rem;
+  align-items: start;
+}
+
+.evidence-thumb {
+  display: grid;
+  place-items: center;
+  width: 8.5rem;
+  aspect-ratio: 4 / 3;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+button.evidence-thumb {
+  cursor: zoom-in;
+}
+
+button.evidence-thumb:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.evidence-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.evidence-thumb.is-loading {
+  animation: evidence-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes evidence-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .evidence-thumb.is-loading {
+    animation: none;
+  }
+}
+
+.evidence-meta {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+  font-size: 0.875rem;
+}
+
+.evidence-name {
+  font-size: 0.9rem;
+}
+
+.evidence-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.action-review {
+  display: grid;
+  gap: 0.6rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+  max-width: 70ch;
+}
+
+/* No celular a foto fica em cima, grande o bastante para conferir. */
+@container (max-width: 30rem) {
+  .evidence-item {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .evidence-thumb {
+    width: 100%;
+  }
+}
