@@ -8,6 +8,7 @@ import { Activity } from "../model/schema/Activity/Activity";
 import { Hazard } from "../model/schema/Hazard/Hazard";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
+import { canManageModule } from "../helper/module-access";
 import {
   findPsychosocialFactor,
   psychosocialFactorNote,
@@ -52,6 +53,15 @@ function assertMethodConsistency(
 
 function originFromMethod(method: AepMethod) {
   return AEP_METHOD_TO_HAZARD_ORIGIN[method];
+}
+
+/**
+ * Quem tem escrita sem administrar o módulo (o colaborador) mexe só na
+ * avaliação que ele conduz. [S4-A]
+ */
+function ownsOrManages(req: AuthRequest, conductedById: string | null): boolean {
+  if (req.actor && canManageModule(req.actor.permission, "aep")) return true;
+  return conductedById === actorUserId(req);
 }
 
 async function resolveScope(
@@ -238,6 +248,10 @@ class AepController {
       });
       if (!current) {
         res.status(404).json({ message: "Avaliação não encontrada." });
+        return;
+      }
+      if (!ownsOrManages(req as AuthRequest, current.conductedById)) {
+        res.status(403).json({ message: "Só quem conduz a avaliação pode editá-la." });
         return;
       }
       if (current.status !== AEP_STATUSES.DRAFT) {
@@ -468,6 +482,10 @@ class AepController {
       });
       if (!aep) {
         res.status(404).json({ message: "Avaliação não encontrada." });
+        return;
+      }
+      if (!ownsOrManages(req as AuthRequest, aep.conductedById)) {
+        res.status(403).json({ message: "Só quem conduz a avaliação anexa evidência." });
         return;
       }
       if (aep.status !== AEP_STATUSES.DRAFT) {

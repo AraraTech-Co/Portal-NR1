@@ -3,7 +3,7 @@ import prisma from "../model/prisma";
 import { LeaveRequest } from "../model/schema/LeaveRequest/LeaveRequest";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
-import { canWriteModule } from "../helper/module-access";
+import { canManageModule } from "../helper/module-access";
 import {
   LEAVE_KIND_DEFAULT,
   LEAVE_KIND_VALUES,
@@ -24,7 +24,7 @@ function blank(v?: string | null) {
 }
 
 function isRh(req: AuthRequest): boolean {
-  return Boolean(req.actor && canWriteModule(req.actor.permission, "ferias"));
+  return Boolean(req.actor && canManageModule(req.actor.permission, "ferias"));
 }
 
 function daysBetween(start: Date, end: Date): number {

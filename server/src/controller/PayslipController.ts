@@ -6,7 +6,7 @@ import prisma from "../model/prisma";
 import { Payslip } from "../model/schema/Payslip/Payslip";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
-import { canWriteModule } from "../helper/module-access";
+import { canManageModule } from "../helper/module-access";
 import { checkPayslip } from "../helper/payslip-check";
 import { extractPdfText } from "../helper/pdf-text";
 import {
@@ -29,7 +29,7 @@ function fail(res: Response, err: unknown) {
 }
 
 function isRh(req: AuthRequest): boolean {
-  return Boolean(req.actor && canWriteModule(req.actor.permission, "holerites"));
+  return Boolean(req.actor && canManageModule(req.actor.permission, "holerites"));
 }
 
 function absoluteStoragePath(storagePath: string): string {

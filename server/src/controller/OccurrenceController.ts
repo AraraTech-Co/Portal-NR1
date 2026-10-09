@@ -7,6 +7,7 @@ import { Action } from "../model/schema/Action/Action";
 import { Evidence } from "../model/schema/Evidence/Evidence";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
+import { canManageModule } from "../helper/module-access";
 import {
   assertSize,
   buildEvidenceStoragePath,
@@ -30,6 +31,15 @@ function fail(res: Response, err: unknown) {
 
 function blank(v?: string | null) {
   return v && v.trim() !== "" ? v.trim() : null;
+}
+
+/**
+ * Quem tem escrita sem administrar o módulo (o colaborador) mexe só na
+ * ocorrência que ele registrou. [S4-A]
+ */
+function ownsOrManages(req: AuthRequest, reportedById: string | null): boolean {
+  if (req.actor && canManageModule(req.actor.permission, "ocorrencias")) return true;
+  return reportedById === actorUserId(req);
 }
 
 class OccurrenceController {
@@ -188,6 +198,10 @@ class OccurrenceController {
       });
       if (!current) {
         res.status(404).json({ message: "Ocorrência não encontrada." });
+        return;
+      }
+      if (!ownsOrManages(req as AuthRequest, current.reportedById)) {
+        res.status(403).json({ message: "Só quem registrou a ocorrência pode editá-la." });
         return;
       }
 
@@ -421,6 +435,10 @@ class OccurrenceController {
       });
       if (!occurrence) {
         res.status(404).json({ message: "Ocorrência não encontrada." });
+        return;
+      }
+      if (!ownsOrManages(req as AuthRequest, occurrence.reportedById)) {
+        res.status(403).json({ message: "Só quem registrou a ocorrência anexa evidência." });
         return;
       }
 

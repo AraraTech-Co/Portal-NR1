@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { Prisma } from "@prisma/client";
 import prisma from "../model/prisma";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
-import { canWriteModule } from "../helper/module-access";
+import { canManageModule } from "../helper/module-access";
 import type { AuthRequest } from "../types/auth";
 
 function fail(res: Response, err: unknown) {
@@ -19,7 +19,7 @@ function blank(v?: string | null) {
 }
 
 function isRh(req: AuthRequest) {
-  return Boolean(req.actor && canWriteModule(req.actor.permission, "ponto"));
+  return Boolean(req.actor && canManageModule(req.actor.permission, "ponto"));
 }
 
 function dayOnly(iso: string): Date {
