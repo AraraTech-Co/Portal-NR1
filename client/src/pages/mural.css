@@ -86,3 +86,33 @@
   align-items: center;
   margin-top: 0.85rem;
 }
+
+/* Quem leu e quem não leu. [S3-H] */
+.mural-readers {
+  margin-top: 0.75rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--border);
+}
+
+.mural-readers p {
+  margin: 0 0 0.4rem;
+}
+
+.mural-readers ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.3rem;
+  max-height: 16rem;
+  overflow-y: auto;
+  font-size: 0.875rem;
+}
+
+.mural-readers li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+}

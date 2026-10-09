@@ -2,10 +2,12 @@ import { FormEvent, Fragment, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   createAnnouncement,
+  fetchAnnouncementReaders,
   fetchAnnouncements,
   markAnnouncementRead,
   type AnnouncementKind,
   type AnnouncementListItem,
+  type AnnouncementReader,
 } from "@/api/announcements";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
@@ -27,6 +29,26 @@ export function AnnouncementsPage() {
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [markingId, setMarkingId] = useState<string | null>(null);
+  // Quem leu e quem não leu: "12 leituras" não diz a quem cobrar. [S3-H]
+  const [readersOf, setReadersOf] = useState<string | null>(null);
+  const [readers, setReaders] = useState<AnnouncementReader[] | null>(null);
+  const [readersError, setReadersError] = useState<string | null>(null);
+
+  async function toggleReaders(id: string) {
+    if (readersOf === id) {
+      setReadersOf(null);
+      return;
+    }
+    setReadersOf(id);
+    setReaders(null);
+    setReadersError(null);
+    try {
+      const data = await fetchAnnouncementReaders(id);
+      setReaders(data.readers);
+    } catch (err) {
+      setReadersError(err instanceof Error ? err.message : "Falha ao carregar");
+    }
+  }
 
   const [kind, setKind] = useState<AnnouncementKind>("NOTICE");
   const [title, setTitle] = useState("");
@@ -64,8 +86,15 @@ export function AnnouncementsPage() {
 
   useEffect(() => {
     const open = searchParams.get("open");
-    if (open) setOpenId(open);
-  }, [searchParams]);
+    if (!open) return;
+    setOpenId(open);
+    /*
+      Aberto pelo link (notificação ou link compartilhado) também conta como
+      lido: senão "quem leu" mente para quem cobra. [S3-H] [S4-G]
+    */
+    const item = rows.find((r) => r.id === open);
+    if (item && !item.read_at) void ensureRead(item);
+  }, [searchParams, rows]);
 
   async function ensureRead(item: AnnouncementListItem) {
     if (item.read_at) return;
@@ -316,6 +345,18 @@ export function AnnouncementsPage() {
                               </div>
                               <MarkdownBody>{r.body}</MarkdownBody>
                               <div className="mural-expand-actions">
+                                {canPublish && (
+                                  <Button
+                                    type="button"
+                                    variant="secondary"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      void toggleReaders(r.id);
+                                    }}
+                                  >
+                                    {readersOf === r.id ? "Fechar leituras" : "Quem leu"}
+                                  </Button>
+                                )}
                                 <Button
                                   type="button"
                                   variant="secondary"
@@ -332,6 +373,40 @@ export function AnnouncementsPage() {
                                   Copiar link
                                 </Button>
                               </div>
+                              {canPublish && readersOf === r.id && (
+                                <div className="mural-readers" onClick={(e) => e.stopPropagation()}>
+                                  {readersError && (
+                                    <p className="form-error" role="alert">
+                                      {readersError}
+                                    </p>
+                                  )}
+                                  {!readersError && readers === null && (
+                                    <p className="muted">Carregando…</p>
+                                  )}
+                                  {readers && (
+                                    <>
+                                      <p className="muted">
+                                        {readers.filter((p) => p.read_at).length} de {readers.length}{" "}
+                                        leram.
+                                      </p>
+                                      <ul>
+                                        {readers.map((p) => (
+                                          <li key={p.id}>
+                                            <span>{p.name}</span>
+                                            {p.read_at ? (
+                                              <Chip tone="success">
+                                                leu em {formatDay(p.read_at)}
+                                              </Chip>
+                                            ) : (
+                                              <Chip tone="warning">não leu</Chip>
+                                            )}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           </div>
                         </div>

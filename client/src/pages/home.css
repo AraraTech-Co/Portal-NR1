@@ -52,3 +52,31 @@
   margin: 0;
   font-size: 0.875rem;
 }
+
+/* Aviso não lido na tela inicial. [S4-G] */
+.home-unread {
+  margin: 1.25rem 0 0;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--sem-warning-bd);
+  border-radius: var(--radius);
+  background: var(--sem-warning);
+  color: var(--sem-warning-fg);
+}
+
+.home-unread h2 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+}
+
+.home-unread ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.9rem;
+}
+
+.home-unread a {
+  color: inherit;
+  font-weight: 600;
+}

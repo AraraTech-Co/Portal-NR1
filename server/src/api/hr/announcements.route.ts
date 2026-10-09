@@ -16,6 +16,10 @@ router.post("/api/announcements", writeRh, (req, res) =>
 router.get("/api/announcements/:id", read, (req, res) =>
   announcements.get(req, res),
 );
+/** Quem leu e quem não leu — para quem publica. [S3-H] */
+router.get("/api/announcements/:id/leituras", read, (req, res) =>
+  announcements.readers(req, res),
+);
 router.post("/api/announcements/:id/read", read, (req, res) =>
   announcements.markRead(req, res),
 );

@@ -7,6 +7,7 @@ import { Action } from "../model/schema/Action/Action";
 import { Evidence } from "../model/schema/Evidence/Evidence";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
+import { notify } from "../helper/notify";
 import { canManageModule } from "../helper/module-access";
 import {
   assertSize,
@@ -418,6 +419,20 @@ class OccurrenceController {
         entityId: action.id,
         after: { occurrenceId: occurrence.id },
       });
+
+      // Quem vai executar precisa saber que a ação é dele. [S3-A]
+      if (action.assigneeId && action.assigneeId !== userId) {
+        await notify({
+          organizationId: orgId,
+          userId: action.assigneeId,
+          kind: "ACTION_ASSIGNED",
+          title: action.title,
+          body: "Ação sua, aberta a partir de uma ocorrência.",
+          link: "/acoes",
+          entityType: "Action",
+          entityId: action.id,
+        });
+      }
 
       res.status(201).json({ action });
     } catch (err) {

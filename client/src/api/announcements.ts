@@ -47,3 +47,19 @@ export function createAnnouncement(input: {
     body: JSON.stringify(input),
   }).then((d) => d.announcement);
 }
+
+export type AnnouncementReader = {
+  id: string;
+  name: string;
+  read_at: string | null;
+};
+
+/** Quem leu e quem ainda não leu — para quem publica. [S3-H] */
+export function fetchAnnouncementReaders(id: string) {
+  return request<{
+    announcement: { id: string; title: string };
+    readers: AnnouncementReader[];
+    read: number;
+    pending: number;
+  }>(`/api/announcements/${encodeURIComponent(id)}/leituras`);
+}

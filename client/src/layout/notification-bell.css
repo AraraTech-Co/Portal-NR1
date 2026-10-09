@@ -1,0 +1,112 @@
+/* Caixa de avisos no topo. [S3-A] [S3-G] [S4-G] */
+.bell {
+  position: relative;
+  margin-left: auto;
+}
+
+.bell-btn {
+  position: relative;
+  border: 1px solid var(--border);
+  background: var(--card);
+  border-radius: var(--radius);
+  width: 2.25rem;
+  height: 2.25rem;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.bell-btn:hover {
+  background: var(--muted);
+}
+
+.bell-count {
+  position: absolute;
+  top: -0.35rem;
+  right: -0.35rem;
+  min-width: 1.1rem;
+  padding: 0 0.2rem;
+  border-radius: 999px;
+  background: var(--destructive);
+  color: var(--primary-foreground);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.1rem;
+}
+
+.bell-panel {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  z-index: 30;
+  width: min(22rem, calc(100vw - 2rem));
+  max-height: min(26rem, 70vh);
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: 0 10px 30px oklch(0.16 0.02 274 / 18%);
+}
+
+.bell-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.bell-link {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--primary);
+  font-size: 0.78rem;
+  text-decoration: underline;
+}
+
+.bell-empty {
+  margin: 0;
+  padding: 1rem 0.75rem;
+}
+
+.bell-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.bell-item {
+  display: grid;
+  gap: 0.15rem;
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  text-align: left;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.bell-item:hover {
+  background: var(--muted);
+}
+
+.bell-item.is-unread {
+  background: color-mix(in oklch, var(--sem-info) 55%, var(--card));
+}
+
+.bell-item.is-unread .bell-item-title {
+  font-weight: 650;
+}
+
+.bell-when {
+  font-size: 0.75rem;
+}
+
+@media print {
+  .bell {
+    display: none;
+  }
+}
