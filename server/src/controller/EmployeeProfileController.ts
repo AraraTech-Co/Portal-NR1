@@ -6,7 +6,7 @@ import { JobRole } from "../model/schema/JobRole/JobRole";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
 import { isValidCpf, normalizeCpf } from "../helper/cpf";
-import { canWriteModule } from "../helper/module-access";
+import { canManageModule } from "../helper/module-access";
 import type { AuthRequest } from "../types/auth";
 
 /**
@@ -39,7 +39,7 @@ function blank(v?: string | null) {
 }
 
 function isRh(req: AuthRequest): boolean {
-  return Boolean(req.actor && canWriteModule(req.actor.permission, "colaboradores"));
+  return Boolean(req.actor && canManageModule(req.actor.permission, "colaboradores"));
 }
 
 class EmployeeProfileController {

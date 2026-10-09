@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import prisma from "../model/prisma";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
-import { canWriteModule } from "../helper/module-access";
+import { canManageModule } from "../helper/module-access";
 import { SURVEY_STATUSES } from "../constants";
 import type { AuthRequest } from "../types/auth";
 
@@ -15,7 +15,7 @@ function blank(v?: string | null) {
 }
 
 function isRh(req: AuthRequest) {
-  return Boolean(req.actor && canWriteModule(req.actor.permission, "colaboradores"));
+  return Boolean(req.actor && canManageModule(req.actor.permission, "colaboradores"));
 }
 
 class ReviewController {

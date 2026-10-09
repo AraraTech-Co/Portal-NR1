@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import prisma from "../model/prisma";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
-import { canWriteModule } from "../helper/module-access";
+import { canManageModule } from "../helper/module-access";
 import {
   REDEMPTION_STATUSES,
   isRedemptionStatus,
@@ -18,7 +18,7 @@ function blank(v?: string | null) {
 }
 
 function isRh(req: AuthRequest) {
-  return Boolean(req.actor && canWriteModule(req.actor.permission, "gamificacao"));
+  return Boolean(req.actor && canManageModule(req.actor.permission, "gamificacao"));
 }
 
 class GamificationController {

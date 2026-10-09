@@ -3,7 +3,7 @@ import prisma from "../model/prisma";
 import { Idea } from "../model/schema/Idea/Idea";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
-import { canWriteModule } from "../helper/module-access";
+import { canManageModule } from "../helper/module-access";
 import {
   IDEA_STATUSES,
   IDEA_STATUSES_NEEDING_NOTE,
@@ -22,7 +22,7 @@ function blank(v?: string | null) {
 }
 
 function isRh(req: AuthRequest): boolean {
-  return Boolean(req.actor && canWriteModule(req.actor.permission, "ideias"));
+  return Boolean(req.actor && canManageModule(req.actor.permission, "ideias"));
 }
 
 class IdeaController {

@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import prisma from "../model/prisma";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
-import { canWriteModule } from "../helper/module-access";
+import { canManageModule } from "../helper/module-access";
 import {
   SURVEY_STATUSES,
   SURVEY_STATUS_VALUES,
@@ -20,7 +20,7 @@ function blank(v?: string | null) {
 }
 
 function isRh(req: AuthRequest) {
-  return Boolean(req.actor && canWriteModule(req.actor.permission, "clima"));
+  return Boolean(req.actor && canManageModule(req.actor.permission, "clima"));
 }
 
 class ClimateController {
@@ -138,7 +138,14 @@ class ClimateController {
     try {
       const orgId = actorOrgId(req as AuthRequest);
       const survey = await prisma.climateSurvey.findFirst({
-        where: { id: req.params.id, organizationId: orgId },
+        where: {
+          id: req.params.id,
+          organizationId: orgId,
+          // Mesma regra da lista: quem não administra só vê pesquisa aberta.
+          ...(!isRh(req as AuthRequest)
+            ? { status: SURVEY_STATUSES.OPEN }
+            : {}),
+        },
         include: {
           questions: { orderBy: { order: "asc" } },
           _count: { select: { responses: true } },

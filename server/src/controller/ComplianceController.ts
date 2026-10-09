@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import prisma from "../model/prisma";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
-import { canWriteModule } from "../helper/module-access";
+import { canManageModule } from "../helper/module-access";
 import {
   assertSize,
   buildPrivateStoragePath,
@@ -29,7 +29,7 @@ function blank(v?: string | null) {
 }
 
 function isRh(req: AuthRequest) {
-  return Boolean(req.actor && canWriteModule(req.actor.permission, "saude"));
+  return Boolean(req.actor && canManageModule(req.actor.permission, "saude"));
 }
 
 /** Exigências por função + certificados do trabalhador + exames (ASO). */

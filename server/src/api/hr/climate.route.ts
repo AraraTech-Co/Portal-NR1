@@ -1,9 +1,10 @@
 import { Router } from "express";
 import climate from "../../controller/ClimateController";
-import { moduleRead, moduleWrite } from "./middleware";
+import { moduleManage, moduleRead } from "./middleware";
 
 const read = moduleRead("clima");
-const writeRh = moduleWrite("clima");
+/** Montar, abrir e encerrar pesquisa é do RH; o colaborador só responde. */
+const writeRh = moduleManage("clima");
 
 const router = Router();
 
