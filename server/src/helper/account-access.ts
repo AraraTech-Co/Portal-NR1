@@ -4,6 +4,7 @@ import { Account } from "../model/schema/Account/Account";
 import { AccountMembership } from "../model/schema/AccountMembership/AccountMembership";
 import { Membership } from "../model/schema/Membership/Membership";
 import { isOrgMaster } from "./auth";
+import { accessEnded } from "./access-period";
 import type { AccessibleAccount } from "../types/auth";
 
 /**
@@ -108,6 +109,9 @@ export async function resolveAccountAccess(
     userId,
     accountId,
   });
+
+  // Prazo vencido (fiscal): o acesso cai na hora, mesmo com sessão aberta.
+  if (orgMembership && accessEnded(orgMembership.accessExpiresAt)) return null;
 
   const master = isOrgMaster(orgMembership?.role);
   if (!master && !link) return null;

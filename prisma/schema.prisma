@@ -188,6 +188,9 @@ model Membership {
   userId         String
   organizationId String
   role           Role     @default(COLABORADOR)
+  /// Fim do acesso a esta organização. Passou, o acesso cai na hora, mesmo
+  /// com sessão aberta. Obrigatório para o fiscal. [S7-A]
+  accessExpiresAt DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

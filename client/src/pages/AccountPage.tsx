@@ -24,7 +24,17 @@ import { formatDay, ORG_ROLE_LABEL } from "@/lib/labels";
 import "@/components/data-table.css";
 import "@/components/form.css";
 import { LoadingState } from "@/components/LoadingState";
-import { ConsultaAcessos } from "./ConsultaAcessos";
+import { ConsultaAcessos, FiscaisComAcesso } from "./ConsultaAcessos";
+
+/** Hoje no fuso de Brasília, em AAAA-MM-DD. */
+function todayIso(): string {
+  return new Date(Date.now() - 3 * 3_600_000).toISOString().slice(0, 10);
+}
+
+/** O fiscal entra por 30 dias se ninguém disser outra data. [S7-A] */
+function defaultFiscalUntil(): string {
+  return new Date(Date.now() - 3 * 3_600_000 + 30 * 86_400_000).toISOString().slice(0, 10);
+}
 
 function inviteUrl(path: string): string {
   return `${window.location.origin}${path}`;
@@ -55,7 +65,7 @@ export function AccountPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const [decideRoles, setDecideRoles] = useState<
-    Record<string, { role: string; org_role: string }>
+    Record<string, { role: string; org_role: string; access_until?: string }>
   >({});
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -180,7 +190,13 @@ export function AccountPage() {
       await decideJoinRequest(id, {
         action,
         ...(action === "approve" && roleMode === "ON_APPROVE"
-          ? { role: roles?.role, org_role: roles?.org_role }
+          ? {
+              role: roles?.role,
+              org_role: roles?.org_role,
+              ...(roles?.org_role === "FISCAL"
+                ? { access_until: roles.access_until || defaultFiscalUntil() }
+                : {}),
+            }
           : {}),
       });
       await reload();
@@ -345,6 +361,7 @@ export function AccountPage() {
                                 setDecideRoles((prev) => ({
                                   ...prev,
                                   [r.id]: {
+                                    ...prev[r.id],
                                     role: e.target.value,
                                     org_role:
                                       prev[r.id]?.org_role ?? "COLABORADOR",
@@ -364,6 +381,7 @@ export function AccountPage() {
                                 setDecideRoles((prev) => ({
                                   ...prev,
                                   [r.id]: {
+                                    ...prev[r.id],
                                     role: prev[r.id]?.role ?? "USER",
                                     org_role: e.target.value,
                                   },
@@ -376,6 +394,27 @@ export function AccountPage() {
                                 </option>
                               ))}
                             </select>
+                            {decideRoles[r.id]?.org_role === "FISCAL" && (
+                              <label className="form-field">
+                                Acesso até
+                                <input
+                                  type="date"
+                                  min={todayIso()}
+                                  value={decideRoles[r.id]?.access_until || defaultFiscalUntil()}
+                                  onChange={(e) =>
+                                    setDecideRoles((prev) => ({
+                                      ...prev,
+                                      [r.id]: {
+                                        ...prev[r.id],
+                                        role: prev[r.id]?.role ?? "USER",
+                                        org_role: "FISCAL",
+                                        access_until: e.target.value,
+                                      },
+                                    }))
+                                  }
+                                />
+                              </label>
+                            )}
                           </div>
                         )}
                       </td>
@@ -569,6 +608,7 @@ export function AccountPage() {
         </section>
       )}
 
+      {canManage && <FiscaisComAcesso />}
       {canManage && <ConsultaAcessos />}
     </div>
   );
