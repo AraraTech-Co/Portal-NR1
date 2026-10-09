@@ -2,7 +2,7 @@ import path from "path";
 import fs from "fs";
 import express, { Express } from "express";
 import api from "./api";
-import { bootConfig, bootCors, bootHelmet } from "./middlewares";
+import { bootBodyErrors, bootConfig, bootCors, bootHelmet } from "./middlewares";
 
 function resolveClientDist(): string | null {
   const candidates = [
@@ -22,6 +22,7 @@ export function createApp(): Express {
   const app = express();
   [bootHelmet, bootCors, bootConfig].forEach((boot) => boot(app));
   app.use(api);
+  bootBodyErrors(app);
 
   const clientDist = resolveClientDist();
   if (clientDist) {
