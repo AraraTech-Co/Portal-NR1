@@ -9,6 +9,7 @@ import prisma from "../model/prisma";
 import { Action } from "../model/schema/Action/Action";
 import { Evidence } from "../model/schema/Evidence/Evidence";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
+import { canWriteModule } from "../helper/module-access";
 import {
   assertSize,
   buildEvidenceStoragePath,
@@ -25,6 +26,19 @@ function fail(res: Response, err: unknown) {
 /** Quem “executou” a ação: assignee se houver, senão quem criou. */
 function executorId(action: { assigneeId: string | null; createdById: string }) {
   return action.assigneeId || action.createdById;
+}
+
+/**
+ * Quem executa prova e conclui a PRÓPRIA ação, mesmo que só leia o plano: a
+ * ação é dele. Quem administra o plano também anexa — mas concluir continua
+ * sendo do responsável. [S3-C] [S3-M]
+ */
+function isExecutor(req: AuthRequest, action: { assigneeId: string | null; createdById: string }) {
+  return executorId(action) === actorUserId(req);
+}
+
+function canManagePlan(req: AuthRequest) {
+  return Boolean(req.actor && canWriteModule(req.actor.permission, "acoes"));
 }
 
 class ActionEvidenceController {
@@ -129,6 +143,12 @@ class ActionEvidenceController {
         res.status(400).json({ message: "Ação inválida." });
         return;
       }
+      if (!isExecutor(req as AuthRequest, action) && !canManagePlan(req as AuthRequest)) {
+        res.status(403).json({
+          message: "Só quem é responsável pela ação anexa evidência a ela.",
+        });
+        return;
+      }
       if (
         action.status === ActionStatus.VALIDATED ||
         action.status === ActionStatus.CLOSED ||
@@ -185,6 +205,13 @@ class ActionEvidenceController {
       const action = await new Action().read.one({ id, organizationId: orgId });
       if (!action) {
         res.status(404).json({ message: "Ação não encontrada." });
+        return;
+      }
+      // Quem executa é quem diz que terminou. [S3-M]
+      if (!isExecutor(req as AuthRequest, action)) {
+        res.status(403).json({
+          message: "Só o responsável pela ação pode concluí-la.",
+        });
         return;
       }
       if (

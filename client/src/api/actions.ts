@@ -65,3 +65,22 @@ export function reviewAction(id: string, body: ActionReview) {
     body: JSON.stringify(body),
   });
 }
+
+export async function sendActionEvidence(input: {
+  action_id: string;
+  type?: string;
+  file_name: string;
+  mime_type: string;
+  content_base64: string;
+  description?: string;
+}) {
+  return request<{ evidence: EvidenceRow }>("/api/evidences", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+/** Só o responsável conclui; exige ao menos uma evidência. [S3-C] [S3-M] */
+export async function completeAction(id: string) {
+  return request<{ action: ActionRow }>(`/api/actions/${id}/complete`, { method: "POST" });
+}

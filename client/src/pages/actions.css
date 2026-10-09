@@ -163,3 +163,19 @@ button.evidence-thumb:focus-visible {
     width: 100%;
   }
 }
+
+/* O responsável prova o que fez e conclui. [S3-C] */
+.action-mine {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--sem-info-bd);
+  border-radius: var(--radius);
+  background: var(--sem-info);
+}
+
+.action-send {
+  display: grid;
+  gap: 0.5rem;
+  max-width: 34rem;
+}

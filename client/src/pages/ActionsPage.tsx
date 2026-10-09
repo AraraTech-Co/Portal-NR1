@@ -57,6 +57,7 @@ export function ActionsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mine, setMine] = useState(false);
+  const [autoMine, setAutoMine] = useState(false);
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [highPriority, setHighPriority] = useState(false);
   const [status, setStatus] = useState("");
@@ -69,7 +70,21 @@ export function ActionsPage() {
     setError(null);
     fetchActions()
       .then((data) => {
-        if (!cancelled) setActions(data.actions);
+        if (cancelled) return;
+        setActions(data.actions);
+        /*
+          Quem tem ação aberta no próprio nome abre a tela já filtrada: a
+          pessoa entra aqui para resolver a dela. [S3-C]
+        */
+        if (!autoMine && user) {
+          const minhas = data.actions.filter(
+            (a) =>
+              (a.assigneeId ?? a.createdById) === user.id &&
+              (a.status === "OPEN" || a.status === "IN_PROGRESS"),
+          );
+          if (minhas.length > 0) setMine(true);
+          setAutoMine(true);
+        }
       })
       .catch((err) => {
         if (!cancelled) {
@@ -82,11 +97,12 @@ export function ActionsPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [autoMine, user]);
 
   const filtered = useMemo(() => {
     return actions.filter((a) => {
-      if (mine && user && a.assigneeId !== user.id) return false;
+      // Responsável é o assignee; sem assignee, quem criou.
+      if (mine && user && (a.assigneeId ?? a.createdById) !== user.id) return false;
       if (overdueOnly && !isOverdue(a.dueDate, a.status)) return false;
       if (
         highPriority &&

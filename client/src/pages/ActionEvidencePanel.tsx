@@ -1,11 +1,14 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import {
+  completeAction,
   fetchActionEvidences,
   fetchEvidenceBlob,
   reviewAction,
+  sendActionEvidence,
   type ActionRow,
   type EvidenceRow,
 } from "@/api/actions";
+import { fileToBase64 } from "@/api/payslips";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
 import { formatDay } from "@/lib/labels";
@@ -79,6 +82,78 @@ type Props = {
  * Evidências da ação, com a foto à vista, e a validação no mesmo lugar:
  * quem valida decide olhando a prova. [S3-L]
  */
+/** O responsável prova o que fez e conclui. [S3-C] */
+function SendEvidence({
+  actionId,
+  onSent,
+}: {
+  actionId: string;
+  onSent: () => Promise<void>;
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const [description, setDescription] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const input = useRef<HTMLInputElement>(null);
+
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!file) {
+      setError("Escolha a foto ou o arquivo da evidência.");
+      return;
+    }
+    setSending(true);
+    setError(null);
+    try {
+      await sendActionEvidence({
+        action_id: actionId,
+        type: file.type.startsWith("image/") ? "PHOTO" : "DOCUMENT",
+        file_name: file.name,
+        mime_type: file.type,
+        content_base64: await fileToBase64(file),
+        description: description.trim() || undefined,
+      });
+      setFile(null);
+      setDescription("");
+      if (input.current) input.current.value = "";
+      await onSent();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao enviar");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <form className="action-send" onSubmit={onSubmit}>
+      <label className="form-field">
+        Foto do que foi feito
+        <input
+          ref={input}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,application/pdf,video/mp4"
+          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+        />
+        <span className="form-hint">No celular, dá para fotografar na hora. Até 20 MB.</span>
+      </label>
+      <label className="form-field">
+        O que a foto mostra (opcional)
+        <input value={description} onChange={(e) => setDescription(e.target.value)} />
+      </label>
+      {error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="form-actions">
+        <Button type="submit" variant="secondary" disabled={sending || !file}>
+          {sending ? "Enviando…" : "Enviar evidência"}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 export function ActionEvidencePanel({ action, userId, canReview, onReviewed }: Props) {
   const [evidences, setEvidences] = useState<EvidenceRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -103,6 +178,22 @@ export function ActionEvidencePanel({ action, userId, canReview, onReviewed }: P
   const waiting = action.status === "WAITING_VALIDATION";
   const executorId = action.assigneeId || action.createdById;
   const isExecutor = Boolean(userId && userId === executorId);
+  const open = action.status === "OPEN" || action.status === "IN_PROGRESS";
+  const [completing, setCompleting] = useState(false);
+
+  /** Concluir manda para validação; exige ao menos uma evidência. [S3-C] */
+  async function finish() {
+    setCompleting(true);
+    setReviewError(null);
+    try {
+      const { action: updated } = await completeAction(action.id);
+      onReviewed(updated);
+    } catch (err) {
+      setReviewError(err instanceof Error ? err.message : "Falha ao concluir");
+    } finally {
+      setCompleting(false);
+    }
+  }
 
   async function decide(e: FormEvent, decision: "approve" | "reject") {
     e.preventDefault();
@@ -190,6 +281,42 @@ export function ActionEvidencePanel({ action, userId, canReview, onReviewed }: P
             );
           })}
         </ul>
+      )}
+
+      {open && isExecutor && (
+        <div className="action-mine">
+          <h3 className="action-panel-title">Sua ação</h3>
+          {action.effectivenessCriteria && (
+            <p className="action-panel-note">
+              <strong>Para dar certo:</strong> {action.effectivenessCriteria}
+            </p>
+          )}
+          <SendEvidence
+            actionId={action.id}
+            onSent={async () => {
+              const data = await fetchActionEvidences(action.id);
+              setEvidences(data.evidences);
+            }}
+          />
+          <div className="form-actions">
+            <Button
+              type="button"
+              disabled={completing || !evidences || evidences.length === 0}
+              onClick={() => void finish()}
+            >
+              {completing ? "Concluindo…" : "Concluí: mandar para validação"}
+            </Button>
+            {evidences?.length === 0 && (
+              <span className="muted">Envie ao menos uma evidência antes de concluir.</span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {open && !isExecutor && (
+        <p className="muted">
+          Esta ação é de outra pessoa. Quem é responsável envia a evidência e conclui.
+        </p>
       )}
 
       {waiting && canReview && !isExecutor && (
