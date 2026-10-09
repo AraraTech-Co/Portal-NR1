@@ -158,3 +158,40 @@ export async function validateAssessment(id: string) {
     method: "POST",
   });
 }
+
+export type Control = {
+  id: string;
+  riskId: string;
+  type: string;
+  description: string;
+  status: string;
+  implementedAt: string | null;
+};
+
+export async function fetchControls(riskId: string) {
+  return request<{ controls: Control[] }>(`/api/controls?risk_id=${encodeURIComponent(riskId)}`);
+}
+
+export async function createControl(input: { risk_id: string; type: string; description: string }) {
+  return request<{ control: Control }>("/api/controls", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+/** Ação do plano: NR-1 1.5.5.2 exige dono e prazo. [S2-M] */
+export async function createRiskAction(input: {
+  title: string;
+  description?: string;
+  risk_id: string;
+  control_id?: string;
+  priority: string;
+  assignee_id: string;
+  due_date: string;
+  effectiveness_criteria?: string;
+}) {
+  return request<{ action: { id: string; title: string } }>("/api/actions", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}

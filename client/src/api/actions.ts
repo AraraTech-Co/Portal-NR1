@@ -7,6 +7,7 @@ export type ActionRow = {
   description: string | null;
   sourceType: string;
   riskId: string | null;
+  controlId: string | null;
   occurrenceId: string | null;
   priority: string;
   status: string;

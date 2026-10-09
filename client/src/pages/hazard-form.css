@@ -89,7 +89,8 @@
   flex-wrap: wrap;
 }
 
-.hz-risk-list li > .assess {
+.hz-risk-list li > .assess,
+.hz-risk-list li > .ctrl {
   flex: 1 0 100%;
   margin-top: 0.3rem;
 }

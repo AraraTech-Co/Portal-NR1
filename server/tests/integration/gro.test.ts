@@ -13,7 +13,7 @@ async function login(app: Express, loginId: string) {
     .post("/api/auth")
     .send({ login: loginId, password: "admin123" });
   expect(res.status).toBe(200);
-  return res.body.token as string;
+  return res.body as { token: string; user: { id: string } };
 }
 
 describe("resolveLevel", () => {
@@ -32,12 +32,15 @@ describe("resolveLevel", () => {
 describe("GRO API", () => {
   let app: Express;
   let ownerToken: string;
+  let ownerId: string;
   let masterToken: string;
 
   beforeAll(async () => {
     app = createApp();
-    ownerToken = await login(app, "admin");
-    masterToken = await login(app, "master");
+    const owner = await login(app, "admin");
+    ownerToken = owner.token;
+    ownerId = owner.user.id;
+    masterToken = (await login(app, "master")).token;
   });
 
   it("lists seed establishments and methodologies", async () => {
@@ -133,6 +136,9 @@ describe("GRO API", () => {
         risk_id: RISK_ID,
         control_id: control.body.control.id,
         priority: "HIGH",
+        // Ação exige dono e prazo (NR-1 1.5.5.2). [S2-M]
+        assignee_id: ownerId,
+        due_date: "2026-12-31",
       });
     expect(action.status).toBe(201);
   });

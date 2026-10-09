@@ -23,6 +23,7 @@ import {
 } from "@/api/operation";
 import { Button } from "@/components/Button";
 import { AssessRiskPanel } from "./AssessRiskPanel";
+import { ControlActionPanel } from "./ControlActionPanel";
 import { Chip } from "@/components/Chip";
 import { LoadingState } from "@/components/LoadingState";
 import { PageHeader } from "@/components/PageHeader";
@@ -169,14 +170,25 @@ function RiskList({
                   )}
                 </span>
                 {avaliando === r.id && (
-                  <AssessRiskPanel
-                    riskId={r.id}
-                    canWrite={canEdit}
-                    onChanged={async () => {
-                      await reload();
-                      await onChanged();
-                    }}
-                  />
+                  <>
+                    <AssessRiskPanel
+                      riskId={r.id}
+                      canWrite={canEdit}
+                      onChanged={async () => {
+                        await reload();
+                        await onChanged();
+                      }}
+                    />
+                    <ControlActionPanel
+                      riskId={r.id}
+                      riskLevel={level}
+                      canWrite={canEdit}
+                      onChanged={async () => {
+                        await reload();
+                        await onChanged();
+                      }}
+                    />
+                  </>
                 )}
               </li>
             );
