@@ -181,6 +181,23 @@ export const fetchTrainings = () =>
     }>;
   }>("/api/trainings").then((d) => d.trainings);
 
+export type TrainingEnrollmentRow = {
+  id: string;
+  status: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  score: number | null;
+  certificateCode: string | null;
+  expiresAt: string | null;
+  user: { id: string; name: string };
+};
+
+/** Quem fez o treinamento — para quem cuida dos treinamentos e para a fiscalização. */
+export const fetchTrainingEnrollments = (id: string) =>
+  request<{ enrollments: TrainingEnrollmentRow[] }>(
+    `/api/trainings/${encodeURIComponent(id)}/enrollments`,
+  ).then((d) => d.enrollments);
+
 export const fetchEthicsReports = () =>
   request<{
     reports: Array<{

@@ -3,7 +3,7 @@ import prisma from "../model/prisma";
 import { HrDocument } from "../model/schema/HrDocument/HrDocument";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
-import { canManageModule } from "../helper/module-access";
+import { canManageModule, isReadOnlyRole } from "../helper/module-access";
 import {
   assertSize,
   buildPrivateStoragePath,
@@ -29,6 +29,15 @@ function isRh(req: AuthRequest): boolean {
   return Boolean(req.actor && canManageModule(req.actor.permission, "documentos_rh"));
 }
 
+/**
+ * A consulta (fiscal) vê os documentos GERAIS — onde fica a ordem de serviço
+ * de segurança — e quem deu ciência. Documento de uma pessoa (contrato,
+ * advertência) não é assunto dela. [S7-A]
+ */
+function isAuditor(req: AuthRequest): boolean {
+  return Boolean(req.actor && isReadOnlyRole(req.actor.permission));
+}
+
 class HrDocumentController {
   async list(req: Request, res: Response) {
     try {
@@ -41,11 +50,13 @@ class HrDocumentController {
         where: {
           organizationId: orgId,
           ...(kind && isHrDocumentKind(kind) ? { kind } : {}),
-          ...(!isRh(auth)
-            ? {
-                OR: [{ targetUserId: null }, { targetUserId: userId }],
-              }
-            : {}),
+          ...(isAuditor(auth)
+            ? { targetUserId: null }
+            : !isRh(auth)
+              ? {
+                  OR: [{ targetUserId: null }, { targetUserId: userId }],
+                }
+              : {}),
         },
         orderBy: { createdAt: "desc" },
         include: {
@@ -81,7 +92,7 @@ class HrDocumentController {
         include: {
           publishedBy: { select: { id: true, name: true } },
           target: { select: { id: true, name: true } },
-          acks: isRh(auth)
+          acks: isRh(auth) || isAuditor(auth)
             ? {
                 include: {
                   user: { select: { id: true, name: true } },
@@ -97,9 +108,15 @@ class HrDocumentController {
       if (
         !isRh(auth) &&
         doc.targetUserId &&
-        doc.targetUserId !== userId
+        (isAuditor(auth) || doc.targetUserId !== userId)
       ) {
         res.status(403).json({ message: "Sem permissão." });
+        return;
+      }
+
+      // A consulta só olha: não deixa marca de leitura em nome de ninguém.
+      if (isAuditor(auth)) {
+        res.json({ document: doc });
         return;
       }
 

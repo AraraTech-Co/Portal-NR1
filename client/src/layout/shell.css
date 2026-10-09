@@ -51,3 +51,19 @@
     padding: 1.15rem 1rem 2rem;
   }
 }
+
+.readonly-banner {
+  margin: 0 0 1rem;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--sem-info-bd);
+  border-radius: var(--radius);
+  background: var(--sem-info);
+  color: var(--sem-info-fg);
+  font-size: 0.875rem;
+}
+
+@media print {
+  .readonly-banner {
+    display: none;
+  }
+}

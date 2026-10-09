@@ -57,6 +57,32 @@ export function canManageModule(roleKey: string, moduleId: ModuleId): boolean {
   return !(SELF_SERVICE_ONLY[role] ?? []).includes(moduleId);
 }
 
+/**
+ * Papéis só de consulta: leem, nunca gravam — nem o próprio registro. O
+ * bloqueio de gravação fica no `authenticate`, para valer em toda rota. [S7-A]
+ */
+const READ_ONLY_ROLES: readonly string[] = ["fiscal"];
+
+export function isReadOnlyRole(roleKey: string): boolean {
+  return READ_ONLY_ROLES.includes(normalizeRoleKey(roleKey));
+}
+
+/**
+ * Onde a consulta vê o registro de TODOS, não só o próprio. Nos módulos de
+ * pessoas, "ler" quer dizer "ler o que é meu"; a fiscalização precisa ver
+ * quem fez o treinamento, quem está com exame em dia, quem deu ciência.
+ */
+const SEES_ALL_READ_ONLY: Record<string, readonly ModuleId[]> = {
+  fiscal: ["colaboradores", "documentos_rh", "saude", "treinamentos", "convocacoes"],
+};
+
+/** Vê o registro de outras pessoas no módulo: quem administra, ou a consulta. */
+export function canSeeAllInModule(roleKey: string, moduleId: ModuleId): boolean {
+  if (canManageModule(roleKey, moduleId)) return true;
+  const role = normalizeRoleKey(roleKey);
+  return (SEES_ALL_READ_ONLY[role] ?? []).includes(moduleId);
+}
+
 /** Mapa módulo → read|write (omite none) para a sessão do client. */
 export function modulesForRole(
   roleKey: string,

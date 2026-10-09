@@ -27,6 +27,8 @@ export function effectivePermission(
   accountRole: AccountRole | null | undefined,
 ): string {
   if (orgRole === "MASTER") return "master";
+  // Fiscal é sempre só consulta, qualquer que seja o papel na conta. [S7-A]
+  if (orgRole === "FISCAL") return "fiscal";
   if (accountRole === "OWNER") return "owner";
   if (accountRole === "ADMIN") return "adm_loja";
   if (orgRole === "RH") return "rh";

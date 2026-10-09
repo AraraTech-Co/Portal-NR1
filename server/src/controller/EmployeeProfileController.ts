@@ -6,7 +6,11 @@ import { JobRole } from "../model/schema/JobRole/JobRole";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
 import { isValidCpf, normalizeCpf } from "../helper/cpf";
-import { canManageModule } from "../helper/module-access";
+import {
+  canManageModule,
+  canSeeAllInModule,
+  isReadOnlyRole,
+} from "../helper/module-access";
 import type { AuthRequest } from "../types/auth";
 
 /**
@@ -42,6 +46,28 @@ function isRh(req: AuthRequest): boolean {
   return Boolean(req.actor && canManageModule(req.actor.permission, "colaboradores"));
 }
 
+function seesAll(req: AuthRequest): boolean {
+  return Boolean(req.actor && canSeeAllInModule(req.actor.permission, "colaboradores"));
+}
+
+/**
+ * A consulta (fiscal) vê quem é quem — nome, matrícula, função, setor,
+ * admissão — sem CPF, telefone, login nem e-mail. [S7-A]
+ */
+function forViewer<T extends { taxId?: unknown; phone?: unknown; user?: unknown }>(
+  req: AuthRequest,
+  profile: T,
+): T {
+  if (!req.actor || !isReadOnlyRole(req.actor.permission)) return profile;
+  const user = profile.user as { id: string; name: string } | undefined;
+  return {
+    ...profile,
+    taxId: null,
+    phone: null,
+    user: user ? { id: user.id, name: user.name } : user,
+  };
+}
+
 class EmployeeProfileController {
   async list(req: Request, res: Response) {
     try {
@@ -51,7 +77,7 @@ class EmployeeProfileController {
       const jobRoleId = req.query.job_role_id as string | undefined;
 
       // Colaborador sem RH só vê o próprio perfil.
-      if (!isRh(auth)) {
+      if (!seesAll(auth)) {
         const mine = await prisma.employeeProfile.findFirst({
           where: { organizationId: orgId, userId: actorUserId(auth) },
           include: {
@@ -75,7 +101,7 @@ class EmployeeProfileController {
           jobRole: { select: { id: true, name: true } },
         },
       });
-      res.json({ profiles: rows });
+      res.json({ profiles: rows.map((p) => forViewer(auth, p)) });
     } catch (err) {
       fail(res, err);
     }
@@ -96,11 +122,11 @@ class EmployeeProfileController {
         res.status(404).json({ message: "Perfil não encontrado." });
         return;
       }
-      if (!isRh(auth) && profile.userId !== actorUserId(auth)) {
+      if (!seesAll(auth) && profile.userId !== actorUserId(auth)) {
         res.status(403).json({ message: "Sem permissão para ver este perfil." });
         return;
       }
-      res.json({ profile });
+      res.json({ profile: forViewer(auth, profile) });
     } catch (err) {
       fail(res, err);
     }

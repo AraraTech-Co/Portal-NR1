@@ -114,6 +114,13 @@ const USERS: Spec[] = [
     orgRole: Role.COLABORADOR,
     accountRole: AccountRole.USER,
   },
+  {
+    login: "teste.fiscal",
+    name: "Fiscal Teste",
+    email: "teste.fiscal@teste.local",
+    orgRole: Role.FISCAL,
+    accountRole: AccountRole.USER,
+  },
 ];
 
 function accessCodeHash(plain: string): string {
