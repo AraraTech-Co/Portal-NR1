@@ -83,3 +83,13 @@
 .hz-inline-add input {
   flex: 1 1 16rem;
 }
+
+/* O painel de avaliação ocupa a linha inteira do risco. */
+.hz-risk-list li {
+  flex-wrap: wrap;
+}
+
+.hz-risk-list li > .assess {
+  flex: 1 0 100%;
+  margin-top: 0.3rem;
+}

@@ -93,3 +93,68 @@ export async function updateRisk(id: string, description: string) {
 export async function archiveRisk(id: string) {
   return request(`/api/risks/${id}`, { method: "DELETE" });
 }
+
+export type ScaleItem = { value: number; label: string; description?: string };
+
+export type MethodologyVersion = {
+  id: string;
+  version: number;
+  severityScale: ScaleItem[];
+  probabilityScale: ScaleItem[];
+  matrix: Record<string, string>;
+  levels: Array<{ id: string; label: string; order: number }>;
+};
+
+export type Methodology = {
+  id: string;
+  name: string;
+  isDefault: boolean;
+  versions: MethodologyVersion[];
+};
+
+export async function fetchMethodologies() {
+  return request<{ methodologies: Methodology[] }>("/api/methodologies");
+}
+
+export type Assessment = {
+  id: string;
+  riskId: string;
+  severity: number;
+  probability: number;
+  resultingLevel: string;
+  status: "DRAFT" | "VALIDATED" | "SUPERSEDED";
+  severityReason: string | null;
+  probabilityReason: string | null;
+  controlsConsidered: string | null;
+  assessorId: string;
+  assessedAt: string;
+  validatedById: string | null;
+  validatedAt: string | null;
+};
+
+export async function fetchAssessments(riskId: string) {
+  return request<{ assessments: Assessment[] }>(
+    `/api/assessments?risk_id=${encodeURIComponent(riskId)}`,
+  );
+}
+
+export async function createAssessment(input: {
+  risk_id: string;
+  methodology_version_id: string;
+  severity: number;
+  probability: number;
+  severity_reason?: string;
+  probability_reason?: string;
+  controls_considered?: string;
+}) {
+  return request<{ assessment: Assessment }>("/api/assessments", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function validateAssessment(id: string) {
+  return request<{ assessment: Assessment }>(`/api/assessments/${id}/validate`, {
+    method: "POST",
+  });
+}
