@@ -15,8 +15,11 @@ async function login(app: Express, loginId: string) {
     .post("/api/auth")
     .send({ login: loginId, password: "admin123" });
   expect(res.status).toBe(200);
-  return res.body.token as string;
+  return res.body as { token: string; user: { id: string } };
 }
+
+/** Ação exige dono e prazo (NR-1 1.5.5.2). [S2-M] */
+const PRAZO = "2026-12-31";
 
 describe("uploads helpers", () => {
   it("allows only safe mime types", () => {
@@ -34,11 +37,15 @@ describe("Evidence + Action workflow", () => {
   let app: Express;
   let ownerToken: string;
   let masterToken: string;
+  let ownerId: string;
 
   beforeAll(async () => {
     app = createApp();
-    ownerToken = await login(app, "admin");
-    masterToken = await login(app, "master");
+    const owner = await login(app, "admin");
+    const master = await login(app, "master");
+    ownerToken = owner.token;
+    masterToken = master.token;
+    ownerId = owner.user.id;
   });
 
   it("complete without evidence fails; with evidence goes to waiting validation", async () => {
@@ -49,6 +56,8 @@ describe("Evidence + Action workflow", () => {
         title: "Instalar protetor",
         risk_id: RISK_ID,
         priority: "HIGH",
+        assignee_id: ownerId,
+        due_date: PRAZO,
       });
     expect(action.status).toBe(201);
     const actionId = action.body.action.id as string;
@@ -107,6 +116,8 @@ describe("Evidence + Action workflow", () => {
         title: "Validar protetor",
         risk_id: RISK_ID,
         control_id: control.body.control.id,
+        assignee_id: ownerId,
+        due_date: PRAZO,
       });
     const id2 = action2.body.action.id as string;
     await request(app)
@@ -153,7 +164,7 @@ describe("Evidence + Action workflow", () => {
     const action = await request(app)
       .post("/api/actions")
       .set("Authorization", `Bearer ${ownerToken}`)
-      .send({ title: "Rejeitar depois", risk_id: RISK_ID });
+      .send({ title: "Rejeitar depois", risk_id: RISK_ID, assignee_id: ownerId, due_date: PRAZO });
     const id = action.body.action.id as string;
     await request(app)
       .post("/api/evidences")

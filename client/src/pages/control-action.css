@@ -1,0 +1,78 @@
+/* Medidas de prevenção e as ações que as implantam. [S2-A] [S2-M] */
+.ctrl {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+
+.ctrl h4 {
+  margin: 0;
+  font-size: 0.7rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+}
+
+.ctrl-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.ctrl-list > li {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+
+.ctrl-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.55rem;
+  font-size: 0.875rem;
+}
+
+.ctrl-row .btn {
+  padding: 0.22rem 0.5rem;
+  font-size: 0.76rem;
+}
+
+.ctrl-action {
+  margin: 0;
+  padding-left: 0.6rem;
+  border-left: 2px solid var(--border);
+  font-size: 0.82rem;
+}
+
+.ctrl-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.ctrl-add input {
+  flex: 1 1 14rem;
+}
+
+.ctrl-free-action .btn {
+  padding: 0.22rem 0.5rem;
+  font-size: 0.76rem;
+}
+
+.ctrl-action-form {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.65rem 0.7rem;
+  border: 1px solid var(--sem-info-bd);
+  border-radius: var(--radius);
+  background: var(--sem-info);
+}

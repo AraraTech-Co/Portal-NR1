@@ -21,16 +21,16 @@ const PNG = Buffer.from(
 async function entrar(app: Express, login: string, password = SENHA) {
   const res = await request(app).post("/api/auth").send({ login, password });
   expect(res.status, `login de ${login}`).toBe(200);
-  return res.body.token as string;
+  return res.body as { token: string; user: { id: string } };
 }
 
 const as = (token: string) => ({ Authorization: `Bearer ${token}` });
 
 let app: Express;
-let sst: string;
-let owner: string;
-let colaborador: string;
-let outraOrg: string;
+let sst: { token: string; user: { id: string } };
+let owner: { token: string; user: { id: string } };
+let colaborador: { token: string; user: { id: string } };
+let outraOrg: { token: string; user: { id: string } };
 let actionId: string;
 let evidenceId: string;
 
@@ -43,14 +43,20 @@ beforeAll(async () => {
 
   const action = await request(app)
     .post("/api/actions")
-    .set(as(sst))
-    .send({ title: "Instalar corrimão na escada", priority: "HIGH" });
+    .set(as(sst.token))
+    // Ação exige dono e prazo (NR-1 1.5.5.2). [S2-M]
+    .send({
+      title: "Instalar corrimão na escada",
+      priority: "HIGH",
+      assignee_id: sst.user.id,
+      due_date: "2026-12-31",
+    });
   expect(action.status).toBe(201);
   actionId = action.body.action.id;
 
   const ev = await request(app)
     .post("/api/evidences")
-    .set(as(sst))
+    .set(as(sst.token))
     .send({
       action_id: actionId,
       type: "PHOTO",
@@ -63,7 +69,7 @@ beforeAll(async () => {
   evidenceId = ev.body.evidence.id;
   expect(ev.body.evidence.storagePath).toBeUndefined();
 
-  const done = await request(app).post(`/api/actions/${actionId}/complete`).set(as(sst));
+  const done = await request(app).post(`/api/actions/${actionId}/complete`).set(as(sst.token));
   expect(done.status).toBe(200);
 });
 
@@ -71,7 +77,7 @@ describe("quem valida vê a prova [S3-L]", () => {
   it("a lista diz quem enviou e não expõe o caminho interno do arquivo", async () => {
     const res = await request(app)
       .get(`/api/evidences?action_id=${actionId}`)
-      .set(as(owner));
+      .set(as(owner.token));
     expect(res.status).toBe(200);
     const [ev] = res.body.evidences;
     expect(ev.id).toBe(evidenceId);
@@ -82,7 +88,7 @@ describe("quem valida vê a prova [S3-L]", () => {
   it("o validador abre a foto: mesmo conteúdo, tipo certo, para ver na tela", async () => {
     const res = await request(app)
       .get(`/api/evidences/${evidenceId}/file`)
-      .set(as(owner))
+      .set(as(owner.token))
       .buffer(true)
       .parse((r, cb) => {
         const chunks: Buffer[] = [];
@@ -99,13 +105,13 @@ describe("quem valida vê a prova [S3-L]", () => {
   it("depois de ver, aprova — e quem executou continua sem poder validar", async () => {
     const proprio = await request(app)
       .post(`/api/actions/${actionId}/review`)
-      .set(as(sst))
+      .set(as(sst.token))
       .send({ decision: "approve" });
     expect(proprio.status).toBe(403);
 
     const ok = await request(app)
       .post(`/api/actions/${actionId}/review`)
-      .set(as(owner))
+      .set(as(owner.token))
       .send({ decision: "approve", effectiveness_result: "Corrimão firme, conferido na foto" });
     expect(ok.status).toBe(200);
     expect(ok.body.action.status).toBe("VALIDATED");
@@ -114,7 +120,7 @@ describe("quem valida vê a prova [S3-L]", () => {
   it("quem só lê o plano também vê a prova (é leitura do plano)", async () => {
     const res = await request(app)
       .get(`/api/evidences/${evidenceId}/file`)
-      .set(as(colaborador));
+      .set(as(colaborador.token));
     expect(res.status).toBe(200);
   });
 });
@@ -128,14 +134,14 @@ describe("o arquivo não sai do seu lugar", () => {
   it("outra organização não acha a evidência", async () => {
     const res = await request(app)
       .get(`/api/evidences/${evidenceId}/file`)
-      .set(as(outraOrg));
+      .set(as(outraOrg.token));
     expect(res.status).toBe(404);
   });
 
   it("evidência de ocorrência não sai por esta rota", async () => {
     const occ = await request(app)
       .post("/api/occurrences")
-      .set(as(sst))
+      .set(as(sst.token))
       .send({
         type: "DANGEROUS_EVENT",
         description: "Escada sem corrimão",
@@ -145,7 +151,7 @@ describe("o arquivo não sai do seu lugar", () => {
     expect(occ.status).toBe(201);
     const ev = await request(app)
       .post(`/api/occurrences/${occ.body.occurrence.id}/evidences`)
-      .set(as(sst))
+      .set(as(sst.token))
       .send({
         file_name: "escada.png",
         mime_type: "image/png",
@@ -155,7 +161,7 @@ describe("o arquivo não sai do seu lugar", () => {
 
     const res = await request(app)
       .get(`/api/evidences/${ev.body.evidence.id}/file`)
-      .set(as(owner));
+      .set(as(owner.token));
     expect(res.status).toBe(404);
   });
 });

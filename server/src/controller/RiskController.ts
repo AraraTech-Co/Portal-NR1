@@ -668,6 +668,10 @@ class RiskController {
         description: description.trim(),
         status: ControlStatus.PLANNED,
       });
+      await audit(req, "control.create", "Risk", risk_id, null, {
+        type: row.type,
+        description: row.description,
+      });
       res.status(201).json({ control: row });
     } catch (err) {
       fail(res, err);
@@ -715,6 +719,26 @@ class RiskController {
         res.status(400).json({ message: "Informe o título." });
         return;
       }
+      /*
+        NR-1 1.5.5.2: o plano de ação diz o que será feito, POR QUEM e ATÉ
+        QUANDO. Ação sem dono e sem prazo não cobra ninguém. [S2-M]
+      */
+      if (!assignee_id) {
+        res.status(400).json({ message: "Informe quem é o responsável pela ação." });
+        return;
+      }
+      if (!due_date) {
+        res.status(400).json({ message: "Informe o prazo da ação." });
+        return;
+      }
+      const responsavel = await prisma.membership.findFirst({
+        where: { userId: assignee_id, organizationId: orgId },
+        select: { accessExpiresAt: true, user: { select: { active: true } } },
+      });
+      if (!responsavel || !responsavel.user.active) {
+        res.status(400).json({ message: "Responsável não é da organização." });
+        return;
+      }
       if (risk_id) {
         const risk = await new Risk().read.one({
           id: risk_id,
@@ -723,6 +747,17 @@ class RiskController {
         });
         if (!risk) {
           res.status(400).json({ message: "Risco inválido." });
+          return;
+        }
+      }
+      if (control_id) {
+        const control = await new ControlMeasure().read.one({
+          id: control_id,
+          organizationId: orgId,
+          ...(risk_id ? { riskId: risk_id } : {}),
+        });
+        if (!control) {
+          res.status(400).json({ message: "Medida de controle inválida para este risco." });
           return;
         }
       }
@@ -738,6 +773,12 @@ class RiskController {
         dueDate: due_date ? new Date(due_date) : null,
         effectivenessCriteria: effectiveness_criteria ?? null,
         createdById: userId,
+      });
+      await audit(req, "action.create", "Risk", risk_id ?? row.id, null, {
+        title: row.title,
+        priority: row.priority,
+        dueDate: row.dueDate,
+        assigneeId: row.assigneeId,
       });
       res.status(201).json({ action: row });
     } catch (err) {
