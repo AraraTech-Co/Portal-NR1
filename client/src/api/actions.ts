@@ -1,5 +1,5 @@
 import { request } from "./client";
-import { getToken } from "./token";
+import { fetchProtectedBlob } from "@/lib/protected-file";
 
 export type ActionRow = {
   id: string;
@@ -50,16 +50,8 @@ export function fetchActionEvidences(actionId: string) {
 }
 
 /** Arquivo da evidência (o endpoint exige o token, então não dá para usar a URL direto num <img>). */
-export async function fetchEvidenceBlob(id: string): Promise<Blob> {
-  const headers = new Headers();
-  const token = getToken();
-  if (token) headers.set("Authorization", `Bearer ${token}`);
-  const res = await fetch(`/api/evidences/${id}/file`, { headers });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error((data as { message?: string }).message || `Erro ${res.status}`);
-  }
-  return res.blob();
+export function fetchEvidenceBlob(id: string): Promise<Blob> {
+  return fetchProtectedBlob(`/api/evidences/${id}/file`);
 }
 
 export type ActionReview =

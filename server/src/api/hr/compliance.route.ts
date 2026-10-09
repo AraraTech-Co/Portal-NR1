@@ -19,6 +19,9 @@ router.get("/api/worker-certificates", read, (req, res) =>
 router.post("/api/worker-certificates", read, (req, res) =>
   compliance.createCertificate(req, res),
 );
+router.get("/api/worker-certificates/:id/file", read, (req, res) =>
+  compliance.certificateFile(req, res),
+);
 router.post("/api/worker-certificates/:id/review", writeRh, (req, res) =>
   compliance.reviewCertificate(req, res),
 );

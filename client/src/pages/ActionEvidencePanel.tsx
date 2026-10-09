@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
 import { formatDay } from "@/lib/labels";
+import { openProtectedFile } from "@/lib/protected-file";
 import "@/components/form.css";
 
 const EVIDENCE_STATUS: Record<EvidenceRow["validationStatus"], { label: string; tone: "warning" | "success" | "danger" }> = {
@@ -16,9 +17,6 @@ const EVIDENCE_STATUS: Record<EvidenceRow["validationStatus"], { label: string; 
   ACCEPTED: { label: "Aceita", tone: "success" },
   REJECTED: { label: "Recusada", tone: "danger" },
 };
-
-/** Tempo para a outra aba terminar de carregar antes de liberar o arquivo da memória. */
-const REVOKE_AFTER_MS = 60_000;
 
 function isImage(e: EvidenceRow) {
   return e.mimeType.startsWith("image/");
@@ -30,31 +28,8 @@ function openLabel(e: EvidenceRow) {
   return "Ver em tamanho real";
 }
 
-/**
- * Abre a evidência numa aba própria. A aba é aberta AGORA, ainda dentro do
- * clique — depois do `await` o navegador a bloquearia como pop-up.
- */
-async function openEvidence(e: EvidenceRow) {
-  const tab = window.open("", "_blank");
-  try {
-    const url = URL.createObjectURL(await fetchEvidenceBlob(e.id));
-    if (tab) {
-      tab.location.href = url;
-    } else {
-      // Pop-up bloqueado: tenta de novo por link, sem tirar a pessoa do portal.
-      const a = document.createElement("a");
-      a.href = url;
-      a.target = "_blank";
-      a.rel = "noopener";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-    }
-    window.setTimeout(() => URL.revokeObjectURL(url), REVOKE_AFTER_MS);
-  } catch (err) {
-    tab?.close();
-    window.alert(err instanceof Error ? err.message : "Não foi possível abrir a evidência.");
-  }
+function openEvidence(e: EvidenceRow) {
+  return openProtectedFile(`/api/evidences/${e.id}/file`);
 }
 
 function EvidenceThumb({ evidence }: { evidence: EvidenceRow }) {

@@ -127,6 +127,20 @@ export const ENROLLMENT_STATUS_LABEL: Record<string, string> = {
   COMPLETED: "Concluído",
 };
 
+export const CERTIFICATE_STATUS_LABEL: Record<string, string> = {
+  PENDING: "Em análise",
+  APPROVED: "Aceito",
+  REJECTED: "Recusado",
+};
+
+export const EXAM_KIND_LABEL: Record<string, string> = {
+  ADMISSIONAL: "Admissional",
+  PERIODIC: "Periódico",
+  RETURN_TO_WORK: "Retorno ao trabalho",
+  ROLE_CHANGE: "Mudança de função",
+  DISMISSAL: "Demissional",
+};
+
 export function formatDay(value: string | Date | null | undefined): string {
   const c = calendarDay(value);
   if (!c) return "—";

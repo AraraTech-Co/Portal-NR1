@@ -9,13 +9,12 @@ import prisma from "../model/prisma";
 import { Action } from "../model/schema/Action/Action";
 import { Evidence } from "../model/schema/Evidence/Evidence";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
-import fs from "fs";
 import {
   assertSize,
   buildEvidenceStoragePath,
-  resolveStoragePath,
   writeEvidenceFile,
 } from "../helper/uploads";
+import { sendPrivateFile } from "../helper/send-private-file";
 import type { AuthRequest } from "../types/auth";
 
 function fail(res: Response, err: unknown) {
@@ -83,19 +82,7 @@ class ActionEvidenceController {
         res.status(404).json({ message: "Evidência não encontrada." });
         return;
       }
-      const abs = resolveStoragePath(evidence.storagePath);
-      if (evidence.sizeBytes === 0 || !fs.existsSync(abs)) {
-        res.status(404).json({ message: "Esta evidência foi registrada sem arquivo." });
-        return;
-      }
-      res.setHeader("Content-Type", evidence.mimeType);
-      res.setHeader(
-        "Content-Disposition",
-        `inline; filename*=UTF-8''${encodeURIComponent(evidence.fileName)}`,
-      );
-      res.setHeader("X-Content-Type-Options", "nosniff");
-      res.setHeader("Cache-Control", "private, no-store");
-      fs.createReadStream(abs).on("error", (err) => fail(res, err)).pipe(res);
+      sendPrivateFile(res, evidence, "Esta evidência foi registrada sem arquivo.");
     } catch (err) {
       fail(res, err);
     }

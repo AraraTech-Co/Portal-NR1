@@ -7,7 +7,10 @@ import {
 import { Chip } from "@/components/Chip";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
-import { formatDay } from "@/lib/labels";
+import { CERTIFICATE_STATUS_LABEL, EXAM_KIND_LABEL, formatDay } from "@/lib/labels";
+import { useAuth } from "@/auth/AuthContext";
+import { Button } from "@/components/Button";
+import { openProtectedFile } from "@/lib/protected-file";
 import "@/components/data-table.css";
 import { LoadingState } from "@/components/LoadingState";
 
@@ -23,6 +26,11 @@ export function HealthPage() {
   >([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
+  // Quem vê o registro de outras pessoas (RH, SST, fiscal) precisa saber de
+  // quem é cada certificado e exame. [S5-K]
+  const showPeople =
+    certificates.some((c) => c.userId !== user?.id) || exams.some((e) => e.userId !== user?.id);
 
   useEffect(() => {
     let cancelled = false;
@@ -112,21 +120,39 @@ export function HealthPage() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Nome</th>
-                  <th>Status</th>
+                  {showPeople && <th>Pessoa</th>}
+                  <th>Certificado</th>
+                  <th>Situação</th>
                   <th>Validade</th>
+                  <th aria-label="Arquivo" />
                 </tr>
               </thead>
               <tbody>
                 {certificates.map((c) => (
                   <tr key={c.id}>
+                    {showPeople && <td>{c.user?.name ?? "—"}</td>}
                     <td>
                       <strong>{c.name}</strong>
                     </td>
                     <td>
-                      <Chip>{c.status}</Chip>
+                      <Chip tone={c.status === "APPROVED" ? "success" : c.status === "REJECTED" ? "danger" : "warning"}>
+                        {CERTIFICATE_STATUS_LABEL[c.status] ?? c.status}
+                      </Chip>
                     </td>
                     <td className="muted">{formatDay(c.expiresAt)}</td>
+                    <td>
+                      {c.has_file ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => void openProtectedFile(`/api/worker-certificates/${c.id}/file`)}
+                        >
+                          Abrir
+                        </Button>
+                      ) : (
+                        <span className="muted">sem arquivo</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -142,6 +168,7 @@ export function HealthPage() {
             <table className="data-table">
               <thead>
                 <tr>
+                  {showPeople && <th>Pessoa</th>}
                   <th>Tipo</th>
                   <th>Realizado</th>
                   <th>Vencimento</th>
@@ -151,7 +178,8 @@ export function HealthPage() {
               <tbody>
                 {exams.map((e) => (
                   <tr key={e.id}>
-                    <td>{e.kind}</td>
+                    {showPeople && <td>{e.user?.name ?? "—"}</td>}
+                    <td>{EXAM_KIND_LABEL[e.kind] ?? e.kind}</td>
                     <td className="muted">{formatDay(e.performedAt)}</td>
                     <td className="muted">{formatDay(e.dueAt)}</td>
                     <td>

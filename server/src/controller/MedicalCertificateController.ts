@@ -9,6 +9,7 @@ import {
   buildPrivateStoragePath,
   writeEvidenceFile,
 } from "../helper/uploads";
+import { sendPrivateFile } from "../helper/send-private-file";
 import {
   CERTIFICATE_STATUSES,
   CERTIFICATE_STATUS_VALUES,
@@ -33,6 +34,13 @@ function isRh(req: AuthRequest): boolean {
   return Boolean(req.actor && canManageModule(req.actor.permission, "atestados"));
 }
 
+/** O caminho no disco é interno; o arquivo sai por GET /:id/file. [S5-B] */
+function publicCertificate<T extends { storagePath: string | null }>(certificate: T | null) {
+  if (!certificate) return certificate;
+  const { storagePath, ...rest } = certificate;
+  return { ...rest, has_file: Boolean(storagePath) };
+}
+
 class MedicalCertificateController {
   async list(req: Request, res: Response) {
     try {
@@ -53,7 +61,8 @@ class MedicalCertificateController {
           reviewedBy: { select: { id: true, name: true } },
         },
       });
-      res.json({ certificates: rows });
+      // O caminho no disco é interno; o arquivo sai por /:id/file. [S5-B]
+      res.json({ certificates: rows.map(publicCertificate) });
     } catch (err) {
       fail(res, err);
     }
@@ -114,7 +123,7 @@ class MedicalCertificateController {
         status: CERTIFICATE_STATUSES.PENDING,
       });
 
-      res.status(201).json({ certificate });
+      res.status(201).json({ certificate: publicCertificate(certificate) });
     } catch (err) {
       fail(res, err);
     }
@@ -191,7 +200,30 @@ class MedicalCertificateController {
         after: { status },
       });
 
-      res.json({ certificate });
+      res.json({ certificate: publicCertificate(certificate) });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
+  /**
+   * Arquivo do atestado, para o RH abrir antes de decidir [S5-B] e para quem
+   * enviou rever o que mandou. Mais ninguém: é dado de saúde.
+   */
+  async file(req: Request, res: Response) {
+    try {
+      const auth = req as AuthRequest;
+      const orgId = actorOrgId(auth);
+      const certificate = await prisma.medicalCertificate.findFirst({
+        where: { id: req.params.id, organizationId: orgId },
+        select: { userId: true, storagePath: true, fileName: true },
+      });
+      // Quem não pode ver recebe o mesmo 404 de quem não existe.
+      if (!certificate || (!isRh(auth) && certificate.userId !== actorUserId(auth))) {
+        res.status(404).json({ message: "Atestado não encontrado." });
+        return;
+      }
+      sendPrivateFile(res, certificate, "Este atestado foi enviado sem arquivo.");
     } catch (err) {
       fail(res, err);
     }
@@ -216,7 +248,7 @@ class MedicalCertificateController {
         { id: current.id },
         { readByWorkerAt: new Date() },
       );
-      res.json({ certificate });
+      res.json({ certificate: publicCertificate(certificate) });
     } catch (err) {
       fail(res, err);
     }
