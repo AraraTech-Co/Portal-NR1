@@ -9,6 +9,8 @@ import { ControlMeasure } from "../model/schema/ControlMeasure/ControlMeasure";
 import { Action } from "../model/schema/Action/Action";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
+import { notify } from "../helper/notify";
+import { formatCalendarDay } from "../helper/calendar-day";
 import { resolveLevel } from "../helper/risk-methodology";
 import type { AuthRequest } from "../types/auth";
 
@@ -780,6 +782,21 @@ class RiskController {
         dueDate: row.dueDate,
         assigneeId: row.assigneeId,
       });
+      // Quem vai executar precisa saber que a ação é dele. [S3-A]
+      if (row.assigneeId && row.assigneeId !== userId) {
+        await notify({
+          organizationId: orgId,
+          userId: row.assigneeId,
+          kind: "ACTION_ASSIGNED",
+          title: row.title,
+          body: row.dueDate
+            ? `Ação sua, com prazo até ${formatCalendarDay(row.dueDate)}.`
+            : "Ação sua no plano de ação.",
+          link: "/acoes",
+          entityType: "Action",
+          entityId: row.id,
+        });
+      }
       res.status(201).json({ action: row });
     } catch (err) {
       fail(res, err);

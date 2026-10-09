@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { fetchAnnouncements, type AnnouncementListItem } from "@/api/announcements";
 import { useAuth } from "@/auth/AuthContext";
 import { Chip } from "@/components/Chip";
 import { PageHeader } from "@/components/PageHeader";
@@ -34,6 +36,15 @@ const SHORTCUTS = [
 
 export function HomePage() {
   const { user } = useAuth();
+  // Aviso não lido tem de aparecer na cara, não esperar a pessoa procurar. [S4-G]
+  const [naoLidos, setNaoLidos] = useState<AnnouncementListItem[]>([]);
+
+  useEffect(() => {
+    fetchAnnouncements()
+      .then((rows) => setNaoLidos(rows.filter((a) => !a.read_at).slice(0, 4)))
+      .catch(() => setNaoLidos([]));
+  }, []);
+
   if (!user) return null;
 
   return (
@@ -59,6 +70,24 @@ export function HomePage() {
           </p>
         </div>
       </section>
+
+      {naoLidos.length > 0 && (
+        <section className="home-unread" aria-label="Avisos não lidos">
+          <h2>
+            {naoLidos.length === 1
+              ? "1 aviso que você ainda não leu"
+              : `${naoLidos.length} avisos que você ainda não leu`}
+          </h2>
+          <ul>
+            {naoLidos.map((a) => (
+              <li key={a.id}>
+                <Link to={`/mural?open=${a.id}`}>{a.title}</Link>
+                <span className="muted"> · {a.publishedBy.name}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="home-shortcuts" aria-label="Atalhos">
         {SHORTCUTS.map((item) => (

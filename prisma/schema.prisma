@@ -94,6 +94,7 @@ model User {
   redemptionsDecided RewardRedemption[]   @relation("RedemptionDecider")
   referrals         Referral[]            @relation("ReferralAuthor")
   onboarding        OnboardingProgress[]
+  notifications  Notification[]
 }
 
 /// MASTER = papel na *empresa* (Organization): acima de OWNER, controla todas as contas.
@@ -179,6 +180,7 @@ model Organization {
   rewards         Reward[]
   referrals       Referral[]
   onboardingSteps OnboardingStep[]
+  notifications   Notification[]
 }
 
 /// Vínculo pessoa <-> organização. Modelado N:N desde já (consultor multi-org),
@@ -1346,6 +1348,37 @@ model Announcement {
 
 /// Confirmação de leitura por pessoa — é o que prova comunicação de risco
 /// (NR-1 1.5.3.3 "c") e capacitação sobre assédio (Lei 14.457, art. 23, I).
+/// O que o portal avisa a uma pessoa. Nasce de um fato (ação atribuída,
+/// aviso publicado) e some da caixa quando ela lê. [S3-A] [S3-G] [S4-G]
+enum NotificationKind {
+  ACTION_ASSIGNED
+  ANNOUNCEMENT_PUBLISHED
+}
+
+model Notification {
+  id             String           @id @default(uuid())
+  organizationId String
+  /// Quem recebe.
+  userId         String
+  kind           NotificationKind
+  title          String
+  body           String?
+  /// Caminho no portal que resolve o aviso (ex.: /acoes).
+  link           String?
+  /// Entidade que originou, para não duplicar e para abrir direto.
+  entityType     String?
+  entityId       String?
+  readAt         DateTime?
+  createdAt      DateTime         @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@index([organizationId, createdAt])
+  @@unique([userId, entityType, entityId, kind])
+}
+
 model AnnouncementRead {
   announcementId String
   userId         String

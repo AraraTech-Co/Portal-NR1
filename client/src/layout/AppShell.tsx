@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Outlet } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
 import { isReadOnlyPermission } from "@/lib/module-access";
+import { NotificationBell } from "./NotificationBell";
 import { Sidebar } from "./Sidebar";
 import "./shell.css";
 
@@ -16,7 +17,7 @@ export function AppShell() {
         onCloseMobile={() => setMobileOpen(false)}
       />
       <div className="app-main">
-        <header className="app-topbar">
+        <header className="app-topbar has-bell">
           <button
             type="button"
             className="app-menu-btn"
@@ -26,6 +27,7 @@ export function AppShell() {
             ☰
           </button>
           <span className="app-topbar-brand font-display">Portal NR-1</span>
+          <NotificationBell />
         </header>
         <main className="app-content">
           {isReadOnlyPermission(user?.permission) && (
