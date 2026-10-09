@@ -4,12 +4,53 @@ import { Establishment } from "../model/schema/Establishment/Establishment";
 import { Sector } from "../model/schema/Sector/Sector";
 import { JobRole } from "../model/schema/JobRole/JobRole";
 import { Activity } from "../model/schema/Activity/Activity";
-import { actorOrgId } from "../helper/org-scope";
+import { actorOrgId, actorUserId } from "../helper/org-scope";
+import { writeAudit } from "../helper/audit";
+import { isValidCnpj, normalizeCnpj } from "../helper/cnpj";
 import type { AuthRequest } from "../types/auth";
 
 function fail(res: Response, err: unknown) {
   const e = err as { status?: number; message?: string };
   res.status(e.status || 500).json({ message: e.message || "Erro interno." });
+}
+
+function httpError(status: number, message: string) {
+  return Object.assign(new Error(message), { status });
+}
+
+/** CNPJ: vazio vira null; preenchido tem de ser válido e fica só com os dígitos. */
+function cnpjOrNull(raw: string | null | undefined): string | null {
+  if (raw === undefined || raw === null || raw.trim() === "") return null;
+  if (!isValidCnpj(raw)) throw httpError(400, "CNPJ inválido — confira os números.");
+  return normalizeCnpj(raw);
+}
+
+function textOrNull(raw: string | null | undefined): string | null {
+  return raw && raw.trim() !== "" ? raw.trim() : null;
+}
+
+/**
+ * Mudança na operação fica na trilha: o inventário depende dela, e a
+ * fiscalização pergunta quem mudou o quê. [S2-N]
+ */
+async function audit(
+  req: Request,
+  action: string,
+  entityType: string,
+  entityId: string,
+  before: unknown,
+  after: unknown,
+) {
+  const auth = req as AuthRequest;
+  await writeAudit({
+    organizationId: actorOrgId(auth),
+    actorId: actorUserId(auth),
+    action,
+    entityType,
+    entityId,
+    before,
+    after,
+  });
 }
 
 class WorkplaceController {
@@ -43,8 +84,8 @@ class WorkplaceController {
       const row = await new Establishment().create.new({
         organizationId: orgId,
         name: name.trim(),
-        taxId: tax_id ?? null,
-        address: address ?? null,
+        taxId: cnpjOrNull(tax_id),
+        address: textOrNull(address),
       });
       res.status(201).json({ establishment: row });
     } catch (err) {
@@ -69,14 +110,21 @@ class WorkplaceController {
         tax_id?: string | null;
         address?: string | null;
       };
+      if (name !== undefined && !name.trim()) {
+        res.status(400).json({ message: "O nome não pode ficar vazio." });
+        return;
+      }
       const row = await new Establishment().update.one(
         { id, organizationId: orgId },
         {
           ...(name !== undefined ? { name: name.trim() } : {}),
-          ...(tax_id !== undefined ? { taxId: tax_id } : {}),
-          ...(address !== undefined ? { address } : {}),
+          ...(tax_id !== undefined ? { taxId: cnpjOrNull(tax_id) } : {}),
+          ...(address !== undefined ? { address: textOrNull(address) } : {}),
         },
       );
+      await audit(req, "establishment.update", "Establishment", id,
+        { name: existing.name, taxId: existing.taxId, address: existing.address },
+        { name: row?.name, taxId: row?.taxId, address: row?.address });
       res.json({ establishment: row });
     } catch (err) {
       fail(res, err);
@@ -87,6 +135,15 @@ class WorkplaceController {
     try {
       const orgId = actorOrgId(req as AuthRequest);
       const id = req.params.id;
+      const sectors = await prisma.sector.count({
+        where: { organizationId: orgId, establishmentId: id, archivedAt: null },
+      });
+      if (sectors > 0) {
+        res.status(409).json({
+          message: `Este estabelecimento ainda tem ${sectors} setor(es) ativo(s). Arquive os setores antes.`,
+        });
+        return;
+      }
       const row = await new Establishment().update.one(
         { id, organizationId: orgId, archivedAt: null },
         { archivedAt: new Date() },
@@ -95,6 +152,7 @@ class WorkplaceController {
         res.status(404).json({ message: "Estabelecimento não encontrado." });
         return;
       }
+      await audit(req, "establishment.archive", "Establishment", id, null, { archivedAt: row.archivedAt });
       res.json({ establishment: row });
     } catch (err) {
       fail(res, err);
@@ -169,6 +227,10 @@ class WorkplaceController {
         return;
       }
       const body = req.body as Record<string, string | undefined>;
+      if (body.name !== undefined && !body.name.trim()) {
+        res.status(400).json({ message: "O nome não pode ficar vazio." });
+        return;
+      }
       const row = await new Sector().update.one(
         { id, organizationId: orgId },
         {
@@ -184,6 +246,9 @@ class WorkplaceController {
             : {}),
         },
       );
+      await audit(req, "sector.update", "Sector", id,
+        { name: existing.name, description: existing.description },
+        { name: row?.name, description: row?.description });
       res.json({ sector: row });
     } catch (err) {
       fail(res, err);
@@ -193,6 +258,15 @@ class WorkplaceController {
   async archiveSector(req: Request, res: Response) {
     try {
       const orgId = actorOrgId(req as AuthRequest);
+      const activities = await prisma.activity.count({
+        where: { organizationId: orgId, sectorId: req.params.id, archivedAt: null },
+      });
+      if (activities > 0) {
+        res.status(409).json({
+          message: `Este setor ainda tem ${activities} atividade(s) ativa(s). Arquive as atividades antes.`,
+        });
+        return;
+      }
       const row = await new Sector().update.one(
         { id: req.params.id, organizationId: orgId, archivedAt: null },
         { archivedAt: new Date() },
@@ -201,6 +275,7 @@ class WorkplaceController {
         res.status(404).json({ message: "Setor não encontrado." });
         return;
       }
+      await audit(req, "sector.archive", "Sector", row.id, null, { archivedAt: row.archivedAt });
       res.json({ sector: row });
     } catch (err) {
       fail(res, err);
@@ -273,6 +348,10 @@ class WorkplaceController {
         name?: string;
         description?: string | null;
       };
+      if (name !== undefined && !name.trim()) {
+        res.status(400).json({ message: "O nome não pode ficar vazio." });
+        return;
+      }
       const row = await new JobRole().update.one(
         { id: req.params.id, organizationId: orgId },
         {
@@ -280,6 +359,9 @@ class WorkplaceController {
           ...(description !== undefined ? { description } : {}),
         },
       );
+      await audit(req, "job_role.update", "JobRole", existing.id,
+        { name: existing.name, description: existing.description },
+        { name: row?.name, description: row?.description });
       res.json({ job_role: row });
     } catch (err) {
       fail(res, err);
@@ -297,6 +379,7 @@ class WorkplaceController {
         res.status(404).json({ message: "Função não encontrada." });
         return;
       }
+      await audit(req, "job_role.archive", "JobRole", row.id, null, { archivedAt: row.archivedAt });
       res.json({ job_role: row });
     } catch (err) {
       fail(res, err);
@@ -348,6 +431,11 @@ class WorkplaceController {
         });
         return;
       }
+      // É da descrição da atividade que sai o perigo. [S1-J]
+      if (!description?.trim()) {
+        res.status(400).json({ message: "Descreva a atividade: o que a pessoa faz, com o quê e onde." });
+        return;
+      }
       const sector = await new Sector().read.one({
         id: sector_id,
         organizationId: orgId,
@@ -363,7 +451,7 @@ class WorkplaceController {
         establishmentId: establishment_id,
         sectorId: sector_id,
         name: name.trim(),
-        description: description ?? null,
+        description: description.trim(),
       });
       if (job_role_ids?.length) {
         for (const jobRoleId of job_role_ids) {
@@ -401,13 +489,24 @@ class WorkplaceController {
         description?: string | null;
         job_role_ids?: string[];
       };
+      if (name !== undefined && !name.trim()) {
+        res.status(400).json({ message: "O nome não pode ficar vazio." });
+        return;
+      }
+      if (description !== undefined && !description?.trim()) {
+        res.status(400).json({ message: "Descreva a atividade: o que a pessoa faz, com o quê e onde." });
+        return;
+      }
       const row = await new Activity().update.one(
         { id: req.params.id, organizationId: orgId },
         {
           ...(name !== undefined ? { name: name.trim() } : {}),
-          ...(description !== undefined ? { description } : {}),
+          ...(description ? { description: description.trim() } : {}),
         },
       );
+      await audit(req, "activity.update", "Activity", existing.id,
+        { name: existing.name, description: existing.description },
+        { name: row?.name, description: row?.description, ...(job_role_ids ? { job_role_ids } : {}) });
       if (job_role_ids) {
         await prisma.activityJobRole.deleteMany({
           where: { activityId: req.params.id },
@@ -433,6 +532,15 @@ class WorkplaceController {
   async archiveActivity(req: Request, res: Response) {
     try {
       const orgId = actorOrgId(req as AuthRequest);
+      const hazards = await prisma.hazard.count({
+        where: { organizationId: orgId, activityId: req.params.id, archivedAt: null },
+      });
+      if (hazards > 0) {
+        res.status(409).json({
+          message: `Esta atividade tem ${hazards} perigo(s) no inventário. Arquive-os antes, para o inventário não perder a origem.`,
+        });
+        return;
+      }
       const row = await new Activity().update.one(
         { id: req.params.id, organizationId: orgId, archivedAt: null },
         { archivedAt: new Date() },
@@ -441,6 +549,7 @@ class WorkplaceController {
         res.status(404).json({ message: "Atividade não encontrada." });
         return;
       }
+      await audit(req, "activity.archive", "Activity", row.id, null, { archivedAt: row.archivedAt });
       res.json({ activity: row });
     } catch (err) {
       fail(res, err);

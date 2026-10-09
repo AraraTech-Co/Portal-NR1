@@ -1,9 +1,13 @@
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import {
+  archiveJobRole,
+  archiveSector,
   createActivity,
   createEstablishment,
   createJobRole,
   createSector,
+  updateJobRole,
+  updateSector,
   fetchActivities,
   fetchEstablishments,
   fetchJobRoles,
@@ -20,6 +24,7 @@ import { useModuleAccess } from "@/lib/module-access";
 import "@/components/form.css";
 import "./operation.css";
 import { LoadingState } from "@/components/LoadingState";
+import { ActivityCard, EstablishmentCard, NameActions } from "./OperationEditors";
 
 function Column({
   title,
@@ -206,12 +211,20 @@ export function OperationPage() {
     setActivityJobRoleIds([]);
   }, [sectorId]);
 
+  const selectedEstablishment = establishments.find((e) => e.id === establishmentId) ?? null;
+  const selectedSector = visibleSectors.find((s) => s.id === sectorId) ?? null;
+
   async function onCreateActivity(e: FormEvent) {
     e.preventDefault();
     if (!establishmentId || !sectorId) return;
     const trimmed = activityName.trim();
     if (trimmed.length < 2) {
       setActivityError("Informe ao menos 2 caracteres.");
+      return;
+    }
+    // É da descrição que sai o perigo. [S1-J]
+    if (!activityDescription.trim()) {
+      setActivityError("Descreva a atividade: o que a pessoa faz, com o quê e onde.");
       return;
     }
     setActivitySaving(true);
@@ -221,7 +234,7 @@ export function OperationPage() {
         establishmentId,
         sectorId,
         name: trimmed,
-        description: activityDescription.trim() || undefined,
+        description: activityDescription.trim(),
         jobRoleIds: activityJobRoleIds,
       });
       setActivityName("");
@@ -288,6 +301,14 @@ export function OperationPage() {
                 />
               ))}
             </div>
+            {selectedEstablishment && (
+              <EstablishmentCard
+                key={selectedEstablishment.id}
+                establishment={selectedEstablishment}
+                canEdit={canEdit}
+                onChanged={reload}
+              />
+            )}
             {canEdit && (
               <QuickAdd
                 label="Novo estabelecimento"
@@ -318,6 +339,22 @@ export function OperationPage() {
                     />
                   ))}
                 </div>
+                {selectedSector && (
+                  <NameActions
+                    key={selectedSector.id}
+                    label="o setor"
+                    name={selectedSector.name}
+                    canEdit={canEdit}
+                    onRename={async (name) => {
+                      await updateSector(selectedSector.id, { name });
+                      await reload();
+                    }}
+                    onArchive={async () => {
+                      await archiveSector(selectedSector.id);
+                      await reload();
+                    }}
+                  />
+                )}
                 {canEdit && (
                   <QuickAdd
                     label="Novo setor"
@@ -342,12 +379,22 @@ export function OperationPage() {
                     <p className="muted">Nenhuma função neste setor.</p>
                   )}
                   {visibleJobRoles.map((j) => (
-                    <PickerItem
-                      key={j.id}
-                      selected={false}
-                      title={j.name}
-                      onSelect={() => undefined}
-                    />
+                    <div key={j.id} className="op-job">
+                      <span className="op-picker-title">{j.name}</span>
+                      <NameActions
+                        label="a função"
+                        name={j.name}
+                        canEdit={canEdit}
+                        onRename={async (name) => {
+                          await updateJobRole(j.id, { name });
+                          await reload();
+                        }}
+                        onArchive={async () => {
+                          await archiveJobRole(j.id);
+                          await reload();
+                        }}
+                      />
+                    </div>
                   ))}
                 </div>
                 {canEdit && (
@@ -377,18 +424,13 @@ export function OperationPage() {
                     <p className="muted">Nenhuma atividade neste setor.</p>
                   )}
                   {visibleActivities.map((a) => (
-                    <div key={a.id} className="op-activity">
-                      <strong>{a.name}</strong>
-                      {a.description && (
-                        <p className="muted">{a.description}</p>
-                      )}
-                      {a.job_role_ids.length > 0 && (
-                        <p className="muted">
-                          {a.job_role_ids.length}{" "}
-                          {a.job_role_ids.length === 1 ? "função" : "funções"}
-                        </p>
-                      )}
-                    </div>
+                    <ActivityCard
+                      key={a.id}
+                      activity={a}
+                      jobRoles={visibleJobRoles}
+                      canEdit={canEdit}
+                      onChanged={reload}
+                    />
                   ))}
                 </div>
                 {canEdit && (
@@ -403,8 +445,9 @@ export function OperationPage() {
                       />
                     </label>
                     <label className="form-field">
-                      Como é feita (opcional)
+                      Como é feita
                       <textarea
+                        placeholder="O que a pessoa faz, com o quê e onde"
                         value={activityDescription}
                         onChange={(e) => setActivityDescription(e.target.value)}
                         disabled={activitySaving}
