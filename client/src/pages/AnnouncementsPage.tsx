@@ -244,7 +244,7 @@ export function AnnouncementsPage() {
         />
       )}
       {!loading && !error && rows.length > 0 && (
-        <div className="data-table-wrap">
+        <div className="data-table-wrap mural-table-wrap">
           <table className="data-table">
             <thead>
               <tr>

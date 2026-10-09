@@ -35,11 +35,41 @@
 
 .mural-expand-clip {
   overflow: hidden;
+  /* clip (e não hidden) para o sticky do painel se prender à tabela que rola */
+  overflow: clip;
   min-height: 0;
+}
+
+/*
+  No celular a tabela é mais larga que a tela e rola na horizontal. O painel
+  aberto ocupava a largura da TABELA, então o texto do aviso corria para fora
+  da tela e só aparecia arrastando para o lado. [S4-H] [S3-J]
+
+  A caixa da tabela vira contêiner de medida; o painel usa a largura VISÍVEL
+  dela (100cqw) e fica preso à esquerda enquanto a tabela rola.
+*/
+.mural-table-wrap {
+  container-type: inline-size;
 }
 
 .mural-expand-body {
   padding: 0 0.85rem 1rem;
+  position: sticky;
+  left: 0;
+  box-sizing: border-box;
+  width: 100cqw;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.mural-expand-body img,
+.mural-expand-body table,
+.mural-expand-body pre {
+  max-width: 100%;
+}
+
+.mural-expand-body pre {
+  overflow-x: auto;
 }
 
 .mural-expand-meta {
