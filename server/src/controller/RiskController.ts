@@ -8,12 +8,38 @@ import { RiskAssessment } from "../model/schema/RiskAssessment/RiskAssessment";
 import { ControlMeasure } from "../model/schema/ControlMeasure/ControlMeasure";
 import { Action } from "../model/schema/Action/Action";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
+import { writeAudit } from "../helper/audit";
 import { resolveLevel } from "../helper/risk-methodology";
 import type { AuthRequest } from "../types/auth";
 
 function fail(res: Response, err: unknown) {
   const e = err as { status?: number; message?: string };
   res.status(e.status || 500).json({ message: e.message || "Erro interno." });
+}
+
+/** Mudança no inventário fica na trilha, para o histórico do risco. [S2-N] */
+async function audit(
+  req: Request,
+  action: string,
+  entityType: string,
+  entityId: string,
+  before: unknown,
+  after: unknown,
+) {
+  const auth = req as AuthRequest;
+  await writeAudit({
+    organizationId: actorOrgId(auth),
+    actorId: actorUserId(auth),
+    action,
+    entityType,
+    entityId,
+    before,
+    after,
+  });
+}
+
+function textOrNull(raw: unknown): string | null {
+  return typeof raw === "string" && raw.trim() !== "" ? raw.trim() : null;
 }
 
 class RiskController {
@@ -85,9 +111,15 @@ class RiskController {
         exposureTime: (body.exposure_time as string) ?? null,
         exposureFrequency: (body.exposure_frequency as string) ?? null,
         exposureIntensity: (body.exposure_intensity as string) ?? null,
+        monitoringData: textOrNull(body.monitoring_data),
         category: (body.category as never) ?? "ACCIDENT",
         origin: (body.origin as never) ?? "ROUTINE_REVIEW",
         createdById: userId,
+      });
+      await audit(req, "hazard.create", "Hazard", row.id, null, {
+        description: row.description,
+        category: row.category,
+        activityId,
       });
       res.status(201).json({ hazard: row });
     } catch (err) {
@@ -108,6 +140,10 @@ class RiskController {
         return;
       }
       const body = req.body as Record<string, unknown>;
+      if (body.description !== undefined && !String(body.description).trim()) {
+        res.status(400).json({ message: "A descrição do perigo não pode ficar vazia." });
+        return;
+      }
       const row = await new Hazard().update.one(
         { id: req.params.id, organizationId: orgId },
         {
@@ -124,10 +160,26 @@ class RiskController {
           ...(body.exposed_workers_count !== undefined
             ? { exposedWorkersCount: body.exposed_workers_count }
             : {}),
+          ...(body.exposure_time !== undefined
+            ? { exposureTime: textOrNull(body.exposure_time) }
+            : {}),
+          ...(body.exposure_frequency !== undefined
+            ? { exposureFrequency: textOrNull(body.exposure_frequency) }
+            : {}),
+          ...(body.exposure_intensity !== undefined
+            ? { exposureIntensity: textOrNull(body.exposure_intensity) }
+            : {}),
+          ...(body.monitoring_data !== undefined
+            ? { monitoringData: textOrNull(body.monitoring_data) }
+            : {}),
+          ...(body.origin !== undefined ? { origin: body.origin as never } : {}),
           ...(body.status !== undefined ? { status: body.status } : {}),
           ...(body.category !== undefined ? { category: body.category } : {}),
         },
       );
+      await audit(req, "hazard.update", "Hazard", existing.id,
+        { description: existing.description, category: existing.category, exposedWorkersCount: existing.exposedWorkersCount },
+        { description: row?.description, category: row?.category, exposedWorkersCount: row?.exposedWorkersCount });
       res.json({ hazard: row });
     } catch (err) {
       fail(res, err);
@@ -203,6 +255,7 @@ class RiskController {
         hazardId: hazard_id,
         description: description.trim(),
       });
+      await audit(req, "risk.create", "Risk", row.id, null, { description: row.description });
       res.status(201).json({ risk: row });
     } catch (err) {
       fail(res, err);
@@ -222,6 +275,10 @@ class RiskController {
         return;
       }
       const { description } = req.body as { description?: string };
+      if (description !== undefined && !description.trim()) {
+        res.status(400).json({ message: "A descrição do risco não pode ficar vazia." });
+        return;
+      }
       const row = await new Risk().update.one(
         { id: req.params.id, organizationId: orgId },
         {
@@ -230,6 +287,9 @@ class RiskController {
             : {}),
         },
       );
+      await audit(req, "risk.update", "Risk", existing.id,
+        { description: existing.description },
+        { description: row?.description });
       res.json({ risk: row });
     } catch (err) {
       fail(res, err);

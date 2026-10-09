@@ -24,6 +24,7 @@ import { HealthPage } from "@/pages/HealthPage";
 import { HomePage } from "@/pages/HomePage";
 import { HrDocumentsPage } from "@/pages/HrDocumentsPage";
 import { IdeasPage } from "@/pages/IdeasPage";
+import { HazardFormPage } from "@/pages/HazardFormPage";
 import { InventoryPage } from "@/pages/InventoryPage";
 import { LeavesPage } from "@/pages/LeavesPage";
 import { LoginPage } from "@/pages/LoginPage";
@@ -94,6 +95,7 @@ function AppRoutes() {
               <Route path="operacao" element={<OperationPage />} />
               <Route path="aep" element={<AepPage />} />
               <Route path="inventario" element={<InventoryPage />} />
+              <Route path="inventario/registrar" element={<HazardFormPage />} />
               <Route path="acoes" element={<ActionsPage />} />
               <Route path="ocorrencias" element={<OccurrencesPage />} />
               <Route path="ocorrencias/:id" element={<OccurrenceDetailPage />} />
