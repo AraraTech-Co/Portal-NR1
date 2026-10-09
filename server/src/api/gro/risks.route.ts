@@ -27,6 +27,9 @@ router.delete("/api/risks/:id", write, (req, res) =>
   risk.archiveRisk(req, res),
 );
 
+router.get("/api/risks/:id/historico", read, (req, res) =>
+  risk.riskHistory(req, res),
+);
 router.get("/api/assessments", read, (req, res) =>
   risk.listAssessments(req, res),
 );
