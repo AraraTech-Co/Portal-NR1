@@ -63,6 +63,14 @@ export const REPORT_CATEGORY_LABEL: Record<string, string> = {
   OTHER: "Outro",
 };
 
+export const REPORT_STATUS_LABEL: Record<string, string> = {
+  RECEIVED: "Recebido",
+  IN_ANALYSIS: "Em análise",
+  AWAITING_INFO: "Aguardando o denunciante",
+  RESOLVED: "Resolvido",
+  ARCHIVED: "Arquivado",
+};
+
 export const ANNOUNCEMENT_KIND_LABEL: Record<string, string> = {
   NOTICE: "Aviso",
   CAMPAIGN: "Campanha",

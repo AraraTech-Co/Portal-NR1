@@ -353,6 +353,17 @@ class EthicsController {
           _count: { select: { messages: true } },
         },
       });
+      // Mensagens do denunciante que o comitê ainda não abriu. [S5-L]
+      const unread = await prisma.ethicsReportMessage.groupBy({
+        by: ["reportId"],
+        where: {
+          reportId: { in: rows.map((r) => r.id) },
+          side: REPORT_AUTHOR_SIDES.REPORTER,
+          readByCommitteeAt: null,
+        },
+        _count: { _all: true },
+      });
+      const unreadBy = new Map(unread.map((u) => [u.reportId, u._count._all]));
       // Nunca devolver accessCodeHash nem reporter em listagens anônimas.
       res.json({
         reports: rows.map((r) => ({
@@ -371,6 +382,7 @@ class EthicsController {
           createdAt: r.createdAt,
           updatedAt: r.updatedAt,
           _count: r._count,
+          unread_from_reporter: unreadBy.get(r.id) ?? 0,
         })),
       });
     } catch (err) {

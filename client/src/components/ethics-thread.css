@@ -1,0 +1,45 @@
+.ethics-thread {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.ethics-msg {
+  max-width: min(36rem, 92%);
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  justify-self: start;
+}
+
+.ethics-msg.is-mine {
+  justify-self: end;
+  background: var(--sem-info);
+  border-color: var(--sem-info-bd);
+}
+
+.ethics-msg-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.25rem 0.75rem;
+  font-size: 0.78rem;
+  color: var(--muted-foreground);
+}
+
+.ethics-msg-head strong {
+  color: var(--foreground);
+}
+
+.ethics-msg p {
+  margin: 0.3rem 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ethics-unread {
+  margin-left: 0.4rem;
+}

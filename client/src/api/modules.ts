@@ -250,6 +250,7 @@ export const fetchEthicsReports = () =>
       createdAt: string;
       establishment: { name: string } | null;
       _count: { messages: number };
+      unread_from_reporter: number;
     }>;
   }>("/api/ethics-reports").then((d) => d.reports);
 

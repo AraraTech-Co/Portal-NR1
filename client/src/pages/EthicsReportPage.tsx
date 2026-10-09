@@ -3,12 +3,14 @@ import { Link } from "react-router-dom";
 import {
   createEthicsReport,
   fetchEthicsMeta,
+  sendReporterMessage,
   trackEthicsReport,
 } from "@/api/ethics";
+import { EthicsThread } from "@/components/EthicsThread";
 import { useAuth } from "@/auth/AuthContext";
 import { Button } from "@/components/Button";
 import { PageHeader } from "@/components/PageHeader";
-import { REPORT_CATEGORY_LABEL } from "@/lib/labels";
+import { REPORT_CATEGORY_LABEL, REPORT_STATUS_LABEL } from "@/lib/labels";
 import "@/components/form.css";
 
 type Mode = "new" | "track";
@@ -38,8 +40,12 @@ export function EthicsReportPage() {
     category: string;
     description: string;
     isAnonymous: boolean;
+    resolutionNote: string | null;
     messages: Array<{ id: string; side: string; body: string; createdAt: string }>;
   } | null>(null);
+  const [answer, setAnswer] = useState("");
+  const [answering, setAnswering] = useState(false);
+  const [answerError, setAnswerError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchEthicsMeta()
@@ -102,6 +108,24 @@ export function EthicsReportPage() {
       setError(err instanceof Error ? err.message : "Não encontrado");
     } finally {
       setSaving(false);
+    }
+  }
+
+  /** Quem denunciou responde ao comitê pelo protocolo e código. [S5-P] */
+  async function onAnswer(e: FormEvent) {
+    e.preventDefault();
+    if (!answer.trim()) return;
+    setAnswering(true);
+    setAnswerError(null);
+    try {
+      await sendReporterMessage({ protocol: trackProtocol, access_code: trackCode, body: answer.trim() });
+      setAnswer("");
+      const data = await trackEthicsReport({ protocol: trackProtocol, access_code: trackCode });
+      setTracked(data.report);
+    } catch (err) {
+      setAnswerError(err instanceof Error ? err.message : "Falha ao enviar");
+    } finally {
+      setAnswering(false);
     }
   }
 
@@ -329,22 +353,46 @@ export function EthicsReportPage() {
           </form>
 
           {tracked && (
-            <div style={{ marginTop: "1.25rem" }}>
-              <p>
+            <div style={{ marginTop: "1.25rem", display: "grid", gap: "0.85rem" }}>
+              <p style={{ margin: 0 }}>
                 <strong>{tracked.protocol}</strong> · {REPORT_CATEGORY_LABEL[tracked.category] ?? tracked.category} ·{" "}
-                {tracked.status}
+                {REPORT_STATUS_LABEL[tracked.status] ?? tracked.status}
                 {tracked.isAnonymous ? " · Anônimo" : " · Identificado"}
               </p>
-              <p className="muted">{tracked.description}</p>
-              {tracked.messages.length > 0 && (
-                <ul>
-                  {tracked.messages.map((m) => (
-                    <li key={m.id}>
-                      <strong>{m.side === "COMMITTEE" ? "Comitê" : "Relator"}:</strong>{" "}
-                      {m.body}
-                    </li>
-                  ))}
-                </ul>
+              <p className="muted" style={{ margin: 0, whiteSpace: "pre-wrap" }}>{tracked.description}</p>
+              {tracked.status === "AWAITING_INFO" && (
+                <p className="form-hint" style={{ margin: 0 }}>
+                  O comitê pediu mais informações. Responda abaixo.
+                </p>
+              )}
+              <EthicsThread messages={tracked.messages} viewer="REPORTER" />
+              {tracked.status === "RESOLVED" || tracked.status === "ARCHIVED" ? (
+                <p className="muted" style={{ margin: 0 }}>
+                  <strong>Relato encerrado.</strong>
+                  {tracked.resolutionNote ? ` ${tracked.resolutionNote}` : ""}
+                </p>
+              ) : (
+                <form className="form-grid" onSubmit={onAnswer}>
+                  <label className="form-field">
+                    Responder ao comitê
+                    <textarea
+                      value={answer}
+                      onChange={(e) => setAnswer(e.target.value)}
+                      placeholder={
+                        tracked.isAnonymous
+                          ? "Sua resposta continua anônima. Evite escrever algo que identifique você."
+                          : "Escreva sua resposta ao comitê."
+                      }
+                      required
+                    />
+                  </label>
+                  {answerError && <p className="form-error">{answerError}</p>}
+                  <div className="form-actions">
+                    <Button type="submit" disabled={answering || !answer.trim()}>
+                      {answering ? "Enviando…" : "Enviar resposta"}
+                    </Button>
+                  </div>
+                </form>
               )}
             </div>
           )}
