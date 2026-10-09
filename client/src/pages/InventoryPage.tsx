@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   fetchInventory,
   type InventoryItem,
@@ -11,6 +12,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { RISK_LEVEL_LABEL } from "@/lib/labels";
 import "./inventory.css";
 import { LoadingState } from "@/components/LoadingState";
+import { useModuleAccess } from "@/lib/module-access";
 import { RiskHistoryPanel } from "./RiskHistoryPanel";
 
 type RiskTone =
@@ -99,6 +101,7 @@ export function InventoryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [openRiskId, setOpenRiskId] = useState<string | null>(null);
+  const { canWrite } = useModuleAccess("inventario");
 
   useEffect(() => {
     fetchEstablishments()
@@ -138,11 +141,18 @@ export function InventoryPage() {
         title="Inventário de riscos"
         description="Perigos e riscos com nível da última avaliação validada."
         actions={
-          snapshot ? (
-            <Chip tone="info">
-              {new Date(snapshot.generated_at).toLocaleString("pt-BR")}
-            </Chip>
-          ) : undefined
+          <>
+            {canWrite && (
+              <Link to="/inventario/registrar" className="inventory-add">
+                Registrar perigo
+              </Link>
+            )}
+            {snapshot && (
+              <Chip tone="info">
+                {new Date(snapshot.generated_at).toLocaleString("pt-BR")}
+              </Chip>
+            )}
+          </>
         }
       />
 
@@ -171,7 +181,14 @@ export function InventoryPage() {
       {!loading && !error && rows.length === 0 && (
         <EmptyState
           title="Nenhum perigo cadastrado"
-          description="Quando houver perigos e riscos na operação, eles aparecem aqui."
+          description="Comece registrando um perigo a partir de uma atividade da operação."
+          action={
+            canWrite ? (
+              <Link to="/inventario/registrar" className="inventory-add">
+                Registrar perigo
+              </Link>
+            ) : undefined
+          }
         />
       )}
 

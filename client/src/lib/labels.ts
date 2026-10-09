@@ -31,6 +31,15 @@ export const HAZARD_CATEGORY_LABEL: Record<string, string> = {
   ACCIDENT: "Acidente",
 };
 
+export const HAZARD_ORIGIN_LABEL: Record<string, string> = {
+  INSPECTION: "Inspeção",
+  WORKER_REPORT: "Relato de trabalhador",
+  INCIDENT: "Ocorrência",
+  ROUTINE_REVIEW: "Revisão de rotina",
+  AI_SUGGESTION: "Sugestão automática",
+  OTHER: "Outra",
+};
+
 export const CONTROL_TYPE_LABEL: Record<string, string> = {
   ELIMINATION: "Eliminação",
   SUBSTITUTION: "Substituição",
