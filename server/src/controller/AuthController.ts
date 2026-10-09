@@ -126,6 +126,24 @@ class AuthController {
 
     const access = await resolveAccountAccess(user.id, chosen.id);
     if (!access) {
+      const ended = await prisma.membership.findFirst({
+        where: {
+          userId: user.id,
+          organizationId: chosen.organization.id,
+          accessExpiresAt: { lte: new Date() },
+        },
+        select: { accessExpiresAt: true },
+      });
+      if (ended?.accessExpiresAt) {
+        const day = ended.accessExpiresAt.toLocaleDateString("pt-BR", {
+          timeZone: "America/Sao_Paulo",
+        });
+        res.status(403).json({
+          message: `Seu acesso terminou em ${day}. Fale com a empresa para renovar.`,
+          code: "ACCESS_ENDED",
+        });
+        return;
+      }
       res.status(403).json({ message: "Conta não permitida." });
       return;
     }

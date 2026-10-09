@@ -79,9 +79,11 @@ export function decideJoinRequest(
     role?: string;
     org_role?: string;
     note?: string;
+    /** Fim do acesso do fiscal (AAAA-MM-DD). Vazio → 30 dias. */
+    access_until?: string;
   },
 ) {
-  return request<{ ok: boolean; status: string }>(
+  return request<{ ok: boolean; status: string; access_expires_at?: string }>(
     `/api/join-requests/${id}/decide`,
     {
       method: "POST",

@@ -123,6 +123,14 @@ const USERS: Spec[] = [
   },
 ];
 
+/** O fiscal sempre entra com prazo; no teste, um ano a partir do seed. */
+function accessUntil(role: Role): Date | null {
+  if (role !== Role.FISCAL) return null;
+  const d = new Date();
+  d.setDate(d.getDate() + 365);
+  return d;
+}
+
 function accessCodeHash(plain: string): string {
   return createHash("sha256").update(plain).digest("hex");
 }
@@ -193,11 +201,12 @@ async function main() {
           organizationId: org.id,
         },
       },
-      update: { role: spec.orgRole },
+      update: { role: spec.orgRole, accessExpiresAt: accessUntil(spec.orgRole) },
       create: {
         userId: user.id,
         organizationId: org.id,
         role: spec.orgRole,
+        accessExpiresAt: accessUntil(spec.orgRole),
       },
     });
 

@@ -14,6 +14,7 @@ import {
   canDecideJoinRequests,
   canManageInviteLinks,
 } from "../helper/invite-access";
+import { resolveAccessUntil } from "../helper/access-period";
 import type { AuthRequest } from "../types/auth";
 
 function fail(res: Response, err: unknown) {
@@ -472,6 +473,8 @@ class AccountInviteController {
         role?: string;
         org_role?: string;
         note?: string;
+        /** Fim do acesso do fiscal (AAAA-MM-DD). Vazio → 30 dias. */
+        access_until?: string;
       };
       if (body.action !== "approve" && body.action !== "reject") {
         throw httpError(400, "action deve ser approve ou reject.");
@@ -542,6 +545,9 @@ class AccountInviteController {
         }
       }
 
+      const fiscalUntil =
+        orgRole === Role.FISCAL ? resolveAccessUntil(body.access_until) : null;
+
       await prisma.$transaction(async (tx) => {
         const existingUser = await tx.user.findFirst({
           where: { email: request.email },
@@ -597,16 +603,21 @@ class AccountInviteController {
             userId: user.id,
             organizationId: request.account.organizationId,
             role: orgRole,
+            // O fiscal entra com prazo; os demais, sem. [S7-A]
+            accessExpiresAt: fiscalUntil,
           },
         });
 
-        await tx.employeeProfile.create({
-          data: {
-            organizationId: request.account.organizationId,
-            userId: user.id,
-            registration: request.isExternal ? null : request.registration,
-          },
-        });
+        // Fiscal não é funcionário: não ganha ficha de colaborador.
+        if (orgRole !== Role.FISCAL) {
+          await tx.employeeProfile.create({
+            data: {
+              organizationId: request.account.organizationId,
+              userId: user.id,
+              registration: request.isExternal ? null : request.registration,
+            },
+          });
+        }
 
         await tx.accountJoinRequest.update({
           where: { id: request.id },
@@ -633,10 +644,17 @@ class AccountInviteController {
           accountId: request.accountId,
           role,
           orgRole,
+          ...(fiscalUntil ? { accessExpiresAt: fiscalUntil.toISOString() } : {}),
         },
       });
 
-      res.json({ ok: true, status: "APPROVED", role, org_role: orgRole });
+      res.json({
+        ok: true,
+        status: "APPROVED",
+        role,
+        org_role: orgRole,
+        ...(fiscalUntil ? { access_expires_at: fiscalUntil.toISOString() } : {}),
+      });
     } catch (err) {
       fail(res, err);
     }
