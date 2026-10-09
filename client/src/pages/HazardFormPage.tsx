@@ -22,6 +22,7 @@ import {
   type Sector,
 } from "@/api/operation";
 import { Button } from "@/components/Button";
+import { AssessRiskPanel } from "./AssessRiskPanel";
 import { Chip } from "@/components/Chip";
 import { LoadingState } from "@/components/LoadingState";
 import { PageHeader } from "@/components/PageHeader";
@@ -71,6 +72,7 @@ function RiskList({
 }) {
   const [risks, setRisks] = useState<RiskRow[] | null>(null);
   const [novo, setNovo] = useState("");
+  const [avaliando, setAvaliando] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -146,15 +148,35 @@ function RiskList({
                 ) : (
                   <Chip tone="warning">Sem avaliação</Chip>
                 )}
-                {canEdit && (
-                  <span className="hz-risk-actions">
-                    <Button type="button" variant="ghost" onClick={() => void onRename(r)}>
-                      Renomear
-                    </Button>
-                    <Button type="button" variant="ghost" onClick={() => void onArchive(r)}>
-                      Arquivar
-                    </Button>
-                  </span>
+                <span className="hz-risk-actions">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    aria-expanded={avaliando === r.id}
+                    onClick={() => setAvaliando(avaliando === r.id ? null : r.id)}
+                  >
+                    {avaliando === r.id ? "Fechar" : level ? "Reavaliar" : "Avaliar"}
+                  </Button>
+                  {canEdit && (
+                    <>
+                      <Button type="button" variant="ghost" onClick={() => void onRename(r)}>
+                        Renomear
+                      </Button>
+                      <Button type="button" variant="ghost" onClick={() => void onArchive(r)}>
+                        Arquivar
+                      </Button>
+                    </>
+                  )}
+                </span>
+                {avaliando === r.id && (
+                  <AssessRiskPanel
+                    riskId={r.id}
+                    canWrite={canEdit}
+                    onChanged={async () => {
+                      await reload();
+                      await onChanged();
+                    }}
+                  />
                 )}
               </li>
             );

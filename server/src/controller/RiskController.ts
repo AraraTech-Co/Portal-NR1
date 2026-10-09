@@ -523,6 +523,11 @@ class RiskController {
         status: AssessmentStatus.DRAFT,
         assessorId: userId,
       });
+      await audit(req, "assessment.create", "Risk", risk_id, null, {
+        severity,
+        probability,
+        level: resultingLevel,
+      });
       res.status(201).json({ assessment: row });
     } catch (err) {
       fail(res, err);
@@ -603,6 +608,11 @@ class RiskController {
         return validated;
       });
 
+      await audit(req, "assessment.validate", "Risk", result.riskId, null, {
+        level: result.resultingLevel,
+        severity: result.severity,
+        probability: result.probability,
+      });
       res.json({ assessment: result });
     } catch (err) {
       fail(res, err);

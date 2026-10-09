@@ -1,0 +1,47 @@
+/* Avaliar o risco: o nível sai da matriz, nunca é digitado. [S2-A] */
+.assess {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--muted);
+}
+
+.assess-current,
+.assess-preview {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.875rem;
+}
+
+.assess-method {
+  margin: 0;
+  font-size: 0.78rem;
+}
+
+.assess-draft {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--sem-warning-bd);
+  border-radius: var(--radius);
+  background: var(--sem-warning);
+  color: var(--sem-warning-fg);
+}
+
+.assess-draft p {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.875rem;
+}
+
+.assess-draft .btn {
+  justify-self: start;
+}
