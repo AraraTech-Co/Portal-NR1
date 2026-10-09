@@ -59,3 +59,16 @@ export function writeEvidenceFile(absolutePath: string, data: Buffer): void {
   fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
   fs.writeFileSync(absolutePath, data);
 }
+
+/**
+ * Caminho absoluto de um arquivo do storage privado. Recusa o que escapar de
+ * UPLOADS_DIR — o storagePath vem do banco, mas não confiamos nele às cegas.
+ */
+export function resolveStoragePath(storagePath: string): string {
+  const root = path.resolve(uploadsRoot());
+  const abs = path.resolve(root, storagePath);
+  if (!abs.startsWith(root + path.sep) && abs !== root) {
+    throw Object.assign(new Error("Caminho inválido."), { status: 400 });
+  }
+  return abs;
+}

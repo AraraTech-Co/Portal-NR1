@@ -9,9 +9,11 @@ import prisma from "../model/prisma";
 import { Action } from "../model/schema/Action/Action";
 import { Evidence } from "../model/schema/Evidence/Evidence";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
+import fs from "fs";
 import {
   assertSize,
   buildEvidenceStoragePath,
+  resolveStoragePath,
   writeEvidenceFile,
 } from "../helper/uploads";
 import type { AuthRequest } from "../types/auth";
@@ -31,19 +33,69 @@ class ActionEvidenceController {
     try {
       const orgId = actorOrgId(req as AuthRequest);
       const actionId = req.query.action_id as string | undefined;
-      const where: Record<string, unknown> = { organizationId: orgId };
-      if (actionId) where.actionId = actionId;
-      const rows = await new Evidence().read.all(
-        where,
-        {},
-        { uploadedAt: "desc" },
-      );
-      res.json({
-        evidences: rows.map((e) => ({
-          ...e,
-          // nunca expor caminho absoluto; storagePath é interno
-        })),
+      const rows = await prisma.evidence.findMany({
+        where: { organizationId: orgId, ...(actionId ? { actionId } : {}) },
+        orderBy: { uploadedAt: "desc" },
+        // storagePath é interno e nunca sai do servidor; o arquivo vem por
+        // GET /api/evidences/:id/file.
+        select: {
+          id: true,
+          type: true,
+          fileName: true,
+          mimeType: true,
+          sizeBytes: true,
+          description: true,
+          eventDate: true,
+          uploadedAt: true,
+          validationStatus: true,
+          reviewedAt: true,
+          actionId: true,
+          uploadedBy: { select: { id: true, name: true } },
+          reviewedBy: { select: { id: true, name: true } },
+        },
       });
+      res.json({ evidences: rows });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
+  /**
+   * Conteúdo da evidência de uma ação, para quem vai validar VER a prova
+   * antes de decidir. [S3-L]
+   *
+   * Serve inline (a foto aparece na tela) com o tipo gravado no envio, que só
+   * aceita jpg/png/webp/pdf/mp4. Só evidência de AÇÃO: as de ocorrência,
+   * AEP, simulado e participação seguem a permissão do módulo delas.
+   */
+  async evidenceFile(req: Request, res: Response) {
+    try {
+      const orgId = actorOrgId(req as AuthRequest);
+      const evidence = await prisma.evidence.findFirst({
+        where: {
+          id: req.params.id,
+          organizationId: orgId,
+          actionId: { not: null },
+        },
+        select: { storagePath: true, fileName: true, mimeType: true, sizeBytes: true },
+      });
+      if (!evidence) {
+        res.status(404).json({ message: "Evidência não encontrada." });
+        return;
+      }
+      const abs = resolveStoragePath(evidence.storagePath);
+      if (evidence.sizeBytes === 0 || !fs.existsSync(abs)) {
+        res.status(404).json({ message: "Esta evidência foi registrada sem arquivo." });
+        return;
+      }
+      res.setHeader("Content-Type", evidence.mimeType);
+      res.setHeader(
+        "Content-Disposition",
+        `inline; filename*=UTF-8''${encodeURIComponent(evidence.fileName)}`,
+      );
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.setHeader("Cache-Control", "private, no-store");
+      fs.createReadStream(abs).on("error", (err) => fail(res, err)).pipe(res);
     } catch (err) {
       fail(res, err);
     }
@@ -131,7 +183,8 @@ class ActionEvidenceController {
         );
       }
 
-      res.status(201).json({ evidence: row });
+      const { storagePath: _interno, ...evidence } = row;
+      res.status(201).json({ evidence });
     } catch (err) {
       fail(res, err);
     }

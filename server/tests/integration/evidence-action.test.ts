@@ -69,7 +69,13 @@ describe("Evidence + Action workflow", () => {
         content_base64: Buffer.from("fake-image").toString("base64"),
       });
     expect(ev.status).toBe(201);
-    expect(ev.body.evidence.storagePath).toContain("evidence/");
+    // O caminho no disco é interno; o arquivo sai por /api/evidences/:id/file. [S3-L]
+    expect(ev.body.evidence.storagePath).toBeUndefined();
+    const file = await request(app)
+      .get(`/api/evidences/${ev.body.evidence.id}/file`)
+      .set("Authorization", `Bearer ${masterToken}`);
+    expect(file.status).toBe(200);
+    expect(file.headers["content-type"]).toBe("image/jpeg");
 
     const done = await request(app)
       .post(`/api/actions/${actionId}/complete`)
