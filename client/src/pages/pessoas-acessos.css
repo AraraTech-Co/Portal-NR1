@@ -1,0 +1,84 @@
+.people-table-wrap {
+  container-type: inline-size;
+}
+
+.people-table-wrap tr.is-open {
+  background: color-mix(in oklch, var(--secondary) 35%, var(--card));
+}
+
+.people-expand > td {
+  padding: 0 !important;
+}
+
+/* No celular a tabela rola; o painel fica na largura visível, como no mural. */
+.people-panel {
+  position: sticky;
+  left: 0;
+  box-sizing: border-box;
+  width: 100cqw;
+  max-width: 100%;
+  padding: 0.75rem 0.85rem 1rem;
+}
+
+.people-access-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 1rem 1.5rem;
+}
+
+.people-access-groups h4 {
+  margin: 0 0 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+}
+
+.people-access-groups ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.people-access-groups li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.people-reset {
+  display: grid;
+  gap: 0.5rem;
+  border-left: 3px solid var(--sem-warning-bd);
+  background: var(--sem-warning);
+}
+
+.people-reset p {
+  margin: 0;
+}
+
+.people-reset-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.people-reset code {
+  font-size: 1.05rem;
+  letter-spacing: 0.04em;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  user-select: all;
+}
+
+.people-table-wrap .form-actions .btn {
+  white-space: nowrap;
+}
