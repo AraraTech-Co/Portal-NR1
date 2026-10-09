@@ -82,3 +82,13 @@
 .people-table-wrap .form-actions .btn {
   white-space: nowrap;
 }
+
+.people-edit {
+  display: grid;
+  gap: 0.6rem;
+  max-width: 48rem;
+}
+
+.people-edit p {
+  margin: 0;
+}

@@ -1,13 +1,19 @@
 import { randomInt } from "crypto";
 import bcrypt from "bcryptjs";
+import { AccountRole, Role } from "@prisma/client";
 import { Request, Response } from "express";
 import prisma from "../model/prisma";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
 import { effectivePermission } from "../helper/auth";
-import { canAssignOrgRole } from "../helper/invite-access";
+import {
+  assignableAccountRoles,
+  assignableOrgRoles,
+  canAssignAccountRole,
+  canAssignOrgRole,
+} from "../helper/invite-access";
 import { modulesForRole } from "../helper/module-access";
-import { accessEnded } from "../helper/access-period";
+import { accessEnded, resolveAccessUntil } from "../helper/access-period";
 import type { AuthRequest } from "../types/auth";
 
 function fail(res: Response, err: unknown) {
@@ -81,11 +87,128 @@ class PeopleAccessController {
             job_role: profile?.jobRole?.name ?? null,
             registration: profile?.registration ?? null,
             can_reset_password: m.user.id !== actor.userId && canAssignOrgRole(actor, m.role),
+            can_change_role: m.user.id !== actor.userId && canAssignOrgRole(actor, m.role),
           };
         })
         .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 
-      res.json({ people });
+      res.json({
+        people,
+        assignable: {
+          account_roles: assignableAccountRoles(actor),
+          org_roles: assignableOrgRoles(actor),
+        },
+      });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
+  /**
+   * Muda o papel de quem já está na organização. [S1-O]
+   *
+   * Mesmas regras de quem aprova a entrada: só quem cuida de Conta e
+   * usuários, só de quem está abaixo e só para papéis abaixo do seu. O papel
+   * na conta vem junto porque ele manda no papel efetivo (ADMIN da conta vale
+   * como ADM loja, qualquer que seja o papel na empresa). Vale na hora: a
+   * permissão é lida do banco a cada requisição.
+   */
+  async changeRole(req: Request, res: Response) {
+    try {
+      const auth = req as AuthRequest;
+      const actor = auth.actor!;
+      const orgId = actorOrgId(auth);
+      const targetId = req.params.userId;
+      const body = req.body as { org_role?: string; account_role?: string; access_until?: string };
+
+      if (targetId === actorUserId(auth)) {
+        res.status(400).json({ message: "Você não pode mudar o seu próprio papel." });
+        return;
+      }
+      const membership = await prisma.membership.findFirst({
+        where: { organizationId: orgId, userId: targetId },
+        select: { id: true, role: true, accessExpiresAt: true },
+      });
+      if (!membership) {
+        res.status(404).json({ message: "Pessoa não encontrada nesta organização." });
+        return;
+      }
+      if (!canAssignOrgRole(actor, membership.role)) {
+        res.status(403).json({ message: "Você só pode mudar o papel de quem está abaixo do seu." });
+        return;
+      }
+
+      const orgRole = body.org_role as Role | undefined;
+      if (!orgRole || !Object.values(Role).includes(orgRole)) {
+        res.status(400).json({ message: "Informe o papel na empresa (org_role)." });
+        return;
+      }
+      if (!canAssignOrgRole(actor, orgRole)) {
+        res.status(403).json({ message: "Você só pode dar papéis abaixo do seu." });
+        return;
+      }
+
+      const link = await prisma.accountMembership.findFirst({
+        where: { accountId: actor.accountId, userId: targetId },
+        select: { id: true, role: true },
+      });
+      let accountRole = link?.role ?? null;
+      if (body.account_role !== undefined) {
+        const wanted = body.account_role as AccountRole;
+        if (!Object.values(AccountRole).includes(wanted)) {
+          res.status(400).json({ message: "Papel na conta inválido." });
+          return;
+        }
+        if (!link) {
+          res.status(400).json({ message: "Esta pessoa não está nesta conta." });
+          return;
+        }
+        if (wanted !== link.role && (!canAssignAccountRole(actor, wanted) || !canAssignAccountRole(actor, link.role))) {
+          res.status(403).json({ message: "Você só pode dar papéis de conta abaixo do seu." });
+          return;
+        }
+        accountRole = wanted;
+      }
+
+      // Fiscal sempre com prazo; quem deixa de ser fiscal perde o prazo. [S7-A]
+      const accessExpiresAt =
+        orgRole === Role.FISCAL
+          ? membership.role === Role.FISCAL && body.access_until === undefined
+            ? membership.accessExpiresAt
+            : resolveAccessUntil(body.access_until)
+          : null;
+
+      await prisma.$transaction([
+        prisma.membership.update({
+          where: { id: membership.id },
+          data: { role: orgRole, accessExpiresAt },
+        }),
+        ...(link && accountRole && accountRole !== link.role
+          ? [prisma.accountMembership.update({ where: { id: link.id }, data: { role: accountRole } })]
+          : []),
+      ]);
+
+      await writeAudit({
+        organizationId: orgId,
+        actorId: actor.userId,
+        action: "membership.role_changed",
+        entityType: "User",
+        entityId: targetId,
+        before: { orgRole: membership.role, accountRole: link?.role ?? null },
+        after: { orgRole, accountRole, accessExpiresAt },
+      });
+
+      const permission = effectivePermission(orgRole, accountRole);
+      res.json({
+        person: {
+          id: targetId,
+          org_role: orgRole,
+          account_role: accountRole,
+          permission,
+          modules: modulesForRole(permission),
+          access_expires_at: accessExpiresAt,
+        },
+      });
     } catch (err) {
       fail(res, err);
     }
