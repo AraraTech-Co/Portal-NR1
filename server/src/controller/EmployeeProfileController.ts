@@ -5,9 +5,22 @@ import { EmployeeProfile } from "../model/schema/EmployeeProfile/EmployeeProfile
 import { JobRole } from "../model/schema/JobRole/JobRole";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
-import { normalizeTaxIdDigits } from "../constants";
+import { isValidCpf, normalizeCpf } from "../helper/cpf";
 import { canWriteModule } from "../helper/module-access";
 import type { AuthRequest } from "../types/auth";
+
+/**
+ * CPF da ficha: vazio é aceito (fica pendente); preenchido, tem de ser CPF de
+ * verdade — 11 dígitos com os verificadores batendo. CNPJ não é CPF. [S5-N]
+ */
+function cpfDoColaborador(raw: unknown): string | null {
+  if (raw === undefined || raw === null || String(raw).trim() === "") return null;
+  const cpf = normalizeCpf(String(raw));
+  if (!isValidCpf(cpf)) {
+    throw Object.assign(new Error("CPF inválido — confira os números."), { status: 400 });
+  }
+  return cpf;
+}
 
 function fail(res: Response, err: unknown) {
   if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
@@ -163,7 +176,7 @@ class EmployeeProfileController {
         }
       }
 
-      const taxId = normalizeTaxIdDigits(tax_id);
+      const taxId = cpfDoColaborador(tax_id);
 
       const profile = await new EmployeeProfile().create.new({
         organizationId: orgId,
@@ -240,7 +253,7 @@ class EmployeeProfileController {
 
       let taxId: string | null | undefined;
       if (body.tax_id !== undefined) {
-        taxId = normalizeTaxIdDigits(body.tax_id as string | null);
+        taxId = cpfDoColaborador(body.tax_id);
       }
 
       const profile = await new EmployeeProfile().update.one(
