@@ -13,6 +13,7 @@ import { ClimatePage } from "@/pages/ClimatePage";
 import { ContractorsPage } from "@/pages/ContractorsPage";
 import { ConvitePage } from "@/pages/ConvitePage";
 import { DocumentsPage } from "@/pages/DocumentsPage";
+import { DocumentViewPage } from "@/pages/DocumentViewPage";
 import { EmergenciesPage } from "@/pages/EmergenciesPage";
 import { EmployeesPage } from "@/pages/EmployeesPage";
 import { EthicsPage } from "@/pages/EthicsPage";
@@ -97,6 +98,7 @@ function AppRoutes() {
               <Route path="ocorrencias/:id" element={<OccurrenceDetailPage />} />
               <Route path="emergencias" element={<EmergenciesPage />} />
               <Route path="documentos" element={<DocumentsPage />} />
+              <Route path="documentos/:id" element={<DocumentViewPage />} />
               <Route path="terceiros" element={<ContractorsPage />} />
               <Route path="colaboradores" element={<EmployeesPage />} />
               <Route path="documentos-rh" element={<HrDocumentsPage />} />

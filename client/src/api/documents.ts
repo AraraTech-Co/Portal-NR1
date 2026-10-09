@@ -54,3 +54,80 @@ export async function issuePgrDocument(input: {
     }),
   });
 }
+
+export type InventoryContent = {
+  generated_at: string;
+  items: {
+    hazard_id: string;
+    description: string;
+    source: string | null;
+    consequences: string | null;
+    exposed_group: string | null;
+    exposed_workers_count: number | null;
+    exposure_time: string | null;
+    exposure_frequency: string | null;
+    exposure_intensity: string | null;
+    monitoring_data: string | null;
+    category: string;
+    activity: string;
+    sector: string;
+    establishment: string;
+    risks: {
+      risk_id: string;
+      description: string;
+      needs_reassessment: boolean;
+      level: string | null;
+      severity: number | null;
+      probability: number | null;
+      controls: { id: string; type: string; description: string; status: string }[];
+    }[];
+  }[];
+};
+
+export type ActionPlanContent = {
+  generated_at: string;
+  actions: {
+    id: string;
+    title: string;
+    description: string | null;
+    status: string;
+    priority: string;
+    due_date: string | null;
+    effectiveness_criteria: string | null;
+    effectiveness_result: string | null;
+    evidence_count: number;
+  }[];
+};
+
+type ScaleItem = { value: number; label: string; description?: string };
+
+export type CriteriaContent = {
+  generated_at: string;
+  note?: string;
+  methodologies: {
+    id: string;
+    name: string;
+    is_default: boolean;
+    version: {
+      version: number;
+      severity_scale: ScaleItem[];
+      probability_scale: ScaleItem[];
+      matrix: Record<string, string>;
+      levels: { id: string; label: string; order: number }[];
+    } | null;
+  }[];
+};
+
+export type PgrDocumentFull = PgrDocument & {
+  responsibleRegistration: string | null;
+  content: unknown;
+  issuedBy: { id: string; name: string };
+  establishment: { id: string; name: string } | null;
+  organization: { name: string; taxId: string | null };
+};
+
+export async function fetchPgrDocument(id: string) {
+  return request<{ document: PgrDocumentFull }>(
+    `/api/pgr-documents/${encodeURIComponent(id)}`,
+  );
+}

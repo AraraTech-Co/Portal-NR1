@@ -14,6 +14,38 @@ export const ACTION_PRIORITY_LABEL: Record<string, string> = {
   CRITICAL: "Crítica",
 };
 
+export const RISK_LEVEL_LABEL: Record<string, string> = {
+  TRIVIAL: "Trivial",
+  TOLERABLE: "Tolerável",
+  MODERATE: "Moderado",
+  SUBSTANTIAL: "Substancial",
+  INTOLERABLE: "Intolerável",
+};
+
+export const HAZARD_CATEGORY_LABEL: Record<string, string> = {
+  PHYSICAL: "Físico",
+  CHEMICAL: "Químico",
+  BIOLOGICAL: "Biológico",
+  ERGONOMIC: "Ergonômico",
+  PSYCHOSOCIAL: "Psicossocial",
+  ACCIDENT: "Acidente",
+};
+
+export const CONTROL_TYPE_LABEL: Record<string, string> = {
+  ELIMINATION: "Eliminação",
+  SUBSTITUTION: "Substituição",
+  ENGINEERING: "Engenharia",
+  ADMINISTRATIVE: "Administrativa",
+  PPE: "EPI",
+};
+
+export const CONTROL_STATUS_LABEL: Record<string, string> = {
+  PLANNED: "Planejada",
+  IMPLEMENTED: "Implantada",
+  INEFFECTIVE: "Ineficaz",
+  REMOVED: "Removida",
+};
+
 export const OCCURRENCE_TYPE_LABEL: Record<string, string> = {
   ACCIDENT: "Acidente",
   OCCUPATIONAL_DISEASE: "Doença relacionada ao trabalho",

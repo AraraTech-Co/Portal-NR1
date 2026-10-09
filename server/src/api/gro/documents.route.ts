@@ -13,6 +13,9 @@ router.get("/api/inventory", read, (req, res) =>
 router.get("/api/pgr-documents", read, (req, res) =>
   documents.listDocuments(req, res),
 );
+router.get("/api/pgr-documents/:id", read, (req, res) =>
+  documents.getDocument(req, res),
+);
 router.post("/api/pgr-documents", write, (req, res) =>
   documents.issueDocument(req, res),
 );

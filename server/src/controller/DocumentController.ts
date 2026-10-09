@@ -190,6 +190,31 @@ class DocumentController {
   }
 
   /**
+   * Um documento emitido, inteiro, para abrir, imprimir e salvar em PDF:
+   * o retrato assinado mais quem emitiu, a empresa e o estabelecimento. [S2-C]
+   */
+  async getDocument(req: Request, res: Response) {
+    try {
+      const orgId = actorOrgId(req as AuthRequest);
+      const doc = await prisma.pgrDocument.findFirst({
+        where: { id: req.params.id, organizationId: orgId },
+        include: {
+          issuedBy: { select: { id: true, name: true } },
+          establishment: { select: { id: true, name: true } },
+          organization: { select: { name: true, taxId: true } },
+        },
+      });
+      if (!doc) {
+        res.status(404).json({ message: "Documento não encontrado." });
+        return;
+      }
+      res.json({ document: doc });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
+  /**
    * Emite documento PGR append-only (BR-22/23).
    * type: INVENTORY | ACTION_PLAN | CRITERIA
    */

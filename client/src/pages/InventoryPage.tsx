@@ -7,6 +7,7 @@ import {
 import { Chip } from "@/components/Chip";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
+import { RISK_LEVEL_LABEL } from "@/lib/labels";
 import "./inventory.css";
 import { LoadingState } from "@/components/LoadingState";
 
@@ -18,13 +19,7 @@ type RiskTone =
   | "risk-intolerable"
   | "neutral";
 
-const LEVEL_LABEL: Record<string, string> = {
-  TRIVIAL: "Trivial",
-  TOLERABLE: "Tolerável",
-  MODERATE: "Moderado",
-  SUBSTANTIAL: "Substancial",
-  INTOLERABLE: "Intolerável",
-};
+const LEVEL_LABEL = RISK_LEVEL_LABEL;
 
 function riskTone(level: string | null): RiskTone {
   if (!level) return "neutral";
