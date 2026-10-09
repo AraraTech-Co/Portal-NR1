@@ -122,3 +122,62 @@
   font-size: 0.85rem;
   font-weight: 500;
 }
+
+/* Editar e arquivar na própria coluna. [S2-G] [S1-H] */
+.op-card {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--muted);
+}
+
+.op-facts {
+  margin: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.op-facts dt {
+  font-size: 0.7rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+}
+
+.op-facts dd {
+  margin: 0.1rem 0 0;
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.op-edit {
+  background: var(--card);
+}
+
+.op-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.op-row-actions .btn,
+.op-name-actions .btn {
+  padding: 0.3rem 0.6rem;
+  font-size: 0.8rem;
+}
+
+.op-name-actions {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.op-job {
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}

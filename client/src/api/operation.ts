@@ -91,3 +91,53 @@ export async function createActivity(input: {
     }),
   });
 }
+
+export async function updateEstablishment(
+  id: string,
+  input: { name?: string; tax_id?: string | null; address?: string | null },
+) {
+  return request<{ establishment: Establishment }>(`/api/establishments/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function archiveEstablishment(id: string) {
+  return request(`/api/establishments/${id}`, { method: "DELETE" });
+}
+
+export async function updateSector(id: string, input: { name?: string }) {
+  return request<{ sector: Sector }>(`/api/sectors/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function archiveSector(id: string) {
+  return request(`/api/sectors/${id}`, { method: "DELETE" });
+}
+
+export async function updateJobRole(id: string, input: { name?: string }) {
+  return request<{ job_role: JobRole }>(`/api/job-roles/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function archiveJobRole(id: string) {
+  return request(`/api/job-roles/${id}`, { method: "DELETE" });
+}
+
+export async function updateActivity(
+  id: string,
+  input: { name?: string; description?: string; job_role_ids?: string[] },
+) {
+  return request<{ activity: Activity }>(`/api/activities/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function archiveActivity(id: string) {
+  return request(`/api/activities/${id}`, { method: "DELETE" });
+}
