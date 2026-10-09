@@ -9,3 +9,11 @@ export function moduleRead(moduleId: string) {
 export function moduleWrite(moduleId: string) {
   return verifyModule(moduleId, "write");
 }
+
+/**
+ * Administrar o módulo: decidir sobre o registro de outra pessoa.
+ * Escrita não basta — o colaborador escreve para enviar o PRÓPRIO atestado.
+ */
+export function moduleManage(moduleId: string) {
+  return verifyModule(moduleId, "manage");
+}

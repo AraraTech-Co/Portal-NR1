@@ -33,6 +33,30 @@ export function canWriteModule(roleKey: string, moduleId: ModuleId): boolean {
   return LEVEL_RANK[accessLevel(roleKey, moduleId)] >= LEVEL_RANK.write;
 }
 
+/**
+ * Módulos em que a escrita do papel é sobre o PRÓPRIO registro, não sobre o
+ * dos outros.
+ *
+ * A matriz tem três níveis (none/read/write) e não distingue "envio o meu" de
+ * "cuido do de todos". Escrever para enviar o próprio registro não pode dar
+ * acesso ao dos colegas nem poder de decidir sobre eles. [S4-A] [S4-J]
+ *
+ * Enquanto a matriz não tiver essa dimensão, a exceção fica aqui, explícita.
+ */
+const SELF_SERVICE_ONLY: Record<string, readonly ModuleId[]> = {
+  colaborador: ["aep", "ocorrencias", "atestados", "denuncia", "clima", "ideias"],
+};
+
+/**
+ * Pode administrar o módulo — ver e decidir sobre o registro DE OUTRA PESSOA.
+ * É o que separa o RH do colaborador onde os dois escrevem.
+ */
+export function canManageModule(roleKey: string, moduleId: ModuleId): boolean {
+  if (!canWriteModule(roleKey, moduleId)) return false;
+  const role = normalizeRoleKey(roleKey);
+  return !(SELF_SERVICE_ONLY[role] ?? []).includes(moduleId);
+}
+
 /** Mapa módulo → read|write (omite none) para a sessão do client. */
 export function modulesForRole(
   roleKey: string,
