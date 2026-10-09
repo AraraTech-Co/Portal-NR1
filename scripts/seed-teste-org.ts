@@ -501,9 +501,10 @@ async function main() {
   });
 
   const profileSpecs: [string, string, string][] = [
-    ["teste.colaborador", "COL-001", "11111111111"],
-    ["teste.supervisor", "SUP-001", "22222222222"],
-    ["teste.rh", "RH-001", "33333333333"],
+    // CPFs válidos (dígito verificador correto) — fictícios. [S5-N]
+    ["teste.colaborador", "COL-001", "52998224725"],
+    ["teste.supervisor", "SUP-001", "11144477735"],
+    ["teste.rh", "RH-001", "00000000191"],
   ];
   for (const [login, registration, taxId] of profileSpecs) {
     const uid = byLogin[login];
