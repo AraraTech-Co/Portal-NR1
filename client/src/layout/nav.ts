@@ -21,6 +21,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/ocorrencias", label: "Ocorrências", moduleId: "ocorrencias" },
       { href: "/emergencias", label: "Emergências", moduleId: "emergencias" },
       { href: "/documentos", label: "Documentos do PGR", moduleId: "documentos_pgr" },
+      { href: "/ordens-servico", label: "Ordens de serviço", moduleId: "documentos_pgr" },
+      { href: "/fiscalizacao", label: "Painel da fiscalização", moduleId: "documentos_pgr" },
       { href: "/terceiros", label: "Terceiros", moduleId: "terceiros" },
     ],
   },

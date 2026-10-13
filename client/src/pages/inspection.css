@@ -1,0 +1,246 @@
+/* Painel da fiscalização: a lacuna tem de ser mais visível que o acerto. [S7-B] */
+
+.insp-page {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.insp-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem 1.5rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+
+.insp-summary h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+}
+
+.insp-summary p {
+  margin: 0.25rem 0 0;
+  font-size: 0.875rem;
+}
+
+.insp-score {
+  display: grid;
+  justify-items: start;
+  gap: 0.5rem;
+}
+
+.insp-score .muted {
+  font-size: 0.8rem;
+}
+
+.insp-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.insp-filter {
+  max-width: 20rem;
+}
+
+.insp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 24rem), 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+.insp-card {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+
+.insp-card.insp-pending {
+  border-left-color: var(--sem-warning-bd);
+}
+
+.insp-card.insp-ok {
+  border-left-color: var(--sem-success-bd);
+}
+
+.insp-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.insp-card-head h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.insp-req {
+  margin: 0.25rem 0 0;
+  font-size: 0.8rem;
+  color: var(--muted-foreground);
+  max-width: 48ch;
+}
+
+.insp-empty {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-style: italic;
+  font-size: 0.9rem;
+}
+
+.insp-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.insp-items li {
+  display: grid;
+  grid-template-columns: 1.1rem 1fr auto;
+  align-items: start;
+  gap: 0.5rem;
+  padding-bottom: 0.45rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.insp-items li:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.insp-mark {
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.insp-items li.is-ok .insp-mark {
+  color: var(--sem-success-fg);
+}
+
+.insp-items li.is-pending .insp-mark {
+  color: var(--sem-warning-fg);
+}
+
+.insp-item-body {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.insp-label {
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.insp-items li.is-pending .insp-label {
+  font-weight: 600;
+}
+
+.insp-detail,
+.insp-who {
+  font-size: 0.8rem;
+  color: var(--muted-foreground);
+  overflow-wrap: anywhere;
+}
+
+.insp-items li.is-pending .insp-detail {
+  color: var(--sem-warning-fg);
+}
+
+.insp-go {
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.insp-history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.insp-history li {
+  display: grid;
+  grid-template-columns: 9.5rem 1fr auto;
+  gap: 0.5rem;
+  align-items: baseline;
+  font-size: 0.875rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.insp-history li:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.insp-history-when,
+.insp-history-who {
+  color: var(--muted-foreground);
+  font-size: 0.8rem;
+}
+
+.insp-history-who {
+  text-align: right;
+}
+
+@media (max-width: 640px) {
+  .insp-history li {
+    grid-template-columns: 1fr auto;
+  }
+
+  .insp-history-when {
+    grid-column: 1 / -1;
+  }
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm 12mm;
+  }
+
+  .sidebar,
+  .sidebar-desktop,
+  .sidebar-drawer,
+  .app-topbar,
+  .insp-actions,
+  .insp-filter {
+    display: none !important;
+  }
+
+  .app-shell,
+  .app-main,
+  .app-content {
+    display: block !important;
+    background: #fff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: none !important;
+  }
+
+  .insp-grid {
+    display: block;
+  }
+
+  .insp-card {
+    border: 1px solid #ccc;
+    break-inside: avoid;
+    margin-bottom: 0.75rem;
+    background: #fff;
+  }
+}
