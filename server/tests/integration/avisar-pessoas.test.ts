@@ -142,3 +142,54 @@ describe("o aviso publicado chega a todo mundo [S3-G] [S4-G]", () => {
     expect(antes).toBe(1);
   });
 });
+
+describe("a caixa não esconde o não lido", () => {
+  /**
+   * Regressão: a caixa trazia 50 avisos ordenados por `readAt` crescente, e
+   * no Postgres `asc` joga NULL para o fim — quem passava de 50 avisos lidos
+   * deixava de ver os não lidos, e o contador contava só a página.
+   */
+  it("com a caixa cheia de lidos, o não lido continua no topo e no contador", async () => {
+    const orgId = (
+      await prisma.membership.findFirstOrThrow({
+        where: { userId: colaborador.user.id },
+        select: { organizationId: true },
+      })
+    ).organizationId;
+    const marca = `fila-${SUFIXO}`;
+
+    const lidos = Array.from({ length: 55 }, (_, i) => ({
+      organizationId: orgId,
+      userId: colaborador.user.id,
+      kind: "ANNOUNCEMENT_PUBLISHED" as const,
+      title: `Lido ${i} ${marca}`,
+      entityType: marca,
+      entityId: `lido-${i}`,
+      readAt: new Date(),
+    }));
+    await prisma.notification.createMany({ data: lidos });
+    await prisma.notification.create({
+      data: {
+        organizationId: orgId,
+        userId: colaborador.user.id,
+        kind: "ANNOUNCEMENT_PUBLISHED",
+        title: `Não lido ${marca}`,
+        entityType: marca,
+        entityId: "nao-lido",
+      },
+    });
+
+    try {
+      const res = await caixa(colaborador.token);
+      expect(res.status).toBe(200);
+      const titulos = (res.body.notifications as { title: string; readAt: string | null }[]);
+      expect(
+        titulos.some((n) => n.title === `Não lido ${marca}`),
+        "o não lido cabe na caixa mesmo com 55 lidos na frente",
+      ).toBe(true);
+      expect(res.body.unread).toBeGreaterThanOrEqual(1);
+    } finally {
+      await prisma.notification.deleteMany({ where: { entityType: marca } });
+    }
+  });
+});

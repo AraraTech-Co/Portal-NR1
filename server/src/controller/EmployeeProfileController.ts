@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { Prisma } from "@prisma/client";
+import { Prisma, Role } from "@prisma/client";
 import prisma from "../model/prisma";
 import { EmployeeProfile } from "../model/schema/EmployeeProfile/EmployeeProfile";
 import { JobRole } from "../model/schema/JobRole/JobRole";
@@ -8,6 +8,7 @@ import { writeAudit } from "../helper/audit";
 import { isValidCpf, normalizeCpf } from "../helper/cpf";
 import {
   canManageModule,
+  canReadModule,
   canSeeAllInModule,
   isReadOnlyRole,
 } from "../helper/module-access";
@@ -40,6 +41,33 @@ function fail(res: Response, err: unknown) {
 
 function blank(v?: string | null) {
   return v && v.trim() !== "" ? v.trim() : null;
+}
+
+/**
+ * Data do desligamento (`AAAA-MM-DD`), gravada como meia-noite UTC — é data
+ * de calendário, não instante. Vazio é hoje; o futuro não se registra, porque
+ * desligamento que ainda não aconteceu não corta acesso de ninguém.
+ */
+function dismissalDate(raw: unknown): Date {
+  const hojeBrasilia = new Date(Date.now() - 3 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+  const value =
+    raw === undefined || raw === null || String(raw).trim() === ""
+      ? hojeBrasilia
+      : String(raw).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) {
+    throw Object.assign(new Error("Data do desligamento inválida. Use AAAA-MM-DD."), {
+      status: 400,
+    });
+  }
+  if (value > hojeBrasilia) {
+    throw Object.assign(
+      new Error("O desligamento não pode ter data no futuro."),
+      { status: 400 },
+    );
+  }
+  return new Date(`${value}T00:00:00.000Z`);
 }
 
 function isRh(req: AuthRequest): boolean {
@@ -127,6 +155,200 @@ class EmployeeProfileController {
         return;
       }
       res.json({ profile: forViewer(auth, profile) });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
+  /**
+   * A ficha da pessoa: tudo o que a empresa tem sobre o vínculo dela, numa
+   * tela — cadastro, função, acesso ao portal, o que a função exige e o que
+   * ela cumpriu, a ordem de serviço e as ações no nome dela. [S6-C]
+   *
+   * Cada bloco respeita o módulo de onde vem: exame ocupacional só para quem
+   * cuida de Saúde; ação só para quem lê o plano de ação.
+   */
+  async file(req: Request, res: Response) {
+    try {
+      const auth = req as AuthRequest;
+      const orgId = actorOrgId(auth);
+      const userId = actorUserId(auth);
+
+      const profile = await prisma.employeeProfile.findFirst({
+        where: { id: req.params.id, organizationId: orgId },
+        include: {
+          user: { select: { id: true, name: true, login: true, email: true, active: true } },
+          dismissedBy: { select: { id: true, name: true } },
+          jobRole: {
+            select: {
+              id: true,
+              name: true,
+              description: true,
+              sector: {
+                select: { id: true, name: true, establishment: { select: { id: true, name: true } } },
+              },
+            },
+          },
+        },
+      });
+      if (!profile) {
+        res.status(404).json({ message: "Ficha não encontrada." });
+        return;
+      }
+      const propria = profile.userId === userId;
+      if (!propria && !seesAll(auth)) {
+        res.status(403).json({ message: "Sem permissão para ver esta ficha." });
+        return;
+      }
+
+      const veSaude = Boolean(
+        auth.actor && canSeeAllInModule(auth.actor.permission, "saude"),
+      );
+      const veAcoes = Boolean(
+        auth.actor && canReadModule(auth.actor.permission, "acoes"),
+      );
+
+      const [membership, exigencias, certificados, exames, ordem, acoes, historico] =
+        await Promise.all([
+          prisma.membership.findFirst({
+            where: { userId: profile.userId, organizationId: orgId },
+            select: { role: true, accessExpiresAt: true },
+          }),
+          profile.jobRoleId
+            ? prisma.jobRoleRequirement.findMany({
+                where: { organizationId: orgId, jobRoleId: profile.jobRoleId },
+                select: { id: true, kind: true, name: true, validityMonths: true },
+                orderBy: { name: "asc" },
+              })
+            : Promise.resolve([]),
+          prisma.workerCertificate.findMany({
+            where: { organizationId: orgId, userId: profile.userId },
+            select: {
+              id: true,
+              requirementId: true,
+              name: true,
+              status: true,
+              issuedAt: true,
+              expiresAt: true,
+              storagePath: true,
+            },
+            orderBy: { createdAt: "desc" },
+          }),
+          veSaude || propria
+            ? prisma.occupationalExam.findMany({
+                where: { organizationId: orgId, userId: profile.userId },
+                select: { id: true, kind: true, performedAt: true, dueAt: true },
+                orderBy: { performedAt: "desc" },
+                take: 10,
+              })
+            : Promise.resolve([]),
+          profile.jobRoleId
+            ? prisma.serviceOrder.findFirst({
+                where: { organizationId: orgId, jobRoleId: profile.jobRoleId },
+                orderBy: { version: "desc" },
+                select: {
+                  id: true,
+                  version: true,
+                  issuedAt: true,
+                  acks: {
+                    where: { userId: profile.userId },
+                    select: { acknowledgedAt: true },
+                  },
+                },
+              })
+            : Promise.resolve(null),
+          veAcoes
+            ? prisma.action.findMany({
+                where: { organizationId: orgId, assigneeId: profile.userId },
+                select: { id: true, title: true, status: true, dueDate: true },
+                orderBy: { dueDate: "asc" },
+                take: 20,
+              })
+            : Promise.resolve([]),
+          prisma.auditEvent.findMany({
+            where: {
+              organizationId: orgId,
+              entityType: "EmployeeProfile",
+              entityId: profile.id,
+            },
+            orderBy: { createdAt: "desc" },
+            take: 20,
+            select: {
+              id: true,
+              action: true,
+              createdAt: true,
+              actor: { select: { name: true } },
+            },
+          }),
+        ]);
+
+      const agora = new Date();
+      const porExigencia = new Map<string, (typeof certificados)[number]>();
+      for (const c of certificados) {
+        if (c.requirementId && !porExigencia.has(c.requirementId)) {
+          porExigencia.set(c.requirementId, c);
+        }
+      }
+
+      res.json({
+        profile: forViewer(auth, profile),
+        membership: membership
+          ? {
+              role: membership.role,
+              access_expires_at: membership.accessExpiresAt,
+              access_active:
+                profile.user.active &&
+                !(membership.accessExpiresAt && membership.accessExpiresAt <= agora),
+            }
+          : null,
+        requirements: exigencias.map((q) => {
+          const cert = porExigencia.get(q.id);
+          // Aceito mas vencido não é "em dia": é o caso que mais engana.
+          const situacao = !cert
+            ? "missing"
+            : cert.status !== "APPROVED"
+              ? cert.status.toLowerCase()
+              : cert.expiresAt && cert.expiresAt <= agora
+                ? "expired"
+                : "ok";
+          return {
+            id: q.id,
+            kind: q.kind,
+            name: q.name,
+            validity_months: q.validityMonths,
+            status: situacao,
+            certificate: cert
+              ? {
+                  id: cert.id,
+                  name: cert.name,
+                  issued_at: cert.issuedAt,
+                  expires_at: cert.expiresAt,
+                  has_file: Boolean(cert.storagePath),
+                }
+              : null,
+          };
+        }),
+        certificates: certificados.map(({ storagePath, ...c }) => ({
+          ...c,
+          has_file: Boolean(storagePath),
+        })),
+        exams: exames,
+        service_order: ordem
+          ? {
+              id: ordem.id,
+              version: ordem.version,
+              issued_at: ordem.issuedAt,
+              acknowledged_at: ordem.acks[0]?.acknowledgedAt ?? null,
+            }
+          : null,
+        actions: acoes,
+        history: historico.map((h) => ({
+          id: h.id,
+          action: h.action,
+          at: h.createdAt,
+          who: h.actor?.name ?? "sistema",
+        })),
+      });
     } catch (err) {
       fail(res, err);
     }
@@ -326,6 +548,13 @@ class EmployeeProfileController {
     }
   }
 
+  /**
+   * Registra o desligamento: data, motivo, quem registrou — e CORTA O ACESSO.
+   *
+   * Desligar e deixar a pessoa entrando é o defeito: ela continua vendo
+   * holerite, mural e documento da empresa. Sai na hora, mesmo com sessão
+   * aberta, pelo mesmo mecanismo do prazo do fiscal. [S5-H]
+   */
   async dismiss(req: Request, res: Response) {
     try {
       const auth = req as AuthRequest;
@@ -341,10 +570,51 @@ class EmployeeProfileController {
         return;
       }
 
-      const profile = await new EmployeeProfile().update.one(
-        { id: current.id, organizationId: orgId },
-        { dismissedAt: new Date() },
-      );
+      // Ninguém registra a própria saída: é ato do empregador sobre o
+      // empregado, e quem registra perde o acesso no mesmo instante — ficaria
+      // trancado do lado de fora no meio da operação. [S5-H]
+      if (current.userId === actorId) {
+        res.status(400).json({
+          message:
+            "Outra pessoa do RH registra o seu desligamento — registrar o próprio tiraria seu acesso na hora.",
+        });
+        return;
+      }
+
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const dismissedAt = dismissalDate(body.dismissed_at);
+      if (current.admittedAt && dismissedAt < current.admittedAt) {
+        res.status(400).json({
+          message: "O desligamento não pode ser anterior à admissão.",
+        });
+        return;
+      }
+
+      const agora = new Date();
+      const profile = await prisma.$transaction(async (tx) => {
+        const updated = await tx.employeeProfile.update({
+          where: { id: current.id },
+          data: {
+            dismissedAt,
+            dismissalReason: blank(body.reason as string),
+            dismissedById: actorId,
+          },
+          include: {
+            user: { select: { id: true, name: true, login: true, email: true } },
+            jobRole: { select: { id: true, name: true } },
+            dismissedBy: { select: { id: true, name: true } },
+          },
+        });
+
+        // Acesso encerrado agora: o prazo vencido derruba até sessão aberta.
+        await tx.membership.updateMany({
+          where: { userId: current.userId, organizationId: orgId },
+          data: { accessExpiresAt: agora },
+        });
+        await tx.token.deleteMany({ where: { userId: current.userId } });
+
+        return updated;
+      });
 
       await writeAudit({
         organizationId: orgId,
@@ -352,6 +622,64 @@ class EmployeeProfileController {
         action: "employee_profile.dismiss",
         entityType: "EmployeeProfile",
         entityId: current.id,
+        after: {
+          dismissedAt: profile.dismissedAt,
+          reason: profile.dismissalReason,
+        },
+      });
+
+      res.json({ profile, access_revoked: true });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
+  /** Desligamento registrado por engano: desfaz e devolve o acesso. [S5-H] */
+  async reinstate(req: Request, res: Response) {
+    try {
+      const auth = req as AuthRequest;
+      const orgId = actorOrgId(auth);
+      const actorId = actorUserId(auth);
+      const current = await prisma.employeeProfile.findFirst({
+        where: { id: req.params.id, organizationId: orgId },
+      });
+      if (!current || !current.dismissedAt) {
+        res.status(404).json({ message: "Perfil desligado não encontrado." });
+        return;
+      }
+
+      const profile = await prisma.$transaction(async (tx) => {
+        const updated = await tx.employeeProfile.update({
+          where: { id: current.id },
+          data: { dismissedAt: null, dismissalReason: null, dismissedById: null },
+          include: {
+            user: { select: { id: true, name: true, login: true, email: true } },
+            jobRole: { select: { id: true, name: true } },
+          },
+        });
+        // O prazo do fiscal não é desligamento: só devolve acesso a quem
+        // perdeu por este caminho.
+        await tx.membership.updateMany({
+          where: {
+            userId: current.userId,
+            organizationId: orgId,
+            role: { not: Role.FISCAL },
+          },
+          data: { accessExpiresAt: null },
+        });
+        return updated;
+      });
+
+      await writeAudit({
+        organizationId: orgId,
+        actorId,
+        action: "employee_profile.reinstate",
+        entityType: "EmployeeProfile",
+        entityId: current.id,
+        before: {
+          dismissedAt: current.dismissedAt,
+          reason: current.dismissalReason,
+        },
       });
 
       res.json({ profile });
