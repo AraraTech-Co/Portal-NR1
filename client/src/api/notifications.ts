@@ -2,7 +2,7 @@ import { request } from "./client";
 
 export type Notification = {
   id: string;
-  kind: "ACTION_ASSIGNED" | "ANNOUNCEMENT_PUBLISHED";
+  kind: "ACTION_ASSIGNED" | "ANNOUNCEMENT_PUBLISHED" | "SERVICE_ORDER_ISSUED";
   title: string;
   body: string | null;
   link: string | null;

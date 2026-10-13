@@ -1,0 +1,116 @@
+/* Ordem de serviço: a lista por função e o papel que se imprime. [S7-F] */
+
+.so-mine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.25rem;
+  margin-bottom: 1rem;
+  padding: 0.9rem 1.1rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--primary);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+
+.so-mine h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.so-mine p {
+  margin: 0.2rem 0 0;
+  font-size: 0.875rem;
+}
+
+.so-mine-action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.so-alert {
+  color: var(--sem-warning-fg);
+  font-weight: 600;
+}
+
+.so-filter {
+  max-width: 20rem;
+  margin-bottom: 1rem;
+}
+
+.so-pending {
+  color: var(--sem-warning-fg);
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.so-text {
+  margin: 0 0 0.6rem;
+  max-width: 70ch;
+}
+
+.so-text:last-child {
+  margin-bottom: 0;
+}
+
+.so-ack-box {
+  display: grid;
+  justify-items: start;
+  gap: 0.5rem;
+  padding: 0.85rem 1rem;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+
+.so-acks {
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+
+.so-acks h2 {
+  margin: 0 0 0.6rem;
+  font-size: 1.05rem;
+}
+
+.so-ack-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.so-ack-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+
+.so-ack-list li:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.so-ack-ok {
+  color: var(--muted-foreground);
+  font-size: 0.85rem;
+}
+
+/* A lista de ciência não vai no papel: o papel é o documento, não o controle. */
+@media print {
+  .so-acks,
+  .so-ack-box,
+  .so-alert {
+    display: none !important;
+  }
+}

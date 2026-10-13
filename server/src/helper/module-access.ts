@@ -73,7 +73,16 @@ export function isReadOnlyRole(roleKey: string): boolean {
  * quem fez o treinamento, quem está com exame em dia, quem deu ciência.
  */
 const SEES_ALL_READ_ONLY: Record<string, readonly ModuleId[]> = {
-  fiscal: ["colaboradores", "documentos_rh", "saude", "treinamentos", "convocacoes"],
+  fiscal: [
+    "colaboradores",
+    "documentos_rh",
+    "saude",
+    "treinamentos",
+    "convocacoes",
+    /// A ciência da ordem de serviço é a prova de que o trabalhador foi
+    /// informado — sem a lista por pessoa, a fiscalização não tem o que ver.
+    "documentos_pgr",
+  ],
 };
 
 /** Vê o registro de outras pessoas no módulo: quem administra, ou a consulta. */

@@ -95,6 +95,8 @@ model User {
   referrals         Referral[]            @relation("ReferralAuthor")
   onboarding        OnboardingProgress[]
   notifications  Notification[]
+  serviceOrdersIssued ServiceOrder[]     @relation("ServiceOrderIssuer")
+  serviceOrderAcks    ServiceOrderAck[]  @relation("ServiceOrderAckWorker")
 }
 
 /// MASTER = papel na *empresa* (Organization): acima de OWNER, controla todas as contas.
@@ -181,6 +183,8 @@ model Organization {
   referrals       Referral[]
   onboardingSteps OnboardingStep[]
   notifications   Notification[]
+  serviceOrders   ServiceOrder[]
+  serviceOrderAcks ServiceOrderAck[]
 }
 
 /// Vínculo pessoa <-> organização. Modelado N:N desde já (consultor multi-org),
@@ -405,6 +409,7 @@ model JobRole {
   activities   ActivityJobRole[]
   employees    EmployeeProfile[]
   requirements JobRoleRequirement[]
+  serviceOrders ServiceOrder[]
 
   @@index([organizationId, archivedAt])
   @@index([sectorId])
@@ -901,6 +906,62 @@ model PgrDocument {
 }
 
 // ============================================================
+// Ordem de serviço de SST — NR-1 1.4.1 "b"
+// O empregador elabora ordens de serviço sobre segurança e saúde e DÁ
+// CONHECIMENTO aos empregados. São duas obrigações: o documento e a ciência.
+// Por isso a ordem é por função (é da função que saem os perigos) e a
+// ciência fica registrada por trabalhador e por versão. [S7-F]
+// ============================================================
+
+/// Emissão append-only, igual ao documento do PGR: emitir gera versão nova e
+/// congela o conteúdo. Corrigir é emitir outra, nunca editar a assinada.
+model ServiceOrder {
+  id             String   @id @default(uuid())
+  organizationId String
+  jobRoleId      String
+  version        Int
+  /// Retrato do que foi dado a conhecer: atividades, perigos, riscos com
+  /// nível, medidas de controle e exigências da função.
+  content        Json
+  /// Obrigações do trabalhador, escritas por quem emite (1.4.2 "a" a "d").
+  duties         String
+  /// O que fazer em emergência, na linguagem da função.
+  emergencyInstructions String?
+  issuedAt       DateTime @default(now())
+  issuedById     String
+  responsibleName         String
+  responsibleRole         String?
+  responsibleRegistration String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  jobRole      JobRole      @relation(fields: [jobRoleId], references: [id], onDelete: Cascade)
+  issuedBy     User         @relation("ServiceOrderIssuer", fields: [issuedById], references: [id])
+  acks         ServiceOrderAck[]
+
+  @@unique([organizationId, jobRoleId, version])
+  @@index([organizationId, issuedAt])
+  @@index([jobRoleId])
+}
+
+/// A ciência do trabalhador — é esta a prova que a fiscalização pede. Uma por
+/// pessoa e por versão: versão nova pede ciência nova.
+model ServiceOrderAck {
+  id             String   @id @default(uuid())
+  organizationId String
+  serviceOrderId String
+  userId         String
+  acknowledgedAt DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  serviceOrder ServiceOrder @relation(fields: [serviceOrderId], references: [id], onDelete: Cascade)
+  user         User         @relation("ServiceOrderAckWorker", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([serviceOrderId, userId])
+  @@index([organizationId, acknowledgedAt])
+}
+
+// ============================================================
 // AEP — Avaliação Ergonômica Preliminar (NR-17 17.3.1)
 // Obrigatória para TODAS as organizações e situações de trabalho,
 // inclusive ME/EPP dispensadas de PGR. É por aqui que os fatores
@@ -1353,6 +1414,7 @@ model Announcement {
 enum NotificationKind {
   ACTION_ASSIGNED
   ANNOUNCEMENT_PUBLISHED
+  SERVICE_ORDER_ISSUED
 }
 
 model Notification {

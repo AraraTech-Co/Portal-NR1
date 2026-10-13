@@ -23,6 +23,7 @@ import { GamificationPage } from "@/pages/GamificationPage";
 import { HealthPage } from "@/pages/HealthPage";
 import { HomePage } from "@/pages/HomePage";
 import { HrDocumentsPage } from "@/pages/HrDocumentsPage";
+import { InspectionPage } from "@/pages/InspectionPage";
 import { IdeasPage } from "@/pages/IdeasPage";
 import { HazardFormPage } from "@/pages/HazardFormPage";
 import { InventoryPage } from "@/pages/InventoryPage";
@@ -37,6 +38,8 @@ import { ParticipationsPage } from "@/pages/ParticipationsPage";
 import { PayslipDetailPage } from "@/pages/PayslipDetailPage";
 import { PayslipsPage } from "@/pages/PayslipsPage";
 import { ReferralsPage } from "@/pages/ReferralsPage";
+import { ServiceOrdersPage } from "@/pages/ServiceOrdersPage";
+import { ServiceOrderViewPage } from "@/pages/ServiceOrderViewPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { SummonsPage } from "@/pages/SummonsPage";
 import { TimeEntriesPage } from "@/pages/TimeEntriesPage";
@@ -102,6 +105,9 @@ function AppRoutes() {
               <Route path="emergencias" element={<EmergenciesPage />} />
               <Route path="documentos" element={<DocumentsPage />} />
               <Route path="documentos/:id" element={<DocumentViewPage />} />
+              <Route path="ordens-servico" element={<ServiceOrdersPage />} />
+              <Route path="ordens-servico/:id" element={<ServiceOrderViewPage />} />
+              <Route path="fiscalizacao" element={<InspectionPage />} />
               <Route path="terceiros" element={<ContractorsPage />} />
               <Route path="colaboradores" element={<EmployeesPage />} />
               <Route path="documentos-rh" element={<HrDocumentsPage />} />
