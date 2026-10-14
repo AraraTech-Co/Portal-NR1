@@ -1,4 +1,3 @@
-import { randomInt } from "crypto";
 import bcrypt from "bcryptjs";
 import { AccountRole, Role } from "@prisma/client";
 import { Request, Response } from "express";
@@ -14,20 +13,12 @@ import {
 } from "../helper/invite-access";
 import { modulesForRole } from "../helper/module-access";
 import { accessEnded, resolveAccessUntil } from "../helper/access-period";
+import { temporaryPassword } from "../helper/temporary-password";
 import type { AuthRequest } from "../types/auth";
 
 function fail(res: Response, err: unknown) {
   const e = err as { status?: number; message?: string };
   res.status(e.status || 500).json({ message: e.message || "Erro interno." });
-}
-
-/** Sem 0/O, 1/l/I: a senha vai ser ditada ou digitada à mão. */
-const ALPHABET = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-
-function temporaryPassword(length = 12): string {
-  let out = "";
-  for (let i = 0; i < length; i += 1) out += ALPHABET[randomInt(ALPHABET.length)];
-  return out;
 }
 
 class PeopleAccessController {

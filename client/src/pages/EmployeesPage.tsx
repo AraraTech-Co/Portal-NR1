@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { fetchEmployees, type EmployeeRow } from "@/api/people";
+import {
+  fetchEmployees,
+  WORKER_BOND_LABEL,
+  type EmployeeRow,
+} from "@/api/people";
 import { Chip } from "@/components/Chip";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
@@ -50,7 +54,14 @@ export function EmployeesPage() {
     const termo = semAcento(busca.trim());
     if (!termo) return rows;
     return rows.filter((r) =>
-      [r.user.name, r.user.login, r.registration ?? "", r.jobRole?.name ?? ""].some((campo) =>
+      [
+        r.user.name,
+        r.user.login,
+        r.registration ?? "",
+        r.jobRole?.name ?? "",
+        WORKER_BOND_LABEL[r.bond] ?? "",
+        r.contractor?.name ?? "",
+      ].some((campo) =>
         semAcento(campo).includes(termo),
       ),
     );
@@ -123,6 +134,7 @@ export function EmployeesPage() {
                 <tr>
                   <th>Nome</th>
                   <th>Função</th>
+                  <th>Vínculo</th>
                   <th>Matrícula</th>
                   <th>Situação</th>
                   <th aria-label="Ficha" />
@@ -136,6 +148,16 @@ export function EmployeesPage() {
                       <div className="muted">{r.user.login}</div>
                     </td>
                     <td>{r.jobRole?.name ?? <span className="muted">sem função</span>}</td>
+                    <td>
+                      {r.bond === "EMPLOYEE" ? (
+                        <span className="muted">{WORKER_BOND_LABEL.EMPLOYEE}</span>
+                      ) : (
+                        <Chip tone="info">
+                          {WORKER_BOND_LABEL[r.bond] ?? r.bond}
+                        </Chip>
+                      )}
+                      {r.contractor && <div className="muted">{r.contractor.name}</div>}
+                    </td>
                     <td>{r.registration ?? <span className="muted">—</span>}</td>
                     <td>
                       {r.dismissedAt ? (

@@ -4,9 +4,12 @@ import {
   dismissEmployee,
   fetchEmployeeFile,
   reinstateEmployee,
+  updateEmployeeProfile,
   REQUIREMENT_STATUS_LABEL,
+  WORKER_BOND_LABEL,
   type EmployeeFile,
 } from "@/api/people";
+import { fetchContractors } from "@/api/modules";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
 import { LoadingState } from "@/components/LoadingState";
@@ -137,6 +140,115 @@ function DismissForm({
 }
 
 /**
+ * Vínculo: empregado, terceirizado, temporário, aprendiz ou estagiário —
+ * e, quando não é empregado, de que empresa contratada ele vem. A
+ * fiscalização pergunta quem é quem no mesmo ambiente (NR-1 1.5.8). [S1-G]
+ */
+function BondEditor({
+  profileId,
+  bond,
+  contractorId,
+  canEdit,
+  onSaved,
+}: {
+  profileId: string;
+  bond: string;
+  contractorId: string | null;
+  canEdit: boolean;
+  onSaved: () => Promise<void>;
+}) {
+  const [editando, setEditando] = useState(false);
+  const [vinculo, setVinculo] = useState(bond);
+  const [empresa, setEmpresa] = useState(contractorId ?? "");
+  const [empresas, setEmpresas] = useState<{ id: string; name: string }[]>([]);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!editando) return;
+    fetchContractors()
+      .then((rows) => setEmpresas(rows.map((c) => ({ id: c.id, name: c.name }))))
+      .catch(() => setEmpresas([]));
+  }, [editando]);
+
+  async function salvar(e: FormEvent) {
+    e.preventDefault();
+    setSalvando(true);
+    setErro(null);
+    try {
+      await updateEmployeeProfile(profileId, {
+        bond: vinculo,
+        contractor_id: vinculo === "EMPLOYEE" ? null : empresa || null,
+      });
+      setEditando(false);
+      await onSaved();
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : "Falha ao salvar");
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  if (!editando) {
+    return (
+      <>
+        {canEdit && (
+          <div className="people-dismiss-slot">
+            <Button type="button" variant="ghost" onClick={() => setEditando(true)}>
+              Mudar vínculo
+            </Button>
+          </div>
+        )}
+      </>
+    );
+  }
+
+  return (
+    <form className="form-grid people-dismiss" onSubmit={salvar}>
+      <label className="form-field">
+        Vínculo
+        <select value={vinculo} onChange={(e) => setVinculo(e.target.value)}>
+          {Object.entries(WORKER_BOND_LABEL).map(([codigo, rotulo]) => (
+            <option key={codigo} value={codigo}>
+              {rotulo}
+            </option>
+          ))}
+        </select>
+      </label>
+      {vinculo !== "EMPLOYEE" && (
+        <label className="form-field">
+          Empresa contratada
+          <select value={empresa} onChange={(e) => setEmpresa(e.target.value)}>
+            <option value="">Não informada</option>
+            {empresas.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <span className="form-hint">
+            Cadastre a empresa em Terceiros para ligar a pessoa a ela.
+          </span>
+        </label>
+      )}
+      {erro && (
+        <p className="form-error" role="alert">
+          {erro}
+        </p>
+      )}
+      <div className="form-actions">
+        <Button type="submit" disabled={salvando}>
+          {salvando ? "Salvando…" : "Salvar vínculo"}
+        </Button>
+        <Button type="button" variant="ghost" onClick={() => setEditando(false)}>
+          Cancelar
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+/**
  * A ficha de uma pessoa: cadastro, vínculo, acesso ao portal, o que a função
  * exige e o que ela cumpriu, ordem de serviço, ações e histórico. [S6-C]
  */
@@ -248,7 +360,23 @@ export function EmployeeFilePage() {
               <dt>Admissão</dt>
               <dd>{formatDay(profile.admittedAt)}</dd>
             </div>
+            <div>
+              <dt>Vínculo</dt>
+              <dd>
+                {WORKER_BOND_LABEL[profile.bond] ?? profile.bond}
+                {profile.contractor && (
+                  <span className="muted"> · {profile.contractor.name}</span>
+                )}
+              </dd>
+            </div>
           </dl>
+          <BondEditor
+            profileId={id}
+            bond={profile.bond}
+            contractorId={profile.contractorId}
+            canEdit={canManage && !desligado}
+            onSaved={load}
+          />
         </section>
 
         <section className="form-section">

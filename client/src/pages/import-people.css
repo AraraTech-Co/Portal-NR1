@@ -1,0 +1,52 @@
+/* Cadastro em massa a partir de planilha colada. [S1-A] */
+
+.import-sheet {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.import-problems {
+  margin: 0 0 0.75rem;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.2rem;
+  font-size: 0.85rem;
+  color: var(--sem-warning-fg);
+}
+
+.import-report {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.import-warning {
+  margin: 0;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--sem-warning-bd);
+  border-left: 3px solid var(--sem-warning-bd);
+  border-radius: var(--radius);
+  background: var(--sem-warning);
+  font-size: 0.875rem;
+}
+
+.import-line {
+  width: 2.5rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-foreground);
+}
+
+.import-password {
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  user-select: all;
+  white-space: nowrap;
+}

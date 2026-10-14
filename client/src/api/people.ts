@@ -9,9 +9,68 @@ export type EmployeeRow = {
   admittedAt: string | null;
   dismissedAt: string | null;
   dismissalReason: string | null;
+  bond: string;
+  contractorId: string | null;
   user: { id: string; name: string; login: string; email: string | null };
   jobRole: { id: string; name: string } | null;
+  contractor: { id: string; name: string } | null;
 };
+
+/** Vínculo da pessoa com a empresa (NR-1 1.5.8). [S1-G] */
+export const WORKER_BOND_LABEL: Record<string, string> = {
+  EMPLOYEE: "Empregado",
+  CONTRACTOR: "Terceirizado",
+  TEMPORARY: "Temporário",
+  APPRENTICE: "Aprendiz",
+  INTERN: "Estagiário",
+};
+
+export type ImportRow = {
+  name: string;
+  registration?: string;
+  tax_id?: string;
+  email?: string;
+  job_role_id?: string;
+  admitted_at?: string;
+  bond?: string;
+  contractor_id?: string;
+  org_role?: string;
+};
+
+export type ImportResult = {
+  line: number;
+  name: string;
+  status: "created" | "skipped" | "error";
+  message?: string;
+  login?: string;
+  temporary_password?: string;
+};
+
+export type ImportReport = {
+  dry_run: boolean;
+  rows: number;
+  created: number;
+  skipped: number;
+  errors: number;
+  results: ImportResult[];
+};
+
+export function importPeople(people: ImportRow[], dryRun: boolean) {
+  return request<ImportReport>("/api/pessoas-acessos/importar", {
+    method: "POST",
+    body: JSON.stringify({ people, dry_run: dryRun }),
+  });
+}
+
+export function updateEmployeeProfile(
+  id: string,
+  input: { bond?: string; contractor_id?: string | null },
+) {
+  return request<{ profile: EmployeeRow }>(
+    `/api/employee-profiles/${encodeURIComponent(id)}`,
+    { method: "PATCH", body: JSON.stringify(input) },
+  );
+}
 
 export type RequirementStatus = {
   id: string;
@@ -32,6 +91,7 @@ export type RequirementStatus = {
 export type EmployeeFile = {
   profile: EmployeeRow & {
     dismissedBy: { id: string; name: string } | null;
+    contractor: { id: string; name: string; taxId: string | null; relation: string } | null;
     jobRole:
       | {
           id: string;

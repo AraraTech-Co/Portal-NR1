@@ -25,6 +25,7 @@ import "@/components/data-table.css";
 import "@/components/form.css";
 import { LoadingState } from "@/components/LoadingState";
 import { ConsultaAcessos, FiscaisComAcesso } from "./ConsultaAcessos";
+import { ImportPeople } from "./ImportPeople";
 import { PessoasEAcessos } from "./PessoasEAcessos";
 
 /** Hoje no fuso de Brasília, em AAAA-MM-DD. */
@@ -609,6 +610,7 @@ export function AccountPage() {
         </section>
       )}
 
+      {canManage && <ImportPeople />}
       {canManage && <PessoasEAcessos />}
       {canManage && <FiscaisComAcesso />}
       {canManage && <ConsultaAcessos />}
