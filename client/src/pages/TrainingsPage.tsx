@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { useResourceList } from "@/hooks/useResourceList";
 import {
   fetchTrainingEnrollments,
@@ -8,19 +9,22 @@ import {
 import { useAuth } from "@/auth/AuthContext";
 import { Chip } from "@/components/Chip";
 import { ListShell } from "@/components/ListShell";
+import { TRAINING_KIND_LABEL } from "@/api/trainings";
+import { TrainingSessions } from "./TrainingSessions";
 import { ENROLLMENT_STATUS_LABEL, formatDay } from "@/lib/labels";
 import { isReadOnlyPermission, useModuleAccess } from "@/lib/module-access";
 import "@/components/form.css";
 import "./trainings.css";
 
-function statusTone(status: string): "success" | "info" | "neutral" {
+function statusTone(status: string): "success" | "info" | "neutral" | "warning" {
   if (status === "COMPLETED") return "success";
   if (status === "IN_PROGRESS") return "info";
+  if (status === "FAILED") return "warning";
   return "neutral";
 }
 
 /** Quem fez o treinamento, quando, com que nota e qual certificado. [S5-J] [S7-G] */
-function Enrollments({ trainingId }: { trainingId: string }) {
+function Enrollments({ trainingId, reloadKey }: { trainingId: string; reloadKey: number }) {
   const [rows, setRows] = useState<TrainingEnrollmentRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,7 +40,7 @@ function Enrollments({ trainingId }: { trainingId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [trainingId]);
+  }, [trainingId, reloadKey]);
 
   if (error) return <p className="form-error" role="alert">{error}</p>;
   if (!rows) return <p className="muted">Carregando…</p>;
@@ -80,14 +84,16 @@ export function TrainingsPage() {
   // Quem cuida dos treinamentos e a fiscalização veem quem fez.
   const seesPeople = canWrite || isReadOnlyPermission(user?.permission);
   const [openId, setOpenId] = useState<string | null>(null);
+  // Registrar turma conclui gente: a lista de quem fez precisa recarregar.
+  const [reloadKey, setReloadKey] = useState(0);
 
   return (
     <ListShell
       title="Treinamentos"
       description={
         seesPeople
-          ? "Catálogo de treinamentos. Toque num treinamento para ver quem fez, a nota e o certificado."
-          : "Catálogo de treinamentos da organização."
+          ? "Toque num treinamento para ver quem fez, a nota, o certificado e as turmas presenciais. \"Fazer\" abre o conteúdo e a prova."
+          : "Toque em \"Fazer\" para ler o conteúdo, responder a prova e receber o certificado."
       }
       loading={loading}
       error={error}
@@ -100,9 +106,10 @@ export function TrainingsPage() {
           <thead>
             <tr>
               <th>Título</th>
-              <th>Categoria</th>
+              <th>Tipo</th>
               <th>Duração (min)</th>
               <th>Inscrições</th>
+              <th aria-label="Fazer" />
             </tr>
           </thead>
           <tbody>
@@ -130,16 +137,29 @@ export function TrainingsPage() {
                   >
                     <td>
                       <strong>{r.title}</strong>
+                      <div className="muted training-sub">{r.category}</div>
                     </td>
-                    <td>{r.category}</td>
+                    <td>{TRAINING_KIND_LABEL[r.kind] ?? r.kind}</td>
                     <td>{r.durationMinutes}</td>
                     <td>{r._count?.enrollments ?? 0}</td>
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <Link to={`/treinamentos/${r.id}`}>
+                        {r.kind === "CLASSROOM" ? "Abrir" : "Fazer"}
+                      </Link>
+                    </td>
                   </tr>
                   {open && (
                     <tr className="training-expand">
-                      <td colSpan={4}>
+                      <td colSpan={5}>
                         <div className="training-panel">
-                          <Enrollments trainingId={r.id} />
+                          <Enrollments trainingId={r.id} reloadKey={reloadKey} />
+                          <TrainingSessions
+                            trainingId={r.id}
+                            kind={r.kind}
+                            defaultMinutes={r.durationMinutes}
+                            canRecord={canWrite}
+                            onRecorded={() => setReloadKey((n) => n + 1)}
+                          />
                         </div>
                       </td>
                     </tr>

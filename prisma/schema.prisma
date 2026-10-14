@@ -96,6 +96,8 @@ model User {
   onboarding        OnboardingProgress[]
   notifications  Notification[]
   profilesDismissed EmployeeProfile[] @relation("ProfileDismisser")
+  trainingSessionsRecorded TrainingSession[]   @relation("SessionRecorder")
+  trainingAttendances      TrainingAttendance[] @relation("AttendanceWorker")
   serviceOrdersIssued ServiceOrder[]     @relation("ServiceOrderIssuer")
   serviceOrderAcks    ServiceOrderAck[]  @relation("ServiceOrderAckWorker")
 }
@@ -186,6 +188,7 @@ model Organization {
   notifications   Notification[]
   serviceOrders   ServiceOrder[]
   serviceOrderAcks ServiceOrderAck[]
+  trainingSessions TrainingSession[]
 }
 
 /// Vínculo pessoa <-> organização. Modelado N:N desde já (consultor multi-org),
@@ -1676,14 +1679,25 @@ model SummonAttendance {
 
 // ---------- Treinamentos ----------
 
+/// Como o treinamento acontece. O presencial precisa de turma com instrutor,
+/// data, carga e lista de presença — é o que a fiscalização pede. [S4-D]
+enum TrainingKind {
+  ONLINE
+  CLASSROOM
+}
+
 model Training {
   id             String    @id @default(uuid())
   organizationId String
   title          String
   category       String     @default("GERAL")
+  kind           TrainingKind @default(ONLINE)
   summary        String?
   durationMinutes Int       @default(30)
   points         Int        @default(100)
+  /// Nota mínima (%) para o certificado. Curso concluído errando tudo não
+  /// comprova capacitação nenhuma. [S4-K]
+  passingScore   Int        @default(70)
   videoUrl       String?
   /// NR-1 1.7.1.2.2: quando a NR não fixa periodicidade, o prazo é do
   /// empregador. Nulo = sem reciclagem obrigatória.
@@ -1699,6 +1713,7 @@ model Training {
   questions    TrainingQuestion[]
   enrollments  TrainingEnrollment[]
   requirements JobRoleRequirement[]
+  sessions     TrainingSession[]
 
   @@index([organizationId, archivedAt])
 }
@@ -1733,6 +1748,8 @@ enum EnrollmentStatus {
   PENDING
   IN_PROGRESS
   COMPLETED
+  /// Fez a prova e não alcançou a nota mínima. Pode refazer. [S4-K]
+  FAILED
 }
 
 model TrainingEnrollment {
@@ -1752,6 +1769,47 @@ model TrainingEnrollment {
 
   @@unique([trainingId, userId])
   @@index([userId, status])
+}
+
+/// A aula presencial que aconteceu: instrutor, data, carga horária e lista de
+/// presença. NR-1 1.7.1 cobra o registro, não o convite. [S4-D]
+model TrainingSession {
+  id             String   @id @default(uuid())
+  organizationId String
+  trainingId     String
+  heldAt         DateTime
+  instructorName String
+  /// Registro profissional do instrutor, quando a NR exige.
+  instructorRegistration String?
+  location       String?
+  durationMinutes Int
+  notes          String?
+  recordedById   String
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  training     Training     @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+  recordedBy   User         @relation("SessionRecorder", fields: [recordedById], references: [id])
+  attendances  TrainingAttendance[]
+
+  @@index([organizationId, heldAt])
+  @@index([trainingId])
+}
+
+/// Presença de uma pessoa na turma. Faltou também é registro: é o que explica
+/// por que ela não tem o certificado.
+model TrainingAttendance {
+  sessionId String
+  userId    String
+  present   Boolean  @default(true)
+  score     Int?
+  createdAt DateTime @default(now())
+
+  session TrainingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user    User            @relation("AttendanceWorker", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([sessionId, userId])
+  @@index([userId])
 }
 
 // ---------- Saúde ocupacional e exigências por função ----------

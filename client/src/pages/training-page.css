@@ -1,0 +1,209 @@
+/* Fazer o treinamento: conteúdo, prova e certificado. [S4-C] */
+
+.tr-page {
+  display: grid;
+  gap: 1rem;
+}
+
+.tr-back {
+  font-size: 0.9rem;
+  color: var(--muted-foreground);
+  text-decoration: none;
+}
+
+.tr-back:hover {
+  color: var(--foreground);
+}
+
+.tr-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  font-size: 0.85rem;
+  color: var(--muted-foreground);
+}
+
+.tr-facts span:not(:last-child)::after {
+  content: " ·";
+}
+
+.tr-done,
+.tr-classroom,
+.tr-failed {
+  padding: 0.9rem 1.1rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  display: grid;
+  gap: 0.4rem;
+  justify-items: start;
+}
+
+.tr-done {
+  border-left-color: var(--sem-success-bd);
+}
+
+.tr-classroom,
+.tr-failed {
+  border-left-color: var(--sem-warning-bd);
+}
+
+.tr-done p,
+.tr-classroom p,
+.tr-failed p {
+  margin: 0;
+}
+
+.tr-code {
+  padding: 0.15rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--muted);
+  user-select: all;
+}
+
+.tr-retry {
+  margin: 0 0 0.6rem;
+  padding: 0.7rem 0.9rem;
+  border-left: 3px solid var(--sem-warning-bd);
+  background: var(--sem-warning);
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+}
+
+.tr-progress {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+}
+
+.tr-slide h2 {
+  margin: 0.2rem 0 0.5rem;
+}
+
+.tr-body {
+  margin: 0 0 1rem;
+  max-width: 68ch;
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+
+.tr-questions {
+  margin: 0 0 1rem;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 1.25rem;
+}
+
+.tr-prompt {
+  margin: 0 0 0.5rem;
+  font-weight: 600;
+}
+
+.tr-options {
+  display: grid;
+  gap: 0.3rem;
+}
+
+/* Alvo de toque confortável: a prova é feita no celular, no chão de loja. */
+.tr-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  min-height: 44px;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.tr-option:has(input:checked) {
+  border-color: var(--primary);
+  background: color-mix(in oklch, var(--primary) 8%, var(--card));
+}
+
+.tr-option input {
+  margin-top: 0.15rem;
+  width: 1.1rem;
+  height: 1.1rem;
+  flex: none;
+}
+
+/* Turmas presenciais e lista de presença. [S4-D] */
+
+.tr-sessions {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.tr-sessions h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.tr-session-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.tr-session-list li {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  font-size: 0.875rem;
+}
+
+.tr-session-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tr-session-notes {
+  white-space: pre-wrap;
+}
+
+.tr-session-form {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 0.9rem 1rem;
+}
+
+.tr-attendance {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.7rem 0.9rem;
+  margin: 0;
+}
+
+.tr-attendance legend {
+  font-size: 0.8rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0 0.3rem;
+}
+
+.tr-attendance-search {
+  width: 100%;
+  margin-bottom: 0.5rem;
+}
+
+.tr-attendance-list {
+  display: grid;
+  gap: 0.3rem;
+  max-height: 16rem;
+  overflow-y: auto;
+}

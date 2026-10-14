@@ -25,5 +25,12 @@ router.post("/api/trainings/:id/start", read, (req, res) =>
 router.post("/api/trainings/:id/complete", read, (req, res) =>
   trainings.complete(req, res),
 );
+/** Turma presencial: registrar a aula dada e quem esteve. [S4-D] */
+router.get("/api/trainings/:id/turmas", read, (req, res) =>
+  trainings.listSessions(req, res),
+);
+router.post("/api/trainings/:id/turmas", writeRh, (req, res) =>
+  trainings.createSession(req, res),
+);
 
 export default router;
