@@ -13,24 +13,34 @@ class NotificationController {
   async list(req: Request, res: Response) {
     try {
       const auth = req as AuthRequest;
-      const rows = await prisma.notification.findMany({
-        where: { userId: actorUserId(auth), organizationId: actorOrgId(auth) },
-        orderBy: [{ readAt: "asc" }, { createdAt: "desc" }],
-        take: 50,
-        select: {
-          id: true,
-          kind: true,
-          title: true,
-          body: true,
-          link: true,
-          readAt: true,
-          createdAt: true,
-        },
-      });
-      res.json({
-        notifications: rows,
-        unread: rows.filter((n) => !n.readAt).length,
-      });
+      const where = {
+        userId: actorUserId(auth),
+        organizationId: actorOrgId(auth),
+      };
+      const [rows, unread] = await Promise.all([
+        prisma.notification.findMany({
+          where,
+          // Não lido primeiro. `asc` sozinho joga NULL para o fim no Postgres:
+          // passando de 50 avisos, o não lido sumia da caixa.
+          orderBy: [
+            { readAt: { sort: "asc", nulls: "first" } },
+            { createdAt: "desc" },
+          ],
+          take: 50,
+          select: {
+            id: true,
+            kind: true,
+            title: true,
+            body: true,
+            link: true,
+            readAt: true,
+            createdAt: true,
+          },
+        }),
+        // O contador é de tudo, não só do que coube na página.
+        prisma.notification.count({ where: { ...where, readAt: null } }),
+      ]);
+      res.json({ notifications: rows, unread });
     } catch (err) {
       fail(res, err);
     }

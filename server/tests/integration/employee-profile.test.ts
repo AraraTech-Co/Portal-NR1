@@ -100,18 +100,28 @@ describe("Employee profiles (RH)", () => {
     expect(list.body.profiles.length).toBeGreaterThanOrEqual(1);
   });
 
-  it("updates and dismisses", async () => {
+  it("updates the profile", async () => {
     const patch = await request(app)
       .patch(`/api/employee-profiles/${profileId}`)
       .set("Authorization", `Bearer ${token}`)
       .send({ phone: "11888887777" });
     expect(patch.status).toBe(200);
     expect(patch.body.profile.phone).toBe("11888887777");
+  });
 
+  // Desligar passou a cortar o acesso na hora: quem registrasse o próprio
+  // desligamento ficaria trancado do lado de fora. Outra pessoa registra. [S5-H]
+  it("ninguém registra o próprio desligamento", async () => {
     const del = await request(app)
       .delete(`/api/employee-profiles/${profileId}`)
       .set("Authorization", `Bearer ${token}`);
-    expect(del.status).toBe(200);
-    expect(del.body.profile.dismissedAt).toBeTruthy();
+    expect(del.status).toBe(400);
+    expect(del.body.message).toMatch(/Outra pessoa/i);
+
+    // E continua entrando.
+    const ainda = await request(app)
+      .post("/api/auth")
+      .send({ login: "admin", password: "admin123" });
+    expect(ainda.status).toBe(200);
   });
 });

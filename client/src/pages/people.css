@@ -1,0 +1,156 @@
+/* Colaboradores e a ficha de cada um. [S5-H] [S6-C] */
+
+.people-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.people-filters .form-field {
+  max-width: 22rem;
+  flex: 1 1 16rem;
+}
+
+.people-check {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.9rem;
+  padding-bottom: 0.5rem;
+}
+
+.data-table tr.is-dismissed td:first-child strong {
+  color: var(--muted-foreground);
+}
+
+.people-back {
+  display: inline-block;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--muted-foreground);
+  text-decoration: none;
+}
+
+.people-back:hover {
+  color: var(--foreground);
+}
+
+.people-dismissed-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.25rem;
+  margin-bottom: 1rem;
+  padding: 0.9rem 1.1rem;
+  border: 1px solid var(--sem-warning-bd);
+  border-left: 3px solid var(--sem-warning-bd);
+  border-radius: var(--radius);
+  background: var(--sem-warning);
+}
+
+.people-dismissed-banner div > div {
+  font-size: 0.875rem;
+}
+
+.people-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+.people-grid .form-section {
+  margin: 0;
+}
+
+.people-facts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.7rem 1.25rem;
+}
+
+.people-facts dt {
+  font-size: 0.7rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+}
+
+.people-facts dd {
+  margin: 0.15rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+.people-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.people-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.people-list li:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.people-list .muted {
+  font-size: 0.8rem;
+}
+
+.people-dismiss-slot {
+  margin-top: 0.9rem;
+}
+
+.people-dismiss {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem;
+}
+
+.people-dismiss p {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.people-history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.people-history li {
+  display: grid;
+  grid-template-columns: 9.5rem 1fr auto;
+  gap: 0.5rem;
+  align-items: baseline;
+  font-size: 0.875rem;
+}
+
+@media (max-width: 640px) {
+  .people-history li {
+    grid-template-columns: 1fr auto;
+  }
+
+  .people-history li > span:first-child {
+    grid-column: 1 / -1;
+    font-size: 0.78rem;
+  }
+}

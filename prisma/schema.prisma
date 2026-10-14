@@ -95,6 +95,7 @@ model User {
   referrals         Referral[]            @relation("ReferralAuthor")
   onboarding        OnboardingProgress[]
   notifications  Notification[]
+  profilesDismissed EmployeeProfile[] @relation("ProfileDismisser")
   serviceOrdersIssued ServiceOrder[]     @relation("ServiceOrderIssuer")
   serviceOrderAcks    ServiceOrderAck[]  @relation("ServiceOrderAckWorker")
 }
@@ -1337,12 +1338,18 @@ model EmployeeProfile {
   jobRoleId      String?
   admittedAt     DateTime?
   dismissedAt    DateTime?
+  /// Por que a pessoa saiu. A fiscalização pergunta, e o RH precisa do
+  /// registro — sem isto o desligamento é só uma data. [S5-H]
+  dismissalReason String?
+  /// Quem registrou o desligamento.
+  dismissedById  String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   jobRole      JobRole?     @relation(fields: [jobRoleId], references: [id])
+  dismissedBy  User?        @relation("ProfileDismisser", fields: [dismissedById], references: [id])
 
   /// Um CPF por empresa (só dígitos). NR-7 7.5.19.1 b.
   @@unique([organizationId, taxId])

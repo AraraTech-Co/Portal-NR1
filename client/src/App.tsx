@@ -15,6 +15,7 @@ import { ConvitePage } from "@/pages/ConvitePage";
 import { DocumentsPage } from "@/pages/DocumentsPage";
 import { DocumentViewPage } from "@/pages/DocumentViewPage";
 import { EmergenciesPage } from "@/pages/EmergenciesPage";
+import { EmployeeFilePage } from "@/pages/EmployeeFilePage";
 import { EmployeesPage } from "@/pages/EmployeesPage";
 import { EthicsPage } from "@/pages/EthicsPage";
 import { EthicsReportDetailPage } from "@/pages/EthicsReportDetailPage";
@@ -110,6 +111,7 @@ function AppRoutes() {
               <Route path="fiscalizacao" element={<InspectionPage />} />
               <Route path="terceiros" element={<ContractorsPage />} />
               <Route path="colaboradores" element={<EmployeesPage />} />
+              <Route path="colaboradores/:id" element={<EmployeeFilePage />} />
               <Route path="documentos-rh" element={<HrDocumentsPage />} />
               <Route path="holerites" element={<PayslipsPage />} />
               <Route path="holerites/:id" element={<PayslipDetailPage />} />
