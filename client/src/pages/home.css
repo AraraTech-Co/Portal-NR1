@@ -1,4 +1,5 @@
 .home-meta {
+  margin-top: 1.75rem;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
   gap: 1rem;
@@ -79,4 +80,147 @@
 .home-unread a {
   color: inherit;
   font-weight: 600;
+}
+
+/* Painel de início: pendências, conformidade e vencimentos. [S1-F] [S5-A] [S6-A] [S6-B] */
+
+.home-block {
+  margin-bottom: 1.5rem;
+}
+
+.home-block h2 {
+  margin: 0 0 0.6rem;
+  font-size: 1.05rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.home-block-link {
+  font-size: 0.8rem;
+  font-weight: 400;
+}
+
+.home-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
+  gap: 0.6rem;
+}
+
+.home-cards a {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  height: 100%;
+  padding: 0.8rem 0.95rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.15s ease;
+}
+
+.home-cards a:hover {
+  border-color: var(--primary);
+}
+
+.home-cards li.is-warning a {
+  border-left-color: var(--sem-warning-bd);
+}
+
+.home-card-count {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  min-width: 2ch;
+  text-align: right;
+}
+
+.home-cards li.is-warning .home-card-count {
+  color: var(--sem-warning-fg);
+}
+
+.home-card-body {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.home-card-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.home-card-detail {
+  font-size: 0.78rem;
+  color: var(--muted-foreground);
+}
+
+.home-steps {
+  margin-bottom: 1.5rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--primary);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+
+.home-steps h2 {
+  margin: 0 0 0.25rem;
+  font-size: 1.05rem;
+}
+
+.home-steps p {
+  margin: 0 0 0.7rem;
+  font-size: 0.85rem;
+}
+
+.home-steps ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.home-steps li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  font-size: 0.9rem;
+}
+
+.home-step-mark {
+  color: var(--muted-foreground);
+  font-weight: 700;
+}
+
+.home-steps li.is-done .home-step-mark {
+  color: var(--sem-success-fg);
+}
+
+.home-steps li.is-done span:last-child {
+  color: var(--muted-foreground);
+}
+
+.home-ok {
+  margin-bottom: 1.5rem;
+  padding: 0.9rem 1.1rem;
+  border: 1px solid var(--sem-success-bd);
+  border-left: 3px solid var(--sem-success-bd);
+  border-radius: var(--radius);
+  background: var(--sem-success);
+}
+
+.home-ok p {
+  margin: 0.2rem 0 0;
+  font-size: 0.875rem;
 }
