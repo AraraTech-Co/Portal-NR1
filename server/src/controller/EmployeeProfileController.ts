@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { Prisma, Role } from "@prisma/client";
+import { Prisma, Role, WorkerBond } from "@prisma/client";
 import prisma from "../model/prisma";
 import { EmployeeProfile } from "../model/schema/EmployeeProfile/EmployeeProfile";
 import { JobRole } from "../model/schema/JobRole/JobRole";
@@ -127,6 +127,7 @@ class EmployeeProfileController {
         include: {
           user: { select: { id: true, name: true, login: true, email: true } },
           jobRole: { select: { id: true, name: true } },
+          contractor: { select: { id: true, name: true } },
         },
       });
       res.json({ profiles: rows.map((p) => forViewer(auth, p)) });
@@ -179,6 +180,7 @@ class EmployeeProfileController {
         include: {
           user: { select: { id: true, name: true, login: true, email: true, active: true } },
           dismissedBy: { select: { id: true, name: true } },
+          contractor: { select: { id: true, name: true, taxId: true, relation: true } },
           jobRole: {
             select: {
               id: true,
@@ -504,6 +506,40 @@ class EmployeeProfileController {
         taxId = cpfDoColaborador(body.tax_id);
       }
 
+      // Vínculo e empresa contratada andam juntos: empregado não pertence a
+      // contratada, e terceirizado sem empresa deixa a lacuna à mostra. [S1-G]
+      const bond =
+        body.bond !== undefined ? (String(body.bond) as WorkerBond) : undefined;
+      if (bond !== undefined && !Object.values(WorkerBond).includes(bond)) {
+        res.status(400).json({
+          message: `Vínculo inválido. Use: ${Object.values(WorkerBond).join(", ")}.`,
+        });
+        return;
+      }
+      const contractorId =
+        body.contractor_id !== undefined
+          ? blank(body.contractor_id as string)
+          : undefined;
+      if (contractorId) {
+        const contratada = await prisma.contractor.findFirst({
+          where: { id: contractorId, organizationId: orgId, archivedAt: null },
+          select: { id: true },
+        });
+        if (!contratada) {
+          res.status(400).json({ message: "Empresa contratada inválida." });
+          return;
+        }
+      }
+      const vinculoFinal = bond ?? current.bond;
+      const contratadaFinal =
+        contractorId !== undefined ? contractorId : current.contractorId;
+      if (contratadaFinal && vinculoFinal === WorkerBond.EMPLOYEE) {
+        res.status(400).json({
+          message: "Empregado não pertence a empresa contratada — mude o vínculo antes.",
+        });
+        return;
+      }
+
       const profile = await new EmployeeProfile().update.one(
         { id: current.id, organizationId: orgId },
         {
@@ -517,6 +553,8 @@ class EmployeeProfileController {
           ...(body.job_role_id !== undefined
             ? { jobRoleId: (body.job_role_id as string) || null }
             : {}),
+          ...(bond !== undefined ? { bond } : {}),
+          ...(contractorId !== undefined ? { contractorId } : {}),
           ...(body.admitted_at !== undefined
             ? {
                 admittedAt: body.admitted_at

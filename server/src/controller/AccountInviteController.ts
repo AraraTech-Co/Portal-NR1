@@ -3,6 +3,10 @@ import bcrypt from "bcryptjs";
 import { AccountRole, InviteRoleMode, Role } from "@prisma/client";
 import { Request, Response } from "express";
 import prisma from "../model/prisma";
+import {
+  allocateUniqueLogin,
+  loginCandidateFromEmail,
+} from "../helper/login-name";
 import { writeAudit } from "../helper/audit";
 import {
   accountRoleToOrgRole,
@@ -28,25 +32,6 @@ function blank(v?: string | null) {
 
 function httpError(status: number, message: string): Error {
   return Object.assign(new Error(message), { status });
-}
-
-function loginCandidateFromEmail(email: string): string {
-  const local = email.split("@")[0]?.toLowerCase().replace(/[^a-z0-9._-]/g, "") ||
-    "user";
-  return local.slice(0, 40) || "user";
-}
-
-async function allocateUniqueLogin(
-  base: string,
-  tx: { user: { findUnique: (args: { where: { login: string } }) => Promise<{ id: string } | null> } },
-): Promise<string> {
-  let candidate = base;
-  for (let i = 0; i < 50; i++) {
-    const exists = await tx.user.findUnique({ where: { login: candidate } });
-    if (!exists) return candidate;
-    candidate = `${base}-${i + 2}`;
-  }
-  return `${base}-${Date.now().toString(36)}`;
 }
 
 function serializeLink(link: {
