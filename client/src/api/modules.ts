@@ -216,7 +216,9 @@ export const fetchTrainings = () =>
       id: string;
       title: string;
       category: string;
+      kind: string;
       durationMinutes: number;
+      passingScore: number;
       archivedAt: string | null;
       _count?: { enrollments: number };
     }>;

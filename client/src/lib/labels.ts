@@ -142,6 +142,8 @@ export const ENROLLMENT_STATUS_LABEL: Record<string, string> = {
   PENDING: "Inscrito",
   IN_PROGRESS: "Em andamento",
   COMPLETED: "Concluído",
+  /// Fez a prova e não alcançou a nota mínima — pode refazer. [S4-K]
+  FAILED: "Não passou",
 };
 
 export const CERTIFICATE_STATUS_LABEL: Record<string, string> = {

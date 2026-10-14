@@ -44,6 +44,7 @@ import { ServiceOrderViewPage } from "@/pages/ServiceOrderViewPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { SummonsPage } from "@/pages/SummonsPage";
 import { TimeEntriesPage } from "@/pages/TimeEntriesPage";
+import { TrainingPage } from "@/pages/TrainingPage";
 import { TrainingsPage } from "@/pages/TrainingsPage";
 import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 
@@ -122,6 +123,7 @@ function AppRoutes() {
               <Route path="saude" element={<HealthPage />} />
               <Route path="atestados" element={<MedicalCertificatesPage />} />
               <Route path="treinamentos" element={<TrainingsPage />} />
+              <Route path="treinamentos/:id" element={<TrainingPage />} />
               <Route path="participacao" element={<ParticipationsPage />} />
               <Route path="denuncia" element={<EthicsReportPage />} />
               <Route path="comite" element={<EthicsPage />} />
