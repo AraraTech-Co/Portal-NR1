@@ -19,6 +19,9 @@ export type ActionRow = {
   effectivenessResult?: string | null;
   rejectionReason?: string | null;
   validatedAt?: string | null;
+  /** Quem validou a conclusão — a prova de que não foi quem executou. [B2-4-D] */
+  validatedBy?: { id: string; name: string } | null;
+  assignee?: { id: string; name: string } | null;
   createdAt: string;
   updatedAt: string;
 };

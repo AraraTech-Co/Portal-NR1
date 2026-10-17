@@ -10,6 +10,7 @@ import {
 } from "@/api/inspection";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
+import { RISK_LEVEL_LABEL } from "@/lib/labels";
 import { LoadingState } from "@/components/LoadingState";
 import { PageHeader } from "@/components/PageHeader";
 import "@/components/form.css";
@@ -25,6 +26,30 @@ function formatCnpj(value: string | null): string | null {
   const digits = value?.replace(/\D/g, "") ?? "";
   if (digits.length !== 14) return value;
   return digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5");
+}
+
+/**
+ * Cor por nível do risco. Um risco Substancial com a documentação em dia
+ * aparecia com o mesmo ✓ de um Trivial; quem não é da área lia como "sob
+ * controle". [B2-1-K]
+ */
+function riskTone(
+  level: string,
+):
+  | "risk-trivial"
+  | "risk-tolerable"
+  | "risk-moderate"
+  | "risk-substantial"
+  | "risk-intolerable"
+  | "neutral" {
+  const mapa = {
+    TRIVIAL: "risk-trivial",
+    TOLERABLE: "risk-tolerable",
+    MODERATE: "risk-moderate",
+    SUBSTANTIAL: "risk-substantial",
+    INTOLERABLE: "risk-intolerable",
+  } as const;
+  return mapa[level as keyof typeof mapa] ?? "neutral";
 }
 
 function CheckCard({ check }: { check: InspectionCheck }) {
@@ -64,7 +89,17 @@ function CheckCard({ check }: { check: InspectionCheck }) {
                   {item.ok ? "✓" : "!"}
                 </span>
                 <div className="insp-item-body">
-                  <span className="insp-label">{item.label}</span>
+                  <span className="insp-label">
+                    {item.label}
+                    {item.level && (
+                      <>
+                        {" "}
+                        <Chip tone={riskTone(item.level)}>
+                          {RISK_LEVEL_LABEL[item.level] ?? item.level}
+                        </Chip>
+                      </>
+                    )}
+                  </span>
                   {item.detail && <span className="insp-detail">{item.detail}</span>}
                   {(item.who || item.when) && (
                     <span className="insp-who">

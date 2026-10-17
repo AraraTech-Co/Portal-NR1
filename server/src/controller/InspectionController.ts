@@ -36,6 +36,11 @@ type Item = {
   who?: string | null;
   when?: string | null;
   link?: string | null;
+  /// Nível do risco, para a tela dar cor e legenda: documentação em dia não
+  /// é a mesma coisa que risco sob controle. [B2-1-K]
+  level?: string | null;
+  /// Pendência que não é da empresa (função sem ninguém, por exemplo).
+  note?: string | null;
 };
 
 type Check = {
@@ -47,6 +52,19 @@ type Check = {
   summary: string;
   items: Item[];
 };
+
+/** As mesmas ações que envelhecem um documento emitido. [B2-4-A] */
+const MUDA_O_PGR = [
+  "hazard.",
+  "risk.",
+  "assessment.",
+  "control.",
+  "action.",
+  "activity.",
+  "sector.",
+  "establishment.",
+  "change_event.",
+];
 
 const DOC_LABEL: Record<string, string> = {
   INVENTORY: "Inventário de riscos",
@@ -323,6 +341,19 @@ class InspectionController {
         const atual = porTipo.get(d.type);
         if (!atual || d.version > atual.version) porTipo.set(d.type, d);
       }
+      const mudancasDesde = new Map<string, number>();
+      for (const doc of porTipo.values()) {
+        mudancasDesde.set(
+          doc.id,
+          await prisma.auditEvent.count({
+            where: {
+              organizationId: orgId,
+              createdAt: { gt: doc.issuedAt },
+              OR: MUDA_O_PGR.map((prefixo) => ({ action: { startsWith: prefixo } })),
+            },
+          }),
+        );
+      }
       checks.push(
         check(
           "documentos",
@@ -330,10 +361,20 @@ class InspectionController {
           "NR-1 1.5.7.2: inventário de riscos, plano de ação e critérios, datados e assinados.",
           REQUIRED_PGR_DOCUMENTS.map((tipo) => {
             const doc = porTipo.get(tipo);
+            const mudou = doc ? (mudancasDesde.get(doc.id) ?? 0) : 0;
             return {
-              ok: Boolean(doc),
+              /*
+                Documento emitido não basta: se o inventário andou depois da
+                assinatura, o papel não descreve mais a empresa — e era isso
+                que o painel dava como em ordem. [B2-4-A]
+              */
+              ok: Boolean(doc) && mudou === 0,
               label: DOC_LABEL[tipo] ?? tipo,
-              detail: doc ? `v${doc.version}` : "nunca emitido",
+              detail: !doc
+                ? "nunca emitido"
+                : mudou > 0
+                  ? `v${doc.version} · desatualizado: ${mudou} mudança(s) depois da emissão`
+                  : `v${doc.version}`,
               who: doc ? `${doc.responsibleName} (emitido por ${doc.issuedBy.name})` : null,
               when: quando(doc?.issuedAt),
               link: doc ? `/documentos/${doc.id}` : "/documentos",
@@ -353,16 +394,19 @@ class InspectionController {
               ok: Boolean(org.responsibleName),
               label: "Nome do responsável",
               detail: org.responsibleName ?? "não cadastrado",
+              link: "/configuracoes",
             },
             {
               ok: Boolean(org.responsibleRole),
               label: "Cargo ou função",
               detail: org.responsibleRole ?? "não cadastrado",
+              link: "/configuracoes",
             },
             {
               ok: Boolean(org.responsibleRegistration),
               label: "Registro profissional",
               detail: org.responsibleRegistration ?? "não cadastrado",
+              link: "/configuracoes",
             },
           ],
         ),
@@ -403,6 +447,7 @@ class InspectionController {
         if (avaliacao.expiresAt && avaliacao.expiresAt < agora) {
           inventario.push({
             ok: false,
+            level: avaliacao.resultingLevel,
             label: `Avaliação vencida: ${r.description}`,
             detail: `${onde} · venceu em ${quando(avaliacao.expiresAt)}`,
             who: `avaliado por ${avaliacao.assessor.name}, validado por ${avaliacao.validatedBy?.name ?? "—"}`,
@@ -414,6 +459,7 @@ class InspectionController {
         if (r.needsReassessment) {
           inventario.push({
             ok: false,
+            level: avaliacao.resultingLevel,
             label: `Risco marcado para reavaliar: ${r.description}`,
             detail: r.reassessmentReason ?? onde,
             link: "/inventario",
@@ -423,7 +469,8 @@ class InspectionController {
         inventario.push({
           ok: true,
           label: r.description,
-          detail: `${onde} · nível ${avaliacao.resultingLevel} · ${r._count.controls} medida(s)`,
+          level: avaliacao.resultingLevel,
+          detail: `${onde} · ${r._count.controls} medida(s)`,
           who: `avaliado por ${avaliacao.assessor.name}, validado por ${avaliacao.validatedBy?.name ?? "—"}`,
           when: quando(avaliacao.validatedAt),
           link: "/inventario",
@@ -482,17 +529,30 @@ class InspectionController {
       // 5. Ordem de serviço e a ciência (1.4.1 "b"). [S7-F]
       const ordens: Item[] = funcoes.map((f) => {
         const vigente = f.serviceOrders[0];
+        const pessoas = f._count.employees;
         const pendentes = vigente
-          ? Math.max(f._count.employees - vigente._count.acks, 0)
-          : f._count.employees;
+          ? Math.max(pessoas - vigente._count.acks, 0)
+          : pessoas;
+        /*
+          Função sem ninguém não pede ordem de serviço agora, e dizer "todos
+          deram ciência" sugere que alguém leu. Misturar função vazia com
+          função onde há gente trabalhando sem ordem esconde do fiscal o que
+          importa. [B2-4-B]
+        */
+        const vazia = pessoas === 0;
         return {
-          ok: Boolean(vigente) && pendentes === 0,
+          ok: vazia || (Boolean(vigente) && pendentes === 0),
           label: f.name,
-          detail: vigente
-            ? pendentes === 0
-              ? `v${vigente.version} · todos deram ciência`
-              : `v${vigente.version} · ${pendentes} sem ciência`
-            : "sem ordem de serviço emitida",
+          note: vazia ? "ninguém nesta função" : null,
+          detail: vazia
+            ? vigente
+              ? `v${vigente.version} · ninguém nesta função`
+              : "ninguém nesta função — a ordem entra quando houver gente"
+            : vigente
+              ? pendentes === 0
+                ? `v${vigente.version} · todos deram ciência`
+                : `v${vigente.version} · ${pendentes} sem ciência`
+              : `${pessoas} pessoa(s) trabalhando sem ordem de serviço`,
           who: vigente ? vigente.issuedBy.name : null,
           when: quando(vigente?.issuedAt),
           link: vigente ? `/ordens-servico/${vigente.id}` : "/ordens-servico",
@@ -625,13 +685,36 @@ class InspectionController {
           link: "/saude",
         });
       }
+      /*
+        Sem exigência por função cadastrada, o cartão dizia "Sem registro"
+        mesmo com curso dado e turma realizada — o fiscal lia como falta o
+        que estava feito. Enquanto a exigência por função não tem tela, o
+        cartão conta o que existe em Treinamentos e diz o que falta. [B2-4-C]
+      */
+      const [cursos, turmas, concluidos] = await Promise.all([
+        prisma.training.count({ where: { organizationId: orgId, archivedAt: null } }),
+        prisma.trainingSession.count({ where: { organizationId: orgId } }),
+        prisma.trainingEnrollment.count({
+          where: { training: { organizationId: orgId }, status: "COMPLETED" },
+        }),
+      ]);
+      if (treinamentos.length === 0 && cursos > 0) {
+        treinamentos.push({
+          ok: true,
+          label: `${cursos} treinamento(s) no portal · ${turmas} turma(s) presencial(is) · ${concluidos} conclusão(ões)`,
+          detail:
+            "Nenhuma exigência por função cadastrada: sem ela o portal não sabe quem precisa de qual treinamento.",
+          link: "/treinamentos",
+        });
+      }
+
       checks.push(
         check(
           "treinamentos",
           "Treinamento e capacitação",
           "NR-1 1.5.5.5: capacitação dos trabalhadores conforme os riscos da função.",
           treinamentos,
-          "Nenhuma exigência cadastrada por função.",
+          "Nenhum treinamento cadastrado e nenhuma exigência por função.",
         ),
       );
 

@@ -225,6 +225,17 @@
   }
 }
 
+/* O papel não diz que envelheceu; a tela diz. [B2-4-A] */
+.doc-outdated {
+  margin: 0;
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--sem-warning-bd);
+  border-left: 3px solid var(--sem-warning-bd);
+  border-radius: var(--radius);
+  background: var(--sem-warning);
+  font-size: 0.9rem;
+}
+
 @media print {
   @page {
     size: A4;
@@ -235,7 +246,8 @@
   .sidebar-desktop,
   .sidebar-drawer,
   .app-topbar,
-  .doc-toolbar {
+  .doc-toolbar,
+  .doc-outdated {
     display: none !important;
   }
 

@@ -24,6 +24,14 @@ export type PgrDocument = {
   responsibleRole: string | null;
   signatureStatement: string;
   establishmentId: string | null;
+  /** De qual unidade é o documento. [S2-E] */
+  establishment?: { id: string; name: string } | null;
+  /** Quantos itens o retrato guarda. [S2-B] */
+  items?: number;
+  is_current?: boolean;
+  /** Mudanças no inventário depois da assinatura. [B2-4-A] */
+  changes_since?: number;
+  outdated?: boolean;
 };
 
 export async function fetchPgrDocuments(type?: string) {
@@ -119,6 +127,7 @@ export type CriteriaContent = {
 };
 
 export type PgrDocumentFull = PgrDocument & {
+  current_version?: number;
   responsibleRegistration: string | null;
   content: unknown;
   issuedBy: { id: string; name: string };

@@ -6,7 +6,7 @@ import { JobRole } from "../model/schema/JobRole/JobRole";
 import { Activity } from "../model/schema/Activity/Activity";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
-import { isValidCnpj, normalizeCnpj } from "../helper/cnpj";
+import { cnpjOrNull } from "../helper/cnpj";
 import type { AuthRequest } from "../types/auth";
 
 function fail(res: Response, err: unknown) {
@@ -19,12 +19,6 @@ function httpError(status: number, message: string) {
 }
 
 /** CNPJ: vazio vira null; preenchido tem de ser válido e fica só com os dígitos. */
-function cnpjOrNull(raw: string | null | undefined): string | null {
-  if (raw === undefined || raw === null || raw.trim() === "") return null;
-  if (!isValidCnpj(raw)) throw httpError(400, "CNPJ inválido — confira os números.");
-  return normalizeCnpj(raw);
-}
-
 function textOrNull(raw: string | null | undefined): string | null {
   return raw && raw.trim() !== "" ? raw.trim() : null;
 }
@@ -41,6 +35,11 @@ async function audit(
   before: unknown,
   after: unknown,
 ) {
+  /*
+    Salvar sem mudar nada não é mudança: registro igual polui o histórico
+    que se mostra ao fiscal e esconde o que de fato aconteceu. [CB-16]
+  */
+  if (before !== null && JSON.stringify(before) === JSON.stringify(after)) return;
   const auth = req as AuthRequest;
   await writeAudit({
     organizationId: actorOrgId(auth),
@@ -86,6 +85,12 @@ class WorkplaceController {
         name: name.trim(),
         taxId: cnpjOrNull(tax_id),
         address: textOrNull(address),
+      });
+      // A data em que a unidade passou a existir é o começo do inventário:
+      // sem ela, o fiscal não tem como ler a linha do tempo. [CB-15]
+      await audit(req, "establishment.create", "Establishment", row.id, null, {
+        name: row.name,
+        taxId: row.taxId,
       });
       res.status(201).json({ establishment: row });
     } catch (err) {
@@ -207,6 +212,7 @@ class WorkplaceController {
         processDescription: process_description ?? null,
         environmentDescription: environment_description ?? null,
       });
+      await audit(req, "sector.create", "Sector", row.id, null, { name: row.name });
       res.status(201).json({ sector: row });
     } catch (err) {
       fail(res, err);
@@ -326,6 +332,7 @@ class WorkplaceController {
         name: name.trim(),
         description: description ?? null,
       });
+      await audit(req, "job_role.create", "JobRole", row.id, null, { name: row.name });
       res.status(201).json({ job_role: row });
     } catch (err) {
       fail(res, err);
@@ -466,6 +473,7 @@ class WorkplaceController {
           });
         }
       }
+      await audit(req, "activity.create", "Activity", row.id, null, { name: row.name });
       res.status(201).json({ activity: row });
     } catch (err) {
       fail(res, err);

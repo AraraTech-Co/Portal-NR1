@@ -5,6 +5,7 @@ import consultaAcessos from "./consulta-acessos.route";
 import pessoas from "./pessoas.route";
 import notificacoes from "./notificacoes.route";
 import inicio from "./inicio.route";
+import organizacao from "./organizacao.route";
 
 const router = Router();
 router.use(invites);
@@ -13,5 +14,6 @@ router.use(consultaAcessos);
 router.use(pessoas);
 router.use(notificacoes);
 router.use(inicio);
+router.use(organizacao);
 
 export default router;

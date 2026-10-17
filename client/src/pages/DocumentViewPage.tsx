@@ -356,6 +356,23 @@ export function DocumentViewPage() {
         </Button>
       </div>
 
+      {doc.outdated && (
+        <p className="doc-outdated" role="status">
+          <strong>Este documento ficou para trás.</strong> O inventário mudou{" "}
+          {doc.changes_since === 1
+            ? "1 vez"
+            : `${doc.changes_since} vezes`}{" "}
+          depois desta emissão. O que está aqui é o retrato de{" "}
+          {formatDateTime(doc.issuedAt)} — para apresentar o estado de hoje,
+          emita uma versão nova.
+        </p>
+      )}
+      {doc.is_current === false && (
+        <p className="doc-outdated" role="status">
+          Esta é a v{doc.version}. A versão vigente é a v{doc.current_version}.
+        </p>
+      )}
+
       <article className="doc-paper">
         <header className="doc-header">
           <p className="doc-kicker">Programa de Gerenciamento de Riscos · NR-1</p>

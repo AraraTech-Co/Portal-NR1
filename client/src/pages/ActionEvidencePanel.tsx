@@ -231,9 +231,14 @@ export function ActionEvidencePanel({ action, userId, canReview, onReviewed }: P
           <strong>Evidência recusada:</strong> {action.rejectionReason}
         </p>
       )}
-      {action.effectivenessResult && action.status === "VALIDATED" && (
+      {action.status === "VALIDATED" && (
         <p className="action-panel-note is-success">
-          <strong>Validada:</strong> {action.effectivenessResult}
+          <strong>
+            Validada
+            {action.validatedBy ? ` por ${action.validatedBy.name}` : ""}
+            {action.validatedAt ? ` em ${formatDay(action.validatedAt)}` : ""}:
+          </strong>{" "}
+          {action.effectivenessResult ?? "sem observação."}
         </p>
       )}
 
