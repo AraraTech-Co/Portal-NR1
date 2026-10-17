@@ -110,8 +110,10 @@ export async function resolveAccountAccess(
     accountId,
   });
 
-  // Prazo vencido (fiscal): o acesso cai na hora, mesmo com sessão aberta.
+  // Prazo vencido (fiscal) ou acesso suspenso (desligamento, decisão do
+  // RH): cai na hora, mesmo com sessão aberta. [CB-9] [CB-44]
   if (orgMembership && accessEnded(orgMembership.accessExpiresAt)) return null;
+  if (orgMembership?.suspendedAt) return null;
 
   const master = isOrgMaster(orgMembership?.role);
   if (!master && !link) return null;

@@ -3,7 +3,7 @@ import { request } from "@/api/client";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
 import { NAV_GROUPS } from "@/layout/nav";
-import { ORG_ROLE_LABEL, PERMISSION_LABEL } from "@/lib/labels";
+import { ACCOUNT_ROLE_LABEL, ORG_ROLE_LABEL, PERMISSION_LABEL } from "@/lib/labels";
 import "@/components/form.css";
 import "./pessoas-acessos.css";
 
@@ -19,21 +19,43 @@ type Person = {
   permission: string;
   modules: Record<string, "read" | "write">;
   access_expires_at: string | null;
+  /** active | dismissed | suspended | expired | inactive [S6-C] [CB-39] */
+  status: string;
+  status_since: string | null;
+  status_by: string | null;
   job_role: string | null;
   registration: string | null;
   can_reset_password: boolean;
   can_change_role: boolean;
+  can_suspend: boolean;
 };
+
+/**
+ * Desligado, suspenso e prazo vencido apareciam todos como "Sem acesso". O
+ * dono não tinha como saber quem saiu da empresa, quem foi bloqueado e quem
+ * só precisa de renovação. [S6-C] [CB-39]
+ */
+const STATUS_LABEL: Record<string, string> = {
+  active: "Ativo",
+  dismissed: "Desligado",
+  suspended: "Acesso suspenso",
+  expired: "Prazo vencido",
+  inactive: "Conta desativada",
+};
+
+function statusTone(status: string): "success" | "neutral" | "warning" {
+  if (status === "active") return "success";
+  if (status === "expired" || status === "suspended") return "warning";
+  return "neutral";
+}
+
+function semAcento(texto: string): string {
+  return texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
 
 type Assignable = { account_roles: string[]; org_roles: string[] };
 
 type Editing = { userId: string; org_role: string; account_role: string | null; access_until: string };
-
-const ACCOUNT_ROLE_LABEL: Record<string, string> = {
-  OWNER: "Owner da conta",
-  ADMIN: "Admin da conta",
-  USER: "Usuário da conta",
-};
 
 /** Hoje + n dias, no fuso de Brasília, em AAAA-MM-DD. */
 function isoInDays(days: number): string {
@@ -85,6 +107,9 @@ export function PessoasEAcessos() {
   const [people, setPeople] = useState<Person[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+  // A lista não tinha busca: o dono procurava nome por nome com Ctrl+F. [B2-1-I] [S6-C]
+  const [busca, setBusca] = useState("");
+  const [soSemAcesso, setSoSemAcesso] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [reset, setReset] = useState<Reset | null>(null);
   const [assignable, setAssignable] = useState<Assignable>({ account_roles: [], org_roles: [] });
@@ -138,6 +163,24 @@ export function PessoasEAcessos() {
     reload().catch((err) => setError(err instanceof Error ? err.message : "Falha ao carregar"));
   }, [reload]);
 
+  /** Suspender e devolver o acesso sem inventar um desligamento. [CB-44] */
+  async function toggleAcesso(p: Person) {
+    const suspender = p.status === "active" || p.status === "expired";
+    setBusyId(p.id);
+    setError(null);
+    try {
+      await request(`/api/pessoas-acessos/${p.id}/acesso`, {
+        method: "POST",
+        body: JSON.stringify({ suspend: suspender }),
+      });
+      await reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao mudar o acesso");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function onReset(p: Person) {
     const ok = window.confirm(
       `Redefinir a senha de ${p.name}?\n\nA sessão aberta dela cai, e no próximo acesso ela entra com uma senha provisória e precisa trocar.`,
@@ -160,6 +203,21 @@ export function PessoasEAcessos() {
     }
   }
 
+  const filtradas = (people ?? []).filter((p) => {
+    if (soSemAcesso && p.status === "active") return false;
+    const termo = semAcento(busca.trim());
+    if (!termo) return true;
+    return [
+      p.name,
+      p.login,
+      p.email ?? "",
+      p.registration ?? "",
+      p.job_role ?? "",
+      PERMISSION_LABEL[p.permission] ?? p.permission,
+      STATUS_LABEL[p.status] ?? "",
+    ].some((campo) => semAcento(campo).includes(termo));
+  });
+
   async function copy() {
     if (!reset) return;
     try {
@@ -181,6 +239,26 @@ export function PessoasEAcessos() {
           {error}
         </p>
       )}
+      {people && people.length > 0 && (
+        <div className="people-filters">
+          <label className="form-field">
+            Buscar
+            <input
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Nome, login, matrícula, função ou papel"
+            />
+          </label>
+          <label className="people-check">
+            <input
+              type="checkbox"
+              checked={soSemAcesso}
+              onChange={(e) => setSoSemAcesso(e.target.checked)}
+            />
+            Só quem está sem acesso
+          </label>
+        </div>
+      )}
       {!error && people === null && <p className="muted">Carregando…</p>}
       {people && (
         <div className="data-table-wrap people-table-wrap">
@@ -194,7 +272,7 @@ export function PessoasEAcessos() {
               </tr>
             </thead>
             <tbody>
-              {people.map((p) => {
+              {filtradas.map((p) => {
                 const open = openId === p.id;
                 const showReset = reset?.userId === p.id;
                 return (
@@ -219,14 +297,21 @@ export function PessoasEAcessos() {
                           )}
                       </td>
                       <td>
-                        {!p.active ? (
-                          <Chip tone="neutral">Sem acesso</Chip>
-                        ) : p.must_change_password ? (
-                          <Chip tone="warning">Precisa trocar a senha</Chip>
-                        ) : (
-                          <Chip tone="success">Ativo</Chip>
+                        <Chip tone={statusTone(p.status)}>
+                          {STATUS_LABEL[p.status] ?? p.status}
+                        </Chip>
+                        {p.status === "active" && p.must_change_password && (
+                          <div className="muted" style={{ marginTop: "0.2rem" }}>
+                            precisa trocar a senha
+                          </div>
                         )}
-                        {p.access_expires_at && (
+                        {p.status !== "active" && p.status_since && (
+                          <div className="muted" style={{ marginTop: "0.2rem" }}>
+                            desde {formatDay(p.status_since)}
+                            {p.status_by ? ` · por ${p.status_by}` : ""}
+                          </div>
+                        )}
+                        {p.status === "active" && p.access_expires_at && (
                           <div className="muted" style={{ marginTop: "0.2rem" }}>
                             acesso até {formatDay(p.access_expires_at)}
                           </div>
@@ -242,6 +327,16 @@ export function PessoasEAcessos() {
                           >
                             {open ? "Fechar acessos" : "Ver acessos"}
                           </Button>
+                          {p.can_suspend && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              disabled={busyId === p.id}
+                              onClick={() => void toggleAcesso(p)}
+                            >
+                              {p.status === "suspended" ? "Devolver acesso" : "Suspender acesso"}
+                            </Button>
+                          )}
                           {p.can_change_role && (
                             <Button
                               type="button"

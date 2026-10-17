@@ -20,7 +20,7 @@ import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
-import { formatDay, ORG_ROLE_LABEL } from "@/lib/labels";
+import { ACCOUNT_ROLE_LABEL, formatDay, ORG_ROLE_LABEL } from "@/lib/labels";
 import "@/components/data-table.css";
 import "@/components/form.css";
 import { LoadingState } from "@/components/LoadingState";
@@ -40,6 +40,23 @@ function defaultFiscalUntil(): string {
 
 function inviteUrl(path: string): string {
   return `${window.location.origin}${path}`;
+}
+
+/** USER < ADMIN < OWNER: o padrão de um convite é o menor. [B2-1-A] */
+function menorPapelDeConta(papeis: string[]): string {
+  const ordem = ["USER", "ADMIN", "OWNER"];
+  for (const p of ordem) if (papeis.includes(p)) return p;
+  return papeis[0] ?? "USER";
+}
+
+function menorPapelNaEmpresa(papeis: string[]): string {
+  if (papeis.includes("COLABORADOR")) return "COLABORADOR";
+  return papeis[0] ?? "COLABORADOR";
+}
+
+/** Papel de conta que dá acesso além do papel na empresa. [B2-1-A] */
+function papelForte(role: string): boolean {
+  return role === "OWNER" || role === "ADMIN";
 }
 
 export function AccountPage() {
@@ -82,12 +99,13 @@ export function AccountPage() {
       setLinks(data.links);
       setAssignable(data.assignable);
       manageOk = true;
-      if (data.assignable.account_roles[0]) {
-        setFixedRole(data.assignable.account_roles[0]);
-      }
-      if (data.assignable.org_roles[0]) {
-        setFixedOrgRole(data.assignable.org_roles[0]);
-      }
+      /*
+        O formulário pegava o primeiro papel da lista, que para o master é
+        OWNER: quem ajustasse só o papel na empresa entregava acesso total da
+        conta a todo mundo que usasse o link. O padrão é o menor. [B2-1-A]
+      */
+      setFixedRole(menorPapelDeConta(data.assignable.account_roles));
+      setFixedOrgRole(menorPapelNaEmpresa(data.assignable.org_roles));
     } catch {
       setLinks([]);
     }
@@ -99,9 +117,9 @@ export function AccountPage() {
       const next: Record<string, { role: string; org_role: string }> = {};
       for (const r of data.requests) {
         next[r.id] = {
-          role: r.suggested_role ?? data.assignable.account_roles[0] ?? "USER",
+          role: r.suggested_role ?? menorPapelDeConta(data.assignable.account_roles),
           org_role:
-            r.suggested_org_role ?? data.assignable.org_roles[0] ?? "COLABORADOR",
+            r.suggested_org_role ?? menorPapelNaEmpresa(data.assignable.org_roles),
         };
       }
       setDecideRoles(next);
@@ -373,7 +391,7 @@ export function AccountPage() {
                             >
                               {assignable.account_roles.map((role) => (
                                 <option key={role} value={role}>
-                                  {role}
+                                  {ACCOUNT_ROLE_LABEL[role] ?? role}
                                 </option>
                               ))}
                             </select>
@@ -502,10 +520,17 @@ export function AccountPage() {
                   >
                     {assignable.account_roles.map((role) => (
                       <option key={role} value={role}>
-                        {role}
+                        {ACCOUNT_ROLE_LABEL[role] ?? role}
                       </option>
                     ))}
                   </select>
+                  {papelForte(fixedRole) && (
+                    <span className="form-hint is-warning">
+                      Atenção: este papel dá acesso total à conta a todas as
+                      pessoas que entrarem por este link, qualquer que seja o
+                      papel na empresa.
+                    </span>
+                  )}
                 </label>
                 <label className="form-field">
                   Papel na organização
@@ -559,7 +584,9 @@ export function AccountPage() {
                       </td>
                       <td className="muted">
                         {link.role_mode === "FIXED"
-                          ? `${link.role} · ${link.org_role}`
+                          ? `${ACCOUNT_ROLE_LABEL[link.role ?? ""] ?? link.role} · ${
+                              ORG_ROLE_LABEL[link.org_role ?? ""] ?? link.org_role
+                            }`
                           : "Na aprovação"}
                       </td>
                       <td className="muted">
@@ -567,10 +594,14 @@ export function AccountPage() {
                         {link.max_uses != null ? ` / ${link.max_uses}` : ""}
                       </td>
                       <td>
-                        {link.active ? (
-                          <Chip tone="success">Ativo</Chip>
+                        {!link.active ? (
+                          <Chip>Desligado</Chip>
+                        ) : link.max_uses != null && link.used_count >= link.max_uses ? (
+                          <Chip tone="neutral">Esgotado</Chip>
+                        ) : link.expires_at && new Date(link.expires_at) < new Date() ? (
+                          <Chip tone="neutral">Vencido</Chip>
                         ) : (
-                          <Chip>Inativo</Chip>
+                          <Chip tone="success">Ativo</Chip>
                         )}
                         {copiedId === link.id ? (
                           <span className="muted"> · Copiado</span>

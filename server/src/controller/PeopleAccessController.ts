@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import { AccountRole, Role } from "@prisma/client";
+import { AccessSuspensionReason, AccountRole, Role } from "@prisma/client";
 import { Request, Response } from "express";
 import prisma from "../model/prisma";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
@@ -36,6 +36,9 @@ class PeopleAccessController {
         select: {
           role: true,
           accessExpiresAt: true,
+          suspendedAt: true,
+          suspensionReason: true,
+          suspendedBy: { select: { id: true, name: true } },
           user: {
             select: {
               id: true,
@@ -51,7 +54,12 @@ class PeopleAccessController {
               employeeProfiles: {
                 where: { organizationId: orgId },
                 take: 1,
-                select: { registration: true, jobRole: { select: { name: true } } },
+                select: {
+                  registration: true,
+                  dismissedAt: true,
+                  dismissedBy: { select: { name: true } },
+                  jobRole: { select: { name: true } },
+                },
               },
             },
           },
@@ -63,12 +71,30 @@ class PeopleAccessController {
           const accountRole = m.user.accountMemberships[0]?.role ?? null;
           const permission = effectivePermission(m.role, accountRole);
           const profile = m.user.employeeProfiles[0] ?? null;
+          /*
+            Desligado, suspenso e prazo vencido apareciam todos como "Sem
+            acesso": o dono não tinha como saber quem saiu, quem foi
+            bloqueado e quem só precisa de renovação. [S6-C] [CB-39]
+          */
+          const situacao = !m.user.active
+            ? "inactive"
+            : m.suspendedAt
+              ? m.suspensionReason === "DISMISSAL"
+                ? "dismissed"
+                : "suspended"
+              : accessEnded(m.accessExpiresAt)
+                ? "expired"
+                : "active";
           return {
             id: m.user.id,
             name: m.user.name,
             login: m.user.login,
             email: m.user.email,
-            active: m.user.active && !accessEnded(m.accessExpiresAt),
+            active: situacao === "active",
+            status: situacao,
+            status_since: m.suspendedAt ?? profile?.dismissedAt ?? m.accessExpiresAt,
+            status_by:
+              m.suspendedBy?.name ?? profile?.dismissedBy?.name ?? null,
             must_change_password: m.user.mustChangePassword,
             org_role: m.role,
             account_role: accountRole,
@@ -79,6 +105,12 @@ class PeopleAccessController {
             registration: profile?.registration ?? null,
             can_reset_password: m.user.id !== actor.userId && canAssignOrgRole(actor, m.role),
             can_change_role: m.user.id !== actor.userId && canAssignOrgRole(actor, m.role),
+            /// Suspender não é desligar: tirar o acesso de quem continua na
+            /// empresa não pode exigir um desligamento inventado. [CB-44]
+            can_suspend:
+              m.user.id !== actor.userId &&
+              canAssignOrgRole(actor, m.role) &&
+              situacao !== "dismissed",
           };
         })
         .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
@@ -89,6 +121,91 @@ class PeopleAccessController {
           account_roles: assignableAccountRoles(actor),
           org_roles: assignableOrgRoles(actor),
         },
+      });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
+  /**
+   * Suspender e devolver o acesso de quem continua na empresa.
+   *
+   * Antes, tirar o acesso de alguém que não é fiscal só se fazia registrando
+   * um desligamento — com data e motivo, como se a pessoa tivesse saído. Ficava
+   * no histórico uma saída que não aconteceu. [CB-44] [S6-C]
+   */
+  async setAccess(req: Request, res: Response) {
+    try {
+      const auth = req as AuthRequest;
+      const actor = auth.actor!;
+      const orgId = actorOrgId(auth);
+      const targetId = req.params.userId;
+      const { suspend, reason } = req.body as { suspend?: boolean; reason?: string };
+
+      if (typeof suspend !== "boolean") {
+        res.status(400).json({ message: "Informe suspend: true ou false." });
+        return;
+      }
+      if (targetId === actorUserId(auth)) {
+        res.status(400).json({ message: "Você não pode suspender o seu próprio acesso." });
+        return;
+      }
+
+      const membership = await prisma.membership.findFirst({
+        where: { organizationId: orgId, userId: targetId },
+        select: { id: true, role: true, suspendedAt: true, suspensionReason: true },
+      });
+      if (!membership) {
+        res.status(404).json({ message: "Pessoa não encontrada nesta organização." });
+        return;
+      }
+      if (!canAssignOrgRole(actor, membership.role)) {
+        res.status(403).json({
+          message: "Você só pode mexer no acesso de quem está abaixo do seu.",
+        });
+        return;
+      }
+      /*
+        Quem saiu da empresa volta pela ficha, com "reverter desligamento":
+        devolver o acesso por aqui deixaria a ficha dizendo que a pessoa foi
+        desligada e o portal deixando ela entrar. [S5-H]
+      */
+      if (membership.suspensionReason === "DISMISSAL") {
+        res.status(409).json({
+          message:
+            "Esta pessoa foi desligada. Para devolver o acesso, reverta o desligamento na ficha dela.",
+        });
+        return;
+      }
+
+      const updated = await prisma.$transaction(async (tx) => {
+        const row = await tx.membership.update({
+          where: { id: membership.id },
+          data: suspend
+            ? {
+                suspendedAt: new Date(),
+                suspensionReason: AccessSuspensionReason.MANUAL,
+                suspendedById: actor.userId,
+              }
+            : { suspendedAt: null, suspensionReason: null, suspendedById: null },
+        });
+        // Suspensão derruba a sessão aberta na hora.
+        if (suspend) await tx.token.deleteMany({ where: { userId: targetId } });
+        return row;
+      });
+
+      await writeAudit({
+        organizationId: orgId,
+        actorId: actor.userId,
+        action: suspend ? "membership.suspend" : "membership.restore",
+        entityType: "User",
+        entityId: targetId,
+        after: { reason: reason?.trim() || null },
+      });
+
+      res.json({
+        ok: true,
+        suspended: Boolean(updated.suspendedAt),
       });
     } catch (err) {
       fail(res, err);

@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { Prisma, Role, WorkerBond } from "@prisma/client";
+import { AccessSuspensionReason, Prisma, WorkerBond } from "@prisma/client";
 import prisma from "../model/prisma";
 import { EmployeeProfile } from "../model/schema/EmployeeProfile/EmployeeProfile";
 import { JobRole } from "../model/schema/JobRole/JobRole";
@@ -214,7 +214,12 @@ class EmployeeProfileController {
         await Promise.all([
           prisma.membership.findFirst({
             where: { userId: profile.userId, organizationId: orgId },
-            select: { role: true, accessExpiresAt: true },
+            select: {
+              role: true,
+              accessExpiresAt: true,
+              suspendedAt: true,
+              suspensionReason: true,
+            },
           }),
           profile.jobRoleId
             ? prisma.jobRoleRequirement.findMany({
@@ -298,8 +303,11 @@ class EmployeeProfileController {
           ? {
               role: membership.role,
               access_expires_at: membership.accessExpiresAt,
+              suspended_at: membership.suspendedAt,
+              suspension_reason: membership.suspensionReason,
               access_active:
                 profile.user.active &&
+                !membership.suspendedAt &&
                 !(membership.accessExpiresAt && membership.accessExpiresAt <= agora),
             }
           : null,
@@ -644,10 +652,18 @@ class EmployeeProfileController {
           },
         });
 
-        // Acesso encerrado agora: o prazo vencido derruba até sessão aberta.
+        /*
+          O corte do desligamento tem campo próprio: antes ia no mesmo
+          `accessExpiresAt` do prazo do fiscal, e as duas coisas apareciam
+          iguais na tela e na recusa de entrada. [CB-39]
+        */
         await tx.membership.updateMany({
           where: { userId: current.userId, organizationId: orgId },
-          data: { accessExpiresAt: agora },
+          data: {
+            suspendedAt: agora,
+            suspensionReason: AccessSuspensionReason.DISMISSAL,
+            suspendedById: actorId,
+          },
         });
         await tx.token.deleteMany({ where: { userId: current.userId } });
 
@@ -695,15 +711,15 @@ class EmployeeProfileController {
             jobRole: { select: { id: true, name: true } },
           },
         });
-        // O prazo do fiscal não é desligamento: só devolve acesso a quem
-        // perdeu por este caminho.
+        // Devolve só o que o desligamento tirou: suspensão manual e prazo
+        // do fiscal continuam de pé.
         await tx.membership.updateMany({
           where: {
             userId: current.userId,
             organizationId: orgId,
-            role: { not: Role.FISCAL },
+            suspensionReason: AccessSuspensionReason.DISMISSAL,
           },
-          data: { accessExpiresAt: null },
+          data: { suspendedAt: null, suspensionReason: null, suspendedById: null },
         });
         return updated;
       });

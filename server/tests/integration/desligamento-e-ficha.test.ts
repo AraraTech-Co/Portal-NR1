@@ -97,9 +97,10 @@ describe("desligamento registrado corta o acesso [S5-H]", () => {
     // Sessão que já estava aberta não sobrevive.
     expect((await request(app).get("/api/auth").set(as(sessao))).status).toBe(401);
     // E não entra de novo — com recado, sem dizer que foi desligamento.
+    // A recusa passou a dizer o que é: desligamento não se "renova". [CB-39]
     const tentativa = await entrar(p.login);
     expect(tentativa.status).toBe(403);
-    expect(tentativa.body.code).toBe("ACCESS_ENDED");
+    expect(tentativa.body.code).toBe("ACCESS_DISMISSED");
   });
 
   it("não aceita desligamento no futuro nem antes da admissão", async () => {
@@ -142,26 +143,33 @@ describe("desligamento registrado corta o acesso [S5-H]", () => {
     expect((await entrar(p.login)).status).toBe(200);
   });
 
-  it("reverter não dá acesso permanente a quem só entra com prazo", async () => {
+  it("reverter devolve o acesso sem mexer no prazo de quem só entra com prazo", async () => {
     const p = await novaPessoa("eva", Role.FISCAL);
+    const ate = new Date(Date.now() + 10 * 24 * 3_600_000);
     await prisma.membership.updateMany({
       where: { userId: p.userId, organizationId: ORG_ID },
-      data: { accessExpiresAt: new Date(Date.now() + 10 * 24 * 3_600_000) },
+      data: { accessExpiresAt: ate },
     });
 
     await desligar(rh.token, p.profileId);
+    expect((await entrar(p.login)).status).toBe(403);
+
     await request(app)
       .post(`/api/employee-profiles/${p.profileId}/reverter-desligamento`)
       .set(as(rh.token));
 
+    /*
+      O desligamento passou a ter campo próprio: reverter solta a suspensão e
+      o prazo do fiscal continua de pé, intacto. Antes os dois dividiam o
+      mesmo campo e o fiscal ficava trancado para sempre. [CB-39]
+    */
     const membership = await prisma.membership.findFirst({
       where: { userId: p.userId, organizationId: ORG_ID },
-      select: { accessExpiresAt: true },
+      select: { accessExpiresAt: true, suspendedAt: true },
     });
-    // O fiscal não volta por aqui: o prazo dele se renova na tela de acessos.
-    expect(membership?.accessExpiresAt).toBeTruthy();
-    expect(membership!.accessExpiresAt!.getTime()).toBeLessThanOrEqual(Date.now());
-    expect((await entrar(p.login)).status).toBe(403);
+    expect(membership?.suspendedAt).toBeNull();
+    expect(membership?.accessExpiresAt?.getTime()).toBe(ate.getTime());
+    expect((await entrar(p.login)).status).toBe(200);
   });
 
   it("quem não cuida de colaboradores não desliga ninguém", async () => {

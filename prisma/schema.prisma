@@ -96,6 +96,7 @@ model User {
   onboarding        OnboardingProgress[]
   notifications  Notification[]
   profilesDismissed EmployeeProfile[] @relation("ProfileDismisser")
+  membershipsSuspended Membership[]   @relation("MembershipSuspender")
   trainingSessionsRecorded TrainingSession[]   @relation("SessionRecorder")
   trainingAttendances      TrainingAttendance[] @relation("AttendanceWorker")
   serviceOrdersIssued ServiceOrder[]     @relation("ServiceOrderIssuer")
@@ -193,6 +194,15 @@ model Organization {
 
 /// Vínculo pessoa <-> organização. Modelado N:N desde já (consultor multi-org),
 /// mesmo que a UI do MVP trabalhe com uma organização ativa por vez.
+/// Por que a pessoa perdeu o acesso. Desligamento, suspensão e prazo vencido
+/// pareciam a mesma coisa na tela ("Sem acesso") e na recusa de entrada. [CB-39]
+enum AccessSuspensionReason {
+  /// Saiu da empresa. [S5-H]
+  DISMISSAL
+  /// Decisão de quem cuida de Conta e usuários, sem desligar. [CB-44]
+  MANUAL
+}
+
 model Membership {
   id             String   @id @default(uuid())
   userId         String
@@ -201,11 +211,16 @@ model Membership {
   /// Fim do acesso a esta organização. Passou, o acesso cai na hora, mesmo
   /// com sessão aberta. Obrigatório para o fiscal. [S7-A]
   accessExpiresAt DateTime?
+  /// Acesso cortado agora, com motivo — separado do prazo, que é do fiscal.
+  suspendedAt     DateTime?
+  suspensionReason AccessSuspensionReason?
+  suspendedById   String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  suspendedBy  User?        @relation("MembershipSuspender", fields: [suspendedById], references: [id])
 
   @@unique([userId, organizationId])
   @@index([organizationId, role])
