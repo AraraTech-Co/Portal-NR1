@@ -165,11 +165,18 @@ export function DocumentsPage() {
                       </div>
                     </td>
                     <td>
-                      {latest ? (
-                        <Chip tone="success">Emitido</Chip>
-                      ) : (
-                        <Chip tone="warning">Pendente</Chip>
+                      {!latest && <Chip tone="warning">Pendente</Chip>}
+                      {latest && latest.outdated && (
+                        <>
+                          <Chip tone="warning">Desatualizado</Chip>
+                          <div className="muted">
+                            {latest.changes_since === 1
+                              ? "1 mudança depois da emissão"
+                              : `${latest.changes_since} mudanças depois da emissão`}
+                          </div>
+                        </>
                       )}
+                      {latest && !latest.outdated && <Chip tone="success">Em dia</Chip>}
                     </td>
                     <td className="muted">
                       {latest ? `v${latest.version}` : "—"}
@@ -314,6 +321,7 @@ export function DocumentsPage() {
                 <tr>
                   <th>Tipo</th>
                   <th>Versão</th>
+                  <th>Abrangência</th>
                   <th>Responsável</th>
                   <th>Emitido em</th>
                   <th aria-label="Abrir" />
@@ -323,7 +331,19 @@ export function DocumentsPage() {
                 {documents.map((d) => (
                   <tr key={d.id}>
                     <td>{PGR_TYPE_LABEL[d.type] ?? d.type}</td>
-                    <td>v{d.version}</td>
+                    <td>
+                      v{d.version}
+                      {d.items != null && (
+                        <div className="muted">
+                          {d.items === 1 ? "1 item" : `${d.items} itens`}
+                        </div>
+                      )}
+                    </td>
+                    <td>
+                      {d.establishment?.name ?? (
+                        <span className="muted">toda a organização</span>
+                      )}
+                    </td>
                     <td>
                       {d.responsibleName}
                       {d.responsibleRole ? (

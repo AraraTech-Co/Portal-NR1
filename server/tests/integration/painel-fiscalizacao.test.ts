@@ -101,10 +101,12 @@ describe("o painel não esconde lacuna [S7-B]", () => {
     expect(semPerigo?.ok).toBe(false);
     expect(semPerigo?.link, "o item diz para onde ir").toBeTruthy();
 
+    // Função recém-criada não tem ninguém: a regra mudou na bateria 2 — só
+    // é pendência a função em que há gente trabalhando sem ordem. [B2-4-B]
     const ordens = acha(checks, "ordens_servico");
     const funcao = ordens.items.find((i) => i.label === role.name);
-    expect(funcao?.ok).toBe(false);
-    expect(funcao?.detail).toMatch(/sem ordem de serviço/i);
+    expect(funcao?.ok).toBe(true);
+    expect(funcao?.detail).toMatch(/ninguém nesta função/i);
 
     const aep = acha(checks, "aep");
     expect(aep.items.find((i) => i.label === est.name)?.ok).toBe(false);

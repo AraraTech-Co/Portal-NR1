@@ -225,7 +225,9 @@ export function ServiceOrdersPage() {
   }, []);
 
   const minha = useMemo(() => roles.find((r) => r.is_mine) ?? null, [roles]);
-  const pendentes = roles.filter((r) => !r.current).length;
+  // Função sem ninguém não pede ordem agora: contar como pendência esconde
+  // do dono as funções em que há gente trabalhando sem ordem. [B2-4-B]
+  const pendentes = roles.filter((r) => !r.current && r.people > 0).length;
   const semCiencia = roles.reduce((soma, r) => soma + (r.current?.pending ?? 0), 0);
 
   return (
@@ -349,7 +351,9 @@ export function ServiceOrdersPage() {
                       )}
                     </td>
                     <td>
-                      {r.current ? (
+                      {r.people === 0 ? (
+                        <span className="muted">ninguém nesta função</span>
+                      ) : r.current ? (
                         r.current.pending === 0 ? (
                           <span>
                             {r.current.acknowledged} de {r.people}

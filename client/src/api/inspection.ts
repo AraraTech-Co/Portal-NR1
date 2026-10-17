@@ -7,6 +7,9 @@ export type InspectionItem = {
   who?: string | null;
   when?: string | null;
   link?: string | null;
+  /** Nível do risco: documentação em dia não é risco sob controle. [B2-1-K] */
+  level?: string | null;
+  note?: string | null;
 };
 
 export type InspectionCheck = {
@@ -108,6 +111,15 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   "employee_profile.create": "Ficha de colaborador criada",
   "employee_profile.update": "Ficha de colaborador alterada",
   "employee_profile.dismiss": "Desligamento registrado",
+  "employee_profile.reinstate": "Desligamento revertido",
+  "establishment.create": "Estabelecimento cadastrado",
+  "sector.create": "Setor cadastrado",
+  "job_role.create": "Função cadastrada",
+  "activity.create": "Atividade cadastrada",
+  "organization.update": "Dados da empresa alterados",
+  "session.signin": "Entrou no portal",
+  "training_session.create": "Turma presencial registrada",
+  "people.import": "Pessoas cadastradas por planilha",
   "hr_document.create": "Documento de RH publicado",
   "announcement.create": "Aviso publicado",
   "idea.create": "Ideia registrada",

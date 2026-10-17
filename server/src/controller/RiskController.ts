@@ -687,7 +687,19 @@ class RiskController {
       const riskId = req.query.risk_id as string | undefined;
       const where: Record<string, unknown> = { organizationId: orgId };
       if (riskId) where.riskId = riskId;
-      const rows = await new Action().read.all(where, {}, { createdAt: "desc" });
+      /*
+        "Quem faz não valida" é uma das travas do portal e não aparecia em
+        tela nenhuma: o nome de quem validou estava gravado e nunca era
+        lido. [B2-4-D]
+      */
+      const rows = await prisma.action.findMany({
+        where: where as never,
+        orderBy: { createdAt: "desc" },
+        include: {
+          assignee: { select: { id: true, name: true } },
+          validatedBy: { select: { id: true, name: true } },
+        },
+      });
       res.json({ actions: rows });
     } catch (err) {
       fail(res, err);

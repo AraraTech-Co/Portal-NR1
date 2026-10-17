@@ -1,0 +1,14 @@
+/* Dados da empresa e responsável pelo PGR. [B2-1-M] */
+
+.org-sub {
+  margin: 0.6rem 0 0;
+  font-size: 0.95rem;
+}
+
+.org-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  padding-bottom: 0.6rem;
+}

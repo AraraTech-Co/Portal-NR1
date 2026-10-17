@@ -2,7 +2,9 @@ import { useAuth } from "@/auth/AuthContext";
 import { Chip } from "@/components/Chip";
 import { PageHeader } from "@/components/PageHeader";
 import { PERMISSION_LABEL } from "@/lib/labels";
+import { OrganizationForm } from "./OrganizationForm";
 import "@/components/data-table.css";
+import "./organization.css";
 
 export function SettingsPage() {
   const { user } = useAuth();
@@ -11,8 +13,10 @@ export function SettingsPage() {
     <div>
       <PageHeader
         title="Configurações"
-        description="Contexto da organização e da conta ativa nesta sessão."
+        description="Dados da empresa, responsável pelo PGR e contexto da sessão."
       />
+
+      <OrganizationForm />
       {user && (
         <section className="form-section">
           <h2>Contexto</h2>

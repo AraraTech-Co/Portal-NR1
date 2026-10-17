@@ -102,6 +102,8 @@ async function buildActionPlanSnapshot(
       risk: true,
       control: true,
       evidences: true,
+      assignee: { select: { id: true, name: true } },
+      validatedBy: { select: { id: true, name: true } },
     },
     orderBy: { createdAt: "asc" },
   });
@@ -117,6 +119,10 @@ async function buildActionPlanSnapshot(
       due_date: a.dueDate,
       effectiveness_criteria: a.effectivenessCriteria,
       effectiveness_result: a.effectivenessResult,
+      assignee: a.assignee?.name ?? null,
+      /// A separação "quem faz não valida" precisa aparecer no papel. [B2-4-D]
+      validated_by: a.validatedBy?.name ?? null,
+      validated_at: a.validatedAt,
       risk_id: a.riskId,
       control_id: a.controlId,
       evidence_count: a.evidences.length,
@@ -156,6 +162,46 @@ async function buildCriteriaSnapshot(organizationId: string) {
   };
 }
 
+/**
+ * Ações que mudam o inventário e o plano de ação. Um documento emitido antes
+ * de qualquer uma delas não descreve mais o que a empresa tem hoje. [B2-4-A]
+ */
+const MUDA_O_PGR = [
+  "hazard.",
+  "risk.",
+  "assessment.",
+  "control.",
+  "action.",
+  "activity.",
+  "sector.",
+  "establishment.",
+  "change_event.",
+];
+
+/**
+ * O documento emitido envelhece: o que vale é o retrato do dia da emissão, e
+ * o portal precisa dizer quando o inventário andou depois disso. Sem isso, a
+ * empresa mostra ao fiscal um papel que não corresponde ao que existe. [B2-4-A]
+ */
+async function changesSince(organizationId: string, since: Date): Promise<number> {
+  return prisma.auditEvent.count({
+    where: {
+      organizationId,
+      createdAt: { gt: since },
+      OR: MUDA_O_PGR.map((prefixo) => ({ action: { startsWith: prefixo } })),
+    },
+  });
+}
+
+/** Quantos itens o retrato guarda — é o que diz se o documento saiu vazio. */
+function snapshotSize(type: string, content: unknown): number {
+  const c = (content ?? {}) as Record<string, unknown[]>;
+  if (type === PgrDocumentType.INVENTORY) return c.items?.length ?? 0;
+  if (type === PgrDocumentType.ACTION_PLAN) return c.actions?.length ?? 0;
+  if (type === PgrDocumentType.CRITERIA) return c.methodologies?.length ?? 0;
+  return 0;
+}
+
 class DocumentController {
   /** Inventário vivo (projeção) — não é documento assinado. */
   async getInventory(req: Request, res: Response) {
@@ -179,9 +225,31 @@ class DocumentController {
           ...(type ? { type: type as PgrDocumentType } : {}),
         },
         orderBy: [{ type: "asc" }, { version: "desc" }],
+        include: { establishment: { select: { id: true, name: true } } },
       });
+
+      // Só a versão mais nova de cada tipo precisa do aviso: as anteriores
+      // já foram substituídas de propósito.
+      const vigentes = new Map<string, string>();
+      for (const d of rows) {
+        const chave = `${d.type}|${d.establishmentId ?? ""}`;
+        if (!vigentes.has(chave)) vigentes.set(chave, d.id);
+      }
+      const mudancas = new Map<string, number>();
+      for (const d of rows) {
+        if (vigentes.get(`${d.type}|${d.establishmentId ?? ""}`) === d.id) {
+          mudancas.set(d.id, await changesSince(orgId, d.issuedAt));
+        }
+      }
+
       res.json({
-        documents: rows,
+        documents: rows.map(({ content, ...d }) => ({
+          ...d,
+          items: snapshotSize(d.type, content),
+          is_current: vigentes.get(`${d.type}|${d.establishmentId ?? ""}`) === d.id,
+          changes_since: mudancas.get(d.id) ?? 0,
+          outdated: (mudancas.get(d.id) ?? 0) > 0,
+        })),
         required_types: REQUIRED_PGR_DOCUMENTS,
       });
     } catch (err) {
@@ -208,7 +276,26 @@ class DocumentController {
         res.status(404).json({ message: "Documento não encontrado." });
         return;
       }
-      res.json({ document: doc });
+      const maisNovo = await prisma.pgrDocument.findFirst({
+        where: {
+          organizationId: orgId,
+          type: doc.type,
+          establishmentId: doc.establishmentId,
+        },
+        orderBy: { version: "desc" },
+        select: { id: true, version: true },
+      });
+      const atual = maisNovo?.id === doc.id;
+      const mudancas = atual ? await changesSince(orgId, doc.issuedAt) : 0;
+      res.json({
+        document: {
+          ...doc,
+          is_current: atual,
+          current_version: maisNovo?.version ?? doc.version,
+          changes_since: mudancas,
+          outdated: atual && mudancas > 0,
+        },
+      });
     } catch (err) {
       fail(res, err);
     }
@@ -280,6 +367,27 @@ class DocumentController {
         content = await buildActionPlanSnapshot(orgId, establishment_id);
       } else {
         content = await buildCriteriaSnapshot(orgId);
+      }
+
+      /*
+        Documento vazio assinado é pior que documento nenhum: a obrigação
+        aparece como cumprida e o papel declara que reflete o gerenciamento
+        de riscos da organização. [S2-B] [B2-4-A]
+      */
+      if (snapshotSize(type, content) === 0) {
+        const falta: Record<string, string> = {
+          [PgrDocumentType.INVENTORY]:
+            "Não há nenhum perigo registrado para emitir o inventário. Levante os perigos antes de assinar.",
+          [PgrDocumentType.ACTION_PLAN]:
+            "Não há nenhuma ação para emitir o plano de ação. Abra as ações antes de assinar.",
+          [PgrDocumentType.CRITERIA]:
+            "Não há metodologia de avaliação cadastrada para emitir os critérios.",
+        };
+        res.status(400).json({
+          message: falta[type] ?? "Não há conteúdo para emitir este documento.",
+          code: "EMPTY_DOCUMENT",
+        });
+        return;
       }
 
       const last = await prisma.pgrDocument.findFirst({

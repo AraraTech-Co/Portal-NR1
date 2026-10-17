@@ -1,3 +1,4 @@
+import { Role } from "@prisma/client";
 import { Request, Response } from "express";
 import prisma from "../model/prisma";
 import { actorOrgId } from "../helper/org-scope";
@@ -13,10 +14,21 @@ class OrgMembersController {
   async list(req: Request, res: Response) {
     try {
       const orgId = actorOrgId(req as AuthRequest);
+      /*
+        Quem aparece como responsável por documento ou por ação: gente que
+        trabalha aqui. O fiscal só consulta e não assina nada; o desligado
+        não responde por mais nada. [CB-49] [CB-23]
+      */
       const rows = await prisma.membership.findMany({
         where: {
           organizationId: orgId,
-          user: { active: true },
+          role: { not: Role.FISCAL },
+          user: {
+            active: true,
+            employeeProfiles: {
+              none: { organizationId: orgId, dismissedAt: { not: null } },
+            },
+          },
         },
         include: {
           user: {

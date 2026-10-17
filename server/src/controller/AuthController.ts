@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import prisma from "../model/prisma";
+import { writeAudit } from "../helper/audit";
 import { User } from "../model/schema/User/User";
 import { Token } from "../model/schema/Token/Token";
 import {
@@ -164,6 +165,20 @@ class AuthController {
     const sessionUser = sessionUserFromAccess({
       ...access,
       user: { ...access.user, mustChangePassword: mustChange },
+    });
+
+    /*
+      A entrada no portal ficava fora da trilha: o fiscal aparecia abrindo
+      telas sem nunca ter entrado. Quem entrou e quando é o começo de
+      qualquer histórico de acesso. [OB-5]
+    */
+    await writeAudit({
+      organizationId: access.organizationId,
+      actorId: user.id,
+      action: "session.signin",
+      entityType: "User",
+      entityId: user.id,
+      after: { accountId: access.accountId },
     });
 
     res.json({

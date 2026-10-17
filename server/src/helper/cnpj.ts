@@ -21,3 +21,17 @@ export function isValidCnpj(value: string): boolean {
 
   return checkDigit(12) === digits[12] && checkDigit(13) === digits[13];
 }
+
+/**
+ * CNPJ do formulário: vazio vira nulo, preenchido tem de ser CNPJ de verdade.
+ * Mesma regra para estabelecimento e para a empresa. [B2-1-M]
+ */
+export function cnpjOrNull(raw: string | null | undefined): string | null {
+  if (raw === undefined || raw === null || String(raw).trim() === "") return null;
+  if (!isValidCnpj(String(raw))) {
+    throw Object.assign(new Error("CNPJ inválido — confira os números."), {
+      status: 400,
+    });
+  }
+  return normalizeCnpj(String(raw));
+}
