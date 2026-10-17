@@ -1,8 +1,10 @@
+import { NotificationKind } from "@prisma/client";
 import { Request, Response } from "express";
 import prisma from "../model/prisma";
 import { MedicalCertificate } from "../model/schema/MedicalCertificate/MedicalCertificate";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
+import { notify } from "../helper/notify";
 import { canManageModule } from "../helper/module-access";
 import {
   assertSize,
@@ -198,6 +200,26 @@ class MedicalCertificateController {
         entityType: "MedicalCertificate",
         entityId: current.id,
         after: { status },
+      });
+
+      /*
+        O RH decidia e a pessoa só descobria entrando na tela. Recusa sem
+        aviso é a pior: ela precisa reenviar. [CB-29]
+      */
+      await notify({
+        organizationId: orgId,
+        userId: current.userId,
+        kind: NotificationKind.CERTIFICATE_REVIEWED,
+        title: status === CERTIFICATE_STATUSES.APPROVED
+          ? "Seu atestado foi aceito"
+          : "Seu atestado foi recusado",
+        body:
+          status === CERTIFICATE_STATUSES.REJECTED
+            ? blank(rejection_reason) ?? "Veja o motivo na tela de atestados."
+            : null,
+        link: "/atestados",
+        entityType: "MedicalCertificate",
+        entityId: current.id,
       });
 
       res.json({ certificate: publicCertificate(certificate) });

@@ -195,7 +195,13 @@ export function PayslipsPage() {
             </span>
           ) : r._count.questions > 0 ? (
             <span style={{ marginLeft: "0.35rem" }}>
-              <Chip>{r._count.questions} dúvida(s)</Chip>
+              {/* Dizia só "1 dúvida(s)" em cinza: não dava para saber se
+                  tinha sido respondida. [S5-E] */}
+              <Chip tone="success">
+                {r._count.questions === 1
+                  ? "Dúvida respondida"
+                  : `${r._count.questions} dúvidas respondidas`}
+              </Chip>
             </span>
           ) : null}
         </td>

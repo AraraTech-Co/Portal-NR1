@@ -1,7 +1,9 @@
 import { randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
+import { NotificationKind } from "@prisma/client";
 import { Request, Response } from "express";
 import prisma from "../model/prisma";
+import { notify } from "../helper/notify";
 import { EthicsReport } from "../model/schema/EthicsReport/EthicsReport";
 import { EthicsReportMessage } from "../model/schema/EthicsReportMessage/EthicsReportMessage";
 import { Establishment } from "../model/schema/Establishment/Establishment";
@@ -564,6 +566,24 @@ class EthicsController {
           { id: report.id, organizationId: orgId },
           { status: REPORT_STATUSES.IN_ANALYSIS },
         );
+      }
+
+      /*
+        A pergunta do comitê ficava esperando a pessoa voltar sozinha ao
+        acompanhamento. Relato anônimo não tem a quem avisar, e continua
+        assim: o anonimato é real. [CB-29]
+      */
+      if (report.reporterUserId) {
+        await notify({
+          organizationId: orgId,
+          userId: report.reporterUserId,
+          kind: NotificationKind.ETHICS_MESSAGE,
+          title: "O comitê respondeu a sua denúncia",
+          body: "Abra o acompanhamento para ler e responder.",
+          link: "/denuncia",
+          entityType: "EthicsReport",
+          entityId: report.id,
+        });
       }
 
       res.status(201).json({ message });

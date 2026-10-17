@@ -49,18 +49,45 @@ class NotificationController {
   async markRead(req: Request, res: Response) {
     try {
       const auth = req as AuthRequest;
-      const updated = await prisma.notification.updateMany({
+      const userId = actorUserId(auth);
+      const aviso = await prisma.notification.findFirst({
         where: {
           id: req.params.id,
-          userId: actorUserId(auth),
+          userId,
           organizationId: actorOrgId(auth),
         },
-        data: { readAt: new Date() },
+        select: { id: true, entityType: true, entityId: true },
       });
-      if (updated.count === 0) {
+      if (!aviso) {
         res.status(404).json({ message: "Aviso não encontrado." });
         return;
       }
+      await prisma.notification.update({
+        where: { id: aviso.id },
+        data: { readAt: new Date() },
+      });
+
+      /*
+        O outro lado da mesma pendência: tocar o aviso do mural no sino
+        também o marca como lido no mural. [B2-3-A]
+      */
+      if (aviso.entityType === "Announcement" && aviso.entityId) {
+        await prisma.announcementRead
+          .upsert({
+            where: {
+              announcementId_userId: {
+                announcementId: aviso.entityId,
+                userId,
+              },
+            },
+            create: { announcementId: aviso.entityId, userId },
+            update: {},
+          })
+          .catch(() => {
+            /* aviso apagado não impede marcar a notificação */
+          });
+      }
+
       res.json({ ok: true });
     } catch (err) {
       fail(res, err);
@@ -70,6 +97,32 @@ class NotificationController {
   async markAllRead(req: Request, res: Response) {
     try {
       const auth = req as AuthRequest;
+      const userId = actorUserId(auth);
+      // Marcar tudo como lido no sino também limpa os avisos do mural. [B2-3-A]
+      const avisos = await prisma.notification.findMany({
+        where: {
+          userId,
+          organizationId: actorOrgId(auth),
+          readAt: null,
+          entityType: "Announcement",
+        },
+        select: { entityId: true },
+      });
+      for (const a of avisos) {
+        if (!a.entityId) continue;
+        await prisma.announcementRead
+          .upsert({
+            where: {
+              announcementId_userId: { announcementId: a.entityId, userId },
+            },
+            create: { announcementId: a.entityId, userId },
+            update: {},
+          })
+          .catch(() => {
+            /* aviso apagado não impede marcar a notificação */
+          });
+      }
+
       const updated = await prisma.notification.updateMany({
         where: {
           userId: actorUserId(auth),

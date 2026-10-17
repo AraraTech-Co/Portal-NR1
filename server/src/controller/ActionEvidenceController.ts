@@ -3,9 +3,11 @@ import {
   ControlStatus,
   EvidenceType,
   EvidenceValidationStatus,
+  NotificationKind,
 } from "@prisma/client";
 import { Request, Response } from "express";
 import prisma from "../model/prisma";
+import { notify } from "../helper/notify";
 import { Action } from "../model/schema/Action/Action";
 import { Evidence } from "../model/schema/Evidence/Evidence";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
@@ -239,6 +241,25 @@ class ActionEvidenceController {
           completedAt: new Date(),
         },
       );
+
+      /*
+        Concluir não avisava ninguém: quem valida tinha de descobrir sozinho
+        que havia o que validar. Avisa quem abriu a ação — nunca quem
+        executou, que é justamente quem não pode validar. [S3-A] [CB-19]
+      */
+      if (action.createdById !== actorUserId(req as AuthRequest)) {
+        await notify({
+          organizationId: orgId,
+          userId: action.createdById,
+          kind: NotificationKind.ACTION_WAITING_VALIDATION,
+          title: action.title,
+          body: "A ação foi concluída e espera a sua validação.",
+          link: "/acoes",
+          entityType: "Action",
+          entityId: action.id,
+        });
+      }
+
       res.json({ action: row });
     } catch (err) {
       fail(res, err);
@@ -370,6 +391,26 @@ class ActionEvidenceController {
           },
         });
       });
+
+      // Quem executou precisa saber que foi aprovada — ou que tem de refazer.
+      const executor = executorId(result);
+      if (executor && executor !== userId) {
+        const recusada = decision === "reject";
+        await notify({
+          organizationId: orgId,
+          userId: executor,
+          kind: recusada
+            ? NotificationKind.ACTION_REJECTED
+            : NotificationKind.ACTION_VALIDATED,
+          title: result.title,
+          body: recusada
+            ? `A evidência foi recusada: ${result.rejectionReason ?? "reveja e envie de novo"}.`
+            : "A conclusão da sua ação foi aprovada.",
+          link: "/acoes",
+          entityType: "Action",
+          entityId: result.id,
+        });
+      }
 
       res.json({ action: result });
     } catch (err) {
