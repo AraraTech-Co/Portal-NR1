@@ -210,11 +210,19 @@ class RiskController {
     try {
       const orgId = actorOrgId(req as AuthRequest);
       const hazardId = req.query.hazard_id as string | undefined;
+      const establishmentId = req.query.establishment_id as string | undefined;
       const where: Record<string, unknown> = {
         organizationId: orgId,
         archivedAt: null,
       };
       if (hazardId) where.hazardId = hazardId;
+      /*
+        Escolher um risco sem saber de que unidade ele é foi o que ligou o
+        quase-acidente de uma unidade ao inventário de outra. [S3-D] [S2-F]
+      */
+      if (establishmentId) {
+        where.hazard = { activity: { establishmentId } };
+      }
       const rows = await prisma.risk.findMany({
         where: where as never,
         include: {
@@ -223,10 +231,27 @@ class RiskController {
             orderBy: { validatedAt: "desc" },
             take: 1,
           },
+          hazard: {
+            select: {
+              description: true,
+              activity: {
+                select: {
+                  name: true,
+                  establishment: { select: { id: true, name: true } },
+                },
+              },
+            },
+          },
         },
         orderBy: { createdAt: "desc" },
       });
-      res.json({ risks: rows });
+      res.json({
+        risks: rows.map((r) => ({
+          ...r,
+          establishment: r.hazard.activity.establishment,
+          activity: r.hazard.activity.name,
+        })),
+      });
     } catch (err) {
       fail(res, err);
     }
@@ -685,8 +710,14 @@ class RiskController {
     try {
       const orgId = actorOrgId(req as AuthRequest);
       const riskId = req.query.risk_id as string | undefined;
+      const establishmentId = req.query.establishment_id as string | undefined;
       const where: Record<string, unknown> = { organizationId: orgId };
       if (riskId) where.riskId = riskId;
+      // Plano de ação só filtrava por situação: não dava para ver uma
+      // unidade de cada vez. [S6-D] [CB-24]
+      if (establishmentId) {
+        where.risk = { hazard: { activity: { establishmentId } } };
+      }
       /*
         "Quem faz não valida" é uma das travas do portal e não aparecia em
         tela nenhuma: o nome de quem validou estava gravado e nunca era
@@ -698,9 +729,32 @@ class RiskController {
         include: {
           assignee: { select: { id: true, name: true } },
           validatedBy: { select: { id: true, name: true } },
+          risk: {
+            select: {
+              description: true,
+              hazard: {
+                select: {
+                  activity: {
+                    select: {
+                      name: true,
+                      establishment: { select: { id: true, name: true } },
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
       });
-      res.json({ actions: rows });
+      res.json({
+        actions: rows.map(({ risk, ...a }) => ({
+          ...a,
+          risk_description: risk?.description ?? null,
+          /// O detalhe da ação não dizia de que unidade ela é. [CB-24]
+          establishment: risk?.hazard.activity.establishment ?? null,
+          activity: risk?.hazard.activity.name ?? null,
+        })),
+      });
     } catch (err) {
       fail(res, err);
     }

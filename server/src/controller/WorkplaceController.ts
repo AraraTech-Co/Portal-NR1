@@ -298,8 +298,30 @@ class WorkplaceController {
         archivedAt: null,
       };
       if (sectorId) query.sectorId = sectorId;
-      const rows = await new JobRole().read.all(query, {}, { createdAt: "asc" });
-      res.json({ job_roles: rows });
+      /*
+        A função vem com a unidade: sem isso, a planilha casava pelo nome em
+        toda a empresa e podia ligar a pessoa à unidade errada. [CB-6]
+      */
+      const rows = await prisma.jobRole.findMany({
+        where: query as never,
+        orderBy: { createdAt: "asc" },
+        include: {
+          sector: {
+            select: {
+              id: true,
+              name: true,
+              establishment: { select: { id: true, name: true } },
+            },
+          },
+        },
+      });
+      res.json({
+        job_roles: rows.map((r) => ({
+          ...r,
+          sector_name: r.sector.name,
+          establishment: r.sector.establishment,
+        })),
+      });
     } catch (err) {
       fail(res, err);
     }

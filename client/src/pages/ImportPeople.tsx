@@ -13,12 +13,15 @@ import "@/components/data-table.css";
 import "@/components/form.css";
 import "./import-people.css";
 
-const EXEMPLO = `nome;matricula;cpf;email;funcao;admissao;vinculo;empresa
-Maria de Souza;1023;529.982.247-25;maria@empresa.com.br;Torneiro;2025-03-10;Empregado;
-João Pereira;1024;;;Ajudante;2025-04-01;Terceirizado;Limpeza Industrial Ltda`;
+const EXEMPLO = `nome;matricula;cpf;email;funcao;unidade;admissao;vinculo;empresa
+Maria de Souza;1023;529.982.247-25;maria@empresa.com.br;Torneiro;Matriz;2025-03-10;Empregado;
+João Pereira;1024;;;Ajudante;Matriz;2025-04-01;Terceirizado;Limpeza Industrial Ltda`;
 
 /** Cabeçalhos aceitos, com e sem acento, para a planilha colada. */
-const COLUNAS: Record<string, keyof ImportRow> = {
+/** A unidade não vai para o servidor: serve para achar a função certa. [CB-6] */
+type ImportRowLocal = ImportRow & { establishment?: string };
+
+const COLUNAS: Record<string, keyof ImportRowLocal> = {
   nome: "name",
   name: "name",
   matricula: "registration",
@@ -34,6 +37,9 @@ const COLUNAS: Record<string, keyof ImportRow> = {
   /// Terceirizado sem empresa deixa a lacuna à mostra na ficha. [S1-R] [CB-8]
   empresa: "contractor_id",
   contratada: "contractor_id",
+  /// Desempata função de mesmo nome em duas unidades. [CB-6]
+  unidade: "establishment",
+  estabelecimento: "establishment",
 };
 
 function semAcento(texto: string): string {
@@ -69,9 +75,25 @@ function parse(
   const temCabecalho = cabecalho.some((c) => c in COLUNAS);
   const campos = temCabecalho
     ? cabecalho.map((c) => COLUNAS[c] ?? null)
-    : (["name", "registration", "tax_id", "email", "job_role_id", "admitted_at", "bond"] as (keyof ImportRow)[]);
+    : ([
+        "name",
+        "registration",
+        "tax_id",
+        "email",
+        "job_role_id",
+        "admitted_at",
+        "bond",
+      ] as (keyof ImportRowLocal)[]);
 
-  const porNome = new Map(funcoes.map((f) => [semAcento(f.name), f.id]));
+  /*
+    Função com o mesmo nome em duas unidades casava pela primeira encontrada
+    e ligava a pessoa à unidade errada, sem aviso. [CB-6]
+  */
+  const porNome = new Map<string, JobRole[]>();
+  for (const f of funcoes) {
+    const chave = semAcento(f.name);
+    porNome.set(chave, [...(porNome.get(chave) ?? []), f]);
+  }
   const empresaPorNome = new Map(empresas.map((c) => [semAcento(c.name), c.id]));
   const vinculos = new Map(
     Object.entries(WORKER_BOND_LABEL).map(([codigo, rotulo]) => [semAcento(rotulo), codigo]),
@@ -95,14 +117,36 @@ function parse(
       continue;
     }
     if (row.job_role_id) {
-      const id = porNome.get(semAcento(row.job_role_id));
-      if (!id) {
-        problems.push(`Linha ${numero}: função "${row.job_role_id}" não existe.`);
+      const nomeDaFuncao = row.job_role_id;
+      let candidatas = porNome.get(semAcento(nomeDaFuncao)) ?? [];
+      const unidade = (row as ImportRowLocal).establishment;
+      if (unidade) {
+        candidatas = candidatas.filter(
+          (f) => semAcento(f.establishment?.name ?? "") === semAcento(unidade),
+        );
+      }
+      if (candidatas.length === 0) {
+        problems.push(
+          unidade
+            ? `Linha ${numero}: função "${nomeDaFuncao}" não existe na unidade "${unidade}".`
+            : `Linha ${numero}: função "${nomeDaFuncao}" não existe.`,
+        );
+        delete row.job_role_id;
+      } else if (candidatas.length > 1) {
+        const unidades = [
+          ...new Set(candidatas.map((f) => f.establishment?.name ?? "sem unidade")),
+        ];
+        problems.push(
+          `Linha ${numero}: a função "${nomeDaFuncao}" existe em ${unidades.join(
+            " e ",
+          )}. Acrescente a coluna "unidade" para dizer qual.`,
+        );
         delete row.job_role_id;
       } else {
-        row.job_role_id = id;
+        row.job_role_id = candidatas[0]!.id;
       }
     }
+    delete (row as ImportRowLocal).establishment;
     if (row.bond) {
       const codigo = WORKER_BOND_LABEL[row.bond.toUpperCase()]
         ? row.bond.toUpperCase()
@@ -223,8 +267,8 @@ export function ImportPeople() {
           placeholder={EXEMPLO}
         />
         <span className="form-hint">
-          Colunas: nome; matrícula; CPF; e-mail; função; admissão; vínculo;
-          empresa contratada. Só o nome é obrigatório. Vínculo:{" "}
+          Colunas: nome; matrícula; CPF; e-mail; função; unidade; admissão;
+          vínculo; empresa contratada. Só o nome é obrigatório. Vínculo:{" "}
           {Object.values(WORKER_BOND_LABEL).join(", ")}. A empresa precisa estar
           cadastrada em Terceiros.
         </span>

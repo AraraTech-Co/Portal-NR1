@@ -22,6 +22,10 @@ export type ActionRow = {
   /** Quem validou a conclusão — a prova de que não foi quem executou. [B2-4-D] */
   validatedBy?: { id: string; name: string } | null;
   assignee?: { id: string; name: string } | null;
+  /** De que unidade é a ação, pelo risco a que ela se liga. [S6-D] [CB-24] */
+  establishment?: { id: string; name: string } | null;
+  activity?: string | null;
+  risk_description?: string | null;
   createdAt: string;
   updatedAt: string;
 };

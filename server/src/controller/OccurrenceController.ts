@@ -43,6 +43,41 @@ function ownsOrManages(req: AuthRequest, reportedById: string | null): boolean {
   return reportedById === actorUserId(req);
 }
 
+/**
+ * O risco da ocorrência tem de ser da mesma unidade.
+ *
+ * Antes se conferia só a organização: um quase-acidente de uma unidade podia
+ * ficar ligado ao risco de outra — e, como a análise marca o risco escolhido
+ * para reavaliação, a escolha errada mexia no inventário da outra. [S3-D] [S2-F]
+ */
+async function riskOfEstablishment(
+  organizationId: string,
+  riskId: string,
+  establishmentId: string | null,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const risk = await prisma.risk.findFirst({
+    where: { id: riskId, organizationId, archivedAt: null },
+    select: {
+      hazard: {
+        select: {
+          activity: {
+            select: { establishmentId: true, establishment: { select: { name: true } } },
+          },
+        },
+      },
+    },
+  });
+  if (!risk) return { ok: false, message: "Risco inválido." };
+  if (!establishmentId) return { ok: true };
+  if (risk.hazard.activity.establishmentId !== establishmentId) {
+    return {
+      ok: false,
+      message: `Este risco é de ${risk.hazard.activity.establishment.name}. Escolha um risco da mesma unidade da ocorrência.`,
+    };
+  }
+  return { ok: true };
+}
+
 class OccurrenceController {
   async list(req: Request, res: Response) {
     try {
@@ -150,13 +185,13 @@ class OccurrenceController {
       }
 
       if (risk_id) {
-        const risk = await new Risk().read.one({
-          id: risk_id,
-          organizationId: orgId,
-          archivedAt: null,
-        });
-        if (!risk) {
-          res.status(400).json({ message: "Risco inválido." });
+        const conferido = await riskOfEstablishment(
+          orgId,
+          risk_id,
+          establishment_id ?? null,
+        );
+        if (!conferido.ok) {
+          res.status(400).json({ message: conferido.message });
           return;
         }
       }
@@ -230,13 +265,17 @@ class OccurrenceController {
       }
 
       if (body.risk_id) {
-        const risk = await new Risk().read.one({
-          id: body.risk_id as string,
-          organizationId: orgId,
-          archivedAt: null,
-        });
-        if (!risk) {
-          res.status(400).json({ message: "Risco inválido." });
+        const unidade =
+          body.establishment_id !== undefined
+            ? ((body.establishment_id as string) || null)
+            : current.establishmentId;
+        const conferido = await riskOfEstablishment(
+          orgId,
+          body.risk_id as string,
+          unidade,
+        );
+        if (!conferido.ok) {
+          res.status(400).json({ message: conferido.message });
           return;
         }
       }

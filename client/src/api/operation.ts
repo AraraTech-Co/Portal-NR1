@@ -20,6 +20,9 @@ export type JobRole = {
   sectorId: string;
   name: string;
   description: string | null;
+  /** Para não casar função pelo nome na empresa inteira. [CB-6] */
+  sector_name?: string;
+  establishment?: { id: string; name: string };
 };
 
 export type Activity = {

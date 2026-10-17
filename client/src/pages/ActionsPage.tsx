@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { fetchActions, type ActionRow } from "@/api/actions";
+import { fetchEstablishments, type Establishment } from "@/api/operation";
 import { useAuth } from "@/auth/AuthContext";
 import { Chip } from "@/components/Chip";
 import { EmptyState } from "@/components/EmptyState";
@@ -61,8 +62,17 @@ export function ActionsPage() {
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [highPriority, setHighPriority] = useState(false);
   const [status, setStatus] = useState("");
+  // O plano só filtrava por situação: não dava para ver uma unidade. [S6-D] [CB-24]
+  const [establishmentId, setEstablishmentId] = useState("");
+  const [establishments, setEstablishments] = useState<Establishment[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
   const { canWrite: canReview } = useModuleAccess("acoes");
+
+  useEffect(() => {
+    fetchEstablishments()
+      .then((d) => setEstablishments(d.establishments))
+      .catch(() => setEstablishments([]));
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -112,14 +122,15 @@ export function ActionsPage() {
         return false;
       }
       if (status && a.status !== status) return false;
+      if (establishmentId && a.establishment?.id !== establishmentId) return false;
       return true;
     });
-  }, [actions, mine, overdueOnly, highPriority, status, user]);
+  }, [actions, mine, overdueOnly, highPriority, status, establishmentId, user]);
 
   const overdueCount = filtered.filter((a) =>
     isOverdue(a.dueDate, a.status),
   ).length;
-  const hasFilter = mine || overdueOnly || highPriority || !!status;
+  const hasFilter = mine || overdueOnly || highPriority || !!status || !!establishmentId;
 
   return (
     <div>
@@ -150,7 +161,30 @@ export function ActionsPage() {
         >
           Alta prioridade
         </button>
-        <label className="muted" style={{ marginLeft: "auto", fontSize: "0.8rem" }}>
+        {establishments.length > 1 && (
+          <label className="muted" style={{ marginLeft: "auto", fontSize: "0.8rem" }}>
+            Unidade{" "}
+            <select
+              value={establishmentId}
+              onChange={(e) => setEstablishmentId(e.target.value)}
+              aria-label="Filtrar por unidade"
+            >
+              <option value="">Todas</option>
+              {establishments.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <label
+          className="muted"
+          style={{
+            marginLeft: establishments.length > 1 ? undefined : "auto",
+            fontSize: "0.8rem",
+          }}
+        >
           Situação{" "}
           <select
             value={status}
