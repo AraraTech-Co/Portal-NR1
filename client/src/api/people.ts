@@ -64,7 +64,15 @@ export function importPeople(people: ImportRow[], dryRun: boolean) {
 
 export function updateEmployeeProfile(
   id: string,
-  input: { bond?: string; contractor_id?: string | null },
+  input: {
+    bond?: string;
+    contractor_id?: string | null;
+    registration?: string;
+    tax_id?: string;
+    phone?: string;
+    job_role_id?: string | null;
+    admitted_at?: string | null;
+  },
 ) {
   return request<{ profile: EmployeeRow }>(
     `/api/employee-profiles/${encodeURIComponent(id)}`,
