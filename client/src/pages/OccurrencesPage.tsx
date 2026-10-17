@@ -52,6 +52,8 @@ export function OccurrencesPage() {
   const [error, setError] = useState<string | null>(null);
   const [typeFilter, setTypeFilter] = useState("");
   const [pendingOnly, setPendingOnly] = useState(false);
+  // Ocorrências só filtravam por tipo e situação. [S6-D] [CB-24]
+  const [unitFilter, setUnitFilter] = useState("");
 
   const [formType, setFormType] = useState("ACCIDENT");
   const [occurredAt, setOccurredAt] = useState("");
@@ -96,11 +98,23 @@ export function OccurrencesPage() {
   }, [reload]);
 
   const filtered = useMemo(() => {
-    if (!pendingOnly) return rows;
-    return rows.filter((r) => !isAnalyzed(r));
-  }, [rows, pendingOnly]);
+    return rows.filter((r) => {
+      if (pendingOnly && isAnalyzed(r)) return false;
+      if (unitFilter && r.establishment?.id !== unitFilter) return false;
+      return true;
+    });
+  }, [rows, pendingOnly, unitFilter]);
 
   const pendingCount = rows.filter((r) => !isAnalyzed(r)).length;
+
+  /*
+    O seletor listava os riscos de todas as unidades, sem dizer de qual era
+    cada um — foi assim que o quase-acidente de uma unidade acabou ligado ao
+    risco de outra. [S3-D] [S2-F]
+  */
+  const risksDaUnidade = establishmentId
+    ? risks.filter((r) => r.establishment?.id === establishmentId)
+    : risks;
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -217,9 +231,10 @@ export function OccurrencesPage() {
                 disabled={saving}
               >
                 <option value="">—</option>
-                {risks.map((r) => (
+                {risksDaUnidade.map((r) => (
                   <option key={r.id} value={r.id}>
                     {r.description}
+                    {r.establishment ? ` — ${r.establishment.name}` : ""}
                   </option>
                 ))}
               </select>
@@ -242,9 +257,32 @@ export function OccurrencesPage() {
         >
           Sem análise
         </button>
+        {establishments.length > 1 && (
+          <label
+            className="muted"
+            style={{ marginLeft: "auto", fontSize: "0.8rem" }}
+          >
+            Unidade{" "}
+            <select
+              value={unitFilter}
+              onChange={(e) => setUnitFilter(e.target.value)}
+              aria-label="Filtrar por unidade"
+            >
+              <option value="">Todas</option>
+              {establishments.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label
           className="muted"
-          style={{ marginLeft: "auto", fontSize: "0.8rem" }}
+          style={{
+            marginLeft: establishments.length > 1 ? undefined : "auto",
+            fontSize: "0.8rem",
+          }}
         >
           Tipo{" "}
           <select

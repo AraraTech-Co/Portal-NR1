@@ -3,10 +3,16 @@ import { request } from "./client";
 export type RiskOption = {
   id: string;
   description: string;
+  /** De que unidade o risco é — sem isto se escolhe o risco errado. [S3-D] */
+  establishment?: { id: string; name: string } | null;
+  activity?: string | null;
 };
 
-export async function fetchRisks() {
-  return request<{ risks: RiskOption[] }>("/api/risks");
+export async function fetchRisks(establishmentId?: string) {
+  const qs = establishmentId
+    ? `?establishment_id=${encodeURIComponent(establishmentId)}`
+    : "";
+  return request<{ risks: RiskOption[] }>(`/api/risks${qs}`);
 }
 
 export type Hazard = {
