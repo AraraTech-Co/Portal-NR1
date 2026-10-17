@@ -229,6 +229,20 @@ class AnnouncementController {
         return;
       }
 
+      /*
+        O sino e o Início discordavam: ler no mural tirava do Início e
+        deixava no sino. São a mesma pendência. [B2-3-A] [S4-G]
+      */
+      await prisma.notification.updateMany({
+        where: {
+          userId,
+          entityType: "Announcement",
+          entityId: announcement.id,
+          readAt: null,
+        },
+        data: { readAt: new Date() },
+      });
+
       const read = await prisma.announcementRead.upsert({
         where: {
           announcementId_userId: {

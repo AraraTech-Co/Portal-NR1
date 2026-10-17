@@ -1453,10 +1453,30 @@ model Announcement {
 /// (NR-1 1.5.3.3 "c") e capacitação sobre assédio (Lei 14.457, art. 23, I).
 /// O que o portal avisa a uma pessoa. Nasce de um fato (ação atribuída,
 /// aviso publicado) e some da caixa quando ela lê. [S3-A] [S3-G] [S4-G]
+/**
+ * O que o portal avisa. Eram três fatos; sete outros aconteciam em silêncio
+ * e obrigavam a pessoa a entrar na tela certa para descobrir. [CB-29] [CB-19]
+ */
 enum NotificationKind {
   ACTION_ASSIGNED
   ANNOUNCEMENT_PUBLISHED
   SERVICE_ORDER_ISSUED
+  /// A ação foi concluída e espera validação de quem não executou. [S3-A]
+  ACTION_WAITING_VALIDATION
+  /// A evidência foi recusada: quem executou precisa refazer. [CB-19]
+  ACTION_REJECTED
+  /// A conclusão foi aprovada.
+  ACTION_VALIDATED
+  /// Holerite publicado para a pessoa. [CB-29]
+  PAYSLIP_PUBLISHED
+  /// Dúvida do holerite respondida pelo RH. [S5-E]
+  PAYSLIP_ANSWERED
+  /// Atestado aceito ou recusado pelo RH. [CB-29]
+  CERTIFICATE_REVIEWED
+  /// O comitê perguntou algo a quem denunciou. [S5-P]
+  ETHICS_MESSAGE
+  /// Treinamento concluído, com certificado. [CB-29]
+  TRAINING_COMPLETED
 }
 
 model Notification {

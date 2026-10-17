@@ -2,7 +2,18 @@ import { request } from "./client";
 
 export type Notification = {
   id: string;
-  kind: "ACTION_ASSIGNED" | "ANNOUNCEMENT_PUBLISHED" | "SERVICE_ORDER_ISSUED";
+  kind:
+    | "ACTION_ASSIGNED"
+    | "ANNOUNCEMENT_PUBLISHED"
+    | "SERVICE_ORDER_ISSUED"
+    | "ACTION_WAITING_VALIDATION"
+    | "ACTION_REJECTED"
+    | "ACTION_VALIDATED"
+    | "PAYSLIP_PUBLISHED"
+    | "PAYSLIP_ANSWERED"
+    | "CERTIFICATE_REVIEWED"
+    | "ETHICS_MESSAGE"
+    | "TRAINING_COMPLETED";
   title: string;
   body: string | null;
   link: string | null;

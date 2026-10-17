@@ -4,8 +4,9 @@ import prisma from "../model/prisma";
 import { Training } from "../model/schema/Training/Training";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
+import { notify } from "../helper/notify";
 import { canManageModule, canSeeAllInModule } from "../helper/module-access";
-import { TrainingKind } from "@prisma/client";
+import { NotificationKind, TrainingKind } from "@prisma/client";
 import { ENROLLMENT_STATUSES } from "../constants";
 import type { AuthRequest } from "../types/auth";
 
@@ -425,6 +426,17 @@ class TrainingController {
           expiresAt: expiryFrom(training.validityMonths),
           startedAt: enrollment.startedAt ?? new Date(),
         },
+      });
+
+      await notify({
+        organizationId: orgId,
+        userId,
+        kind: NotificationKind.TRAINING_COMPLETED,
+        title: `Certificado de ${training.title}`,
+        body: `Você concluiu com ${score}%. O certificado está em Treinamentos.`,
+        link: `/treinamentos/${training.id}`,
+        entityType: "Training",
+        entityId: training.id,
       });
 
       res.json({ enrollment, passed: true, passing_score: training.passingScore });
