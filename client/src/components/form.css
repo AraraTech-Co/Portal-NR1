@@ -68,3 +68,9 @@
 .form-section > .muted {
   margin: 0 0 1rem;
 }
+
+/* Dica que é aviso, não explicação: papel que dá acesso além do esperado. [B2-1-A] */
+.form-hint.is-warning {
+  color: var(--sem-warning-fg);
+  font-weight: 600;
+}

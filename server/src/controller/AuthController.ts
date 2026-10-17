@@ -127,20 +127,35 @@ class AuthController {
 
     const access = await resolveAccountAccess(user.id, chosen.id);
     if (!access) {
-      const ended = await prisma.membership.findFirst({
-        where: {
-          userId: user.id,
-          organizationId: chosen.organization.id,
-          accessExpiresAt: { lte: new Date() },
-        },
-        select: { accessExpiresAt: true },
+      /*
+        Prazo vencido, desligamento e suspensão davam o mesmo recado
+        ("fale com a empresa para renovar"), e quem foi desligado não tem o
+        que renovar. Cada um diz o que é — sem expor motivo de
+        desligamento a quem está do lado de fora. [CB-39]
+      */
+      const membership = await prisma.membership.findFirst({
+        where: { userId: user.id, organizationId: chosen.organization.id },
+        select: { accessExpiresAt: true, suspendedAt: true, suspensionReason: true },
       });
-      if (ended?.accessExpiresAt) {
-        const day = ended.accessExpiresAt.toLocaleDateString("pt-BR", {
-          timeZone: "America/Sao_Paulo",
-        });
+      const dia = (d: Date) =>
+        d.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+
+      if (membership?.suspendedAt) {
         res.status(403).json({
-          message: `Seu acesso terminou em ${day}. Fale com a empresa para renovar.`,
+          message:
+            membership.suspensionReason === "DISMISSAL"
+              ? `Seu acesso foi encerrado em ${dia(membership.suspendedAt)} porque seu vínculo com a empresa terminou.`
+              : `Seu acesso está suspenso desde ${dia(membership.suspendedAt)}. Fale com a empresa.`,
+          code:
+            membership.suspensionReason === "DISMISSAL"
+              ? "ACCESS_DISMISSED"
+              : "ACCESS_SUSPENDED",
+        });
+        return;
+      }
+      if (membership?.accessExpiresAt && membership.accessExpiresAt <= new Date()) {
+        res.status(403).json({
+          message: `Seu acesso terminou em ${dia(membership.accessExpiresAt)}. Fale com a empresa para renovar.`,
           code: "ACCESS_ENDED",
         });
         return;

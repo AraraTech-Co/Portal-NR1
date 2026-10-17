@@ -99,6 +99,16 @@ export const ORG_ROLE_LABEL: Record<string, string> = {
   FISCAL: "Fiscal (só consulta)",
 };
 
+/**
+ * Papel na conta. Aparecia em código (OWNER/ADMIN/USER) no convite, no pedido
+ * de entrada e na lista de pessoas. [B2-1-A] [B2-1-C] [CB-12]
+ */
+export const ACCOUNT_ROLE_LABEL: Record<string, string> = {
+  OWNER: "Dono da conta",
+  ADMIN: "Administrador da conta",
+  USER: "Usuário da conta",
+};
+
 /** Chaves efetivas de permissão (sessão). */
 export const PERMISSION_LABEL: Record<string, string> = {
   master: "Master",

@@ -310,9 +310,13 @@ class AccountInviteController {
           select: { id: true },
         });
         if (profileTaken) {
+          /*
+            Dizer que a matrícula existe entrega a lista de matrículas a quem
+            tiver o link. A pessoa certa resolve com o RH. [CB-17]
+          */
           throw httpError(
             409,
-            "Este número de cadastro já está em uso nesta empresa.",
+            "Não foi possível concluir o cadastro com estes dados. Fale com o RH da empresa.",
           );
         }
         const pendingReg = await prisma.accountJoinRequest.findFirst({
@@ -552,8 +556,12 @@ class AccountInviteController {
           });
           if (taken) {
             throw httpError(
+              /*
+                Dizer que a matrícula existe entrega a lista de matrículas a
+                quem tiver o link. A pessoa certa resolve com o RH. [CB-17]
+              */
               409,
-              "Este número de cadastro já está em uso nesta empresa.",
+              "Não foi possível concluir o cadastro com estes dados. Fale com o RH da empresa.",
             );
           }
         }
