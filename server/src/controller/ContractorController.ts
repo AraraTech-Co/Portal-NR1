@@ -48,9 +48,18 @@ class ContractorController {
         orderBy: { name: "asc" },
         include: {
           establishment: { select: { id: true, name: true } },
+          /// Quantas pessoas do portal são desta contratada. [S1-R]
+          _count: {
+            select: { workers: { where: { dismissedAt: null } } },
+          },
         },
       });
-      res.json({ contractors: rows });
+      res.json({
+        contractors: rows.map(({ _count, ...c }) => ({
+          ...c,
+          workers: _count.workers,
+        })),
+      });
     } catch (err) {
       fail(res, err);
     }

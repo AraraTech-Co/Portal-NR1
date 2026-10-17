@@ -5,6 +5,7 @@ import {
   type ImportReport,
   type ImportRow,
 } from "@/api/people";
+import { fetchContractorList } from "@/api/contractors";
 import { fetchJobRoles, type JobRole } from "@/api/operation";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
@@ -12,9 +13,9 @@ import "@/components/data-table.css";
 import "@/components/form.css";
 import "./import-people.css";
 
-const EXEMPLO = `nome;matricula;cpf;email;funcao;admissao;vinculo
-Maria de Souza;1023;529.982.247-25;maria@empresa.com.br;Vendedor;2025-03-10;EMPLOYEE
-João Pereira;1024;;;Vendedor;2025-04-01;CONTRACTOR`;
+const EXEMPLO = `nome;matricula;cpf;email;funcao;admissao;vinculo;empresa
+Maria de Souza;1023;529.982.247-25;maria@empresa.com.br;Torneiro;2025-03-10;Empregado;
+João Pereira;1024;;;Ajudante;2025-04-01;Terceirizado;Limpeza Industrial Ltda`;
 
 /** Cabeçalhos aceitos, com e sem acento, para a planilha colada. */
 const COLUNAS: Record<string, keyof ImportRow> = {
@@ -30,6 +31,9 @@ const COLUNAS: Record<string, keyof ImportRow> = {
   admissao: "admitted_at",
   vinculo: "bond",
   papel: "org_role",
+  /// Terceirizado sem empresa deixa a lacuna à mostra na ficha. [S1-R] [CB-8]
+  empresa: "contractor_id",
+  contratada: "contractor_id",
 };
 
 function semAcento(texto: string): string {
@@ -49,7 +53,11 @@ type Parsed = { rows: ImportRow[]; problems: string[] };
  * saem daqui como código e id — quem monta a planilha escreve "Vendedor",
  * não um uuid. [S1-A]
  */
-function parse(texto: string, funcoes: JobRole[]): Parsed {
+function parse(
+  texto: string,
+  funcoes: JobRole[],
+  empresas: { id: string; name: string }[],
+): Parsed {
   const linhas = texto
     .split(/\r?\n/)
     .map((l) => l.trim())
@@ -64,6 +72,7 @@ function parse(texto: string, funcoes: JobRole[]): Parsed {
     : (["name", "registration", "tax_id", "email", "job_role_id", "admitted_at", "bond"] as (keyof ImportRow)[]);
 
   const porNome = new Map(funcoes.map((f) => [semAcento(f.name), f.id]));
+  const empresaPorNome = new Map(empresas.map((c) => [semAcento(c.name), c.id]));
   const vinculos = new Map(
     Object.entries(WORKER_BOND_LABEL).map(([codigo, rotulo]) => [semAcento(rotulo), codigo]),
   );
@@ -105,6 +114,18 @@ function parse(texto: string, funcoes: JobRole[]): Parsed {
         row.bond = codigo;
       }
     }
+    if (row.contractor_id) {
+      const id = empresaPorNome.get(semAcento(row.contractor_id));
+      if (!id) {
+        problems.push(
+          `Linha ${numero}: empresa contratada "${row.contractor_id}" não está cadastrada em Terceiros.`,
+        );
+        delete row.contractor_id;
+      } else {
+        row.contractor_id = id;
+        if (!row.bond || row.bond === "EMPLOYEE") row.bond = "CONTRACTOR";
+      }
+    }
     if (row.admitted_at && /^\d{2}\/\d{2}\/\d{4}$/.test(row.admitted_at)) {
       const [d, m, a] = row.admitted_at.split("/");
       row.admitted_at = `${a}-${m}-${d}`;
@@ -128,6 +149,7 @@ function tone(status: string): "success" | "neutral" | "danger" {
 export function ImportPeople() {
   const [texto, setTexto] = useState("");
   const [funcoes, setFuncoes] = useState<JobRole[]>([]);
+  const [empresas, setEmpresas] = useState<{ id: string; name: string }[]>([]);
   const [previa, setPrevia] = useState<ImportReport | null>(null);
   const [relatorio, setRelatorio] = useState<ImportReport | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -137,9 +159,15 @@ export function ImportPeople() {
     fetchJobRoles()
       .then((d) => setFuncoes(d.job_roles))
       .catch(() => setFuncoes([]));
+    fetchContractorList()
+      .then((rows) => setEmpresas(rows.map((c) => ({ id: c.id, name: c.name }))))
+      .catch(() => setEmpresas([]));
   }, []);
 
-  const lido = useMemo(() => parse(texto, funcoes), [texto, funcoes]);
+  const lido = useMemo(
+    () => parse(texto, funcoes, empresas),
+    [texto, funcoes, empresas],
+  );
 
   async function conferir() {
     setErro(null);
@@ -195,9 +223,10 @@ export function ImportPeople() {
           placeholder={EXEMPLO}
         />
         <span className="form-hint">
-          Colunas: nome; matrícula; CPF; e-mail; função; admissão; vínculo.
-          Só o nome é obrigatório. Vínculo:{" "}
-          {Object.values(WORKER_BOND_LABEL).join(", ")}.
+          Colunas: nome; matrícula; CPF; e-mail; função; admissão; vínculo;
+          empresa contratada. Só o nome é obrigatório. Vínculo:{" "}
+          {Object.values(WORKER_BOND_LABEL).join(", ")}. A empresa precisa estar
+          cadastrada em Terceiros.
         </span>
       </label>
 

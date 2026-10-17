@@ -9,7 +9,8 @@ import {
   WORKER_BOND_LABEL,
   type EmployeeFile,
 } from "@/api/people";
-import { fetchContractors } from "@/api/modules";
+import { fetchContractorList } from "@/api/contractors";
+import { fetchJobRoles, type JobRole } from "@/api/operation";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
 import { LoadingState } from "@/components/LoadingState";
@@ -140,6 +141,144 @@ function DismissForm({
 }
 
 /**
+ * Editar o cadastro da pessoa.
+ *
+ * A planilha criava a ficha completa, mas a tela só deixava mudar o vínculo:
+ * quem entrou por convite, ou com a função escrita diferente do cadastro,
+ * ficava sem função e sem CPF, e não havia onde pôr. O servidor já aceitava
+ * todos estes campos. [S1-A] [CB-1] [CB-3]
+ */
+function CadastroEditor({
+  profileId,
+  profile,
+  canEdit,
+  onSaved,
+}: {
+  profileId: string;
+  profile: EmployeeFile["profile"];
+  canEdit: boolean;
+  onSaved: () => Promise<void>;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const [registration, setRegistration] = useState(profile.registration ?? "");
+  const [taxId, setTaxId] = useState(profile.taxId ?? "");
+  const [phone, setPhone] = useState(profile.phone ?? "");
+  const [jobRoleId, setJobRoleId] = useState(profile.jobRole?.id ?? "");
+  const [admittedAt, setAdmittedAt] = useState(
+    profile.admittedAt ? String(profile.admittedAt).slice(0, 10) : "",
+  );
+  const [funcoes, setFuncoes] = useState<JobRole[]>([]);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!aberto) return;
+    fetchJobRoles()
+      .then((d) => setFuncoes(d.job_roles))
+      .catch(() => setFuncoes([]));
+  }, [aberto]);
+
+  async function salvar(e: FormEvent) {
+    e.preventDefault();
+    setSalvando(true);
+    setErro(null);
+    try {
+      await updateEmployeeProfile(profileId, {
+        registration: registration.trim(),
+        tax_id: taxId.trim(),
+        phone: phone.trim(),
+        job_role_id: jobRoleId || null,
+        admitted_at: admittedAt || null,
+      });
+      setAberto(false);
+      await onSaved();
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : "Falha ao salvar");
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  if (!aberto) {
+    return canEdit ? (
+      <div className="people-dismiss-slot">
+        <Button type="button" variant="ghost" onClick={() => setAberto(true)}>
+          Editar cadastro
+        </Button>
+      </div>
+    ) : null;
+  }
+
+  return (
+    <form className="form-grid people-dismiss" onSubmit={salvar}>
+      <div className="form-grid cols-2">
+        <label className="form-field">
+          Matrícula
+          <input
+            value={registration}
+            onChange={(e) => setRegistration(e.target.value)}
+            maxLength={40}
+          />
+        </label>
+        <label className="form-field">
+          CPF
+          <input
+            value={taxId}
+            onChange={(e) => setTaxId(e.target.value)}
+            placeholder="000.000.000-00"
+          />
+          <span className="form-hint">
+            Obrigatório no ASO (NR-7 7.5.19.1 b). Deixe em branco se ainda não
+            tiver.
+          </span>
+        </label>
+      </div>
+      <div className="form-grid cols-2">
+        <label className="form-field">
+          Função
+          <select value={jobRoleId} onChange={(e) => setJobRoleId(e.target.value)}>
+            <option value="">Sem função</option>
+            {funcoes.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.name}
+              </option>
+            ))}
+          </select>
+          <span className="form-hint">
+            É da função que saem os perigos e a ordem de serviço da pessoa.
+          </span>
+        </label>
+        <label className="form-field">
+          Admissão
+          <input
+            type="date"
+            value={admittedAt}
+            onChange={(e) => setAdmittedAt(e.target.value)}
+          />
+        </label>
+      </div>
+      <label className="form-field">
+        Telefone
+        <input value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={20} />
+      </label>
+      {erro && (
+        <p className="form-error" role="alert">
+          {erro}
+        </p>
+      )}
+      <div className="form-actions">
+        <Button type="submit" disabled={salvando}>
+          {salvando ? "Salvando…" : "Salvar cadastro"}
+        </Button>
+        <Button type="button" variant="ghost" onClick={() => setAberto(false)}>
+          Cancelar
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+/**
  * Vínculo: empregado, terceirizado, temporário, aprendiz ou estagiário —
  * e, quando não é empregado, de que empresa contratada ele vem. A
  * fiscalização pergunta quem é quem no mesmo ambiente (NR-1 1.5.8). [S1-G]
@@ -166,7 +305,7 @@ function BondEditor({
 
   useEffect(() => {
     if (!editando) return;
-    fetchContractors()
+    fetchContractorList()
       .then((rows) => setEmpresas(rows.map((c) => ({ id: c.id, name: c.name }))))
       .catch(() => setEmpresas([]));
   }, [editando]);
@@ -370,6 +509,12 @@ export function EmployeeFilePage() {
               </dd>
             </div>
           </dl>
+          <CadastroEditor
+            profileId={id}
+            profile={profile}
+            canEdit={canManage && !desligado}
+            onSaved={load}
+          />
           <BondEditor
             profileId={id}
             bond={profile.bond}
