@@ -54,7 +54,6 @@ class TimeEntryController {
     try {
       const auth = req as AuthRequest;
       const orgId = actorOrgId(auth);
-      const actorId = actorUserId(auth);
       const {
         user_id,
         day,
@@ -70,9 +69,34 @@ class TimeEntryController {
         res.status(400).json({ message: "Informe day." });
         return;
       }
-      const targetUserId =
-        isRh(auth) && user_id ? String(user_id) : actorId;
+      /*
+        O lançamento é sempre de alguém, dito por quem lança: não existe mais
+        o caminho em que a pessoa grava o próprio saldo porque não disse de
+        quem era. [S5-O]
+      */
+      if (!isRh(auth)) {
+        res.status(403).json({
+          message: "O lançamento de ponto é de quem cuida do Banco de horas.",
+          code: "TIME_ENTRY_MANAGED_ONLY",
+        });
+        return;
+      }
+      if (!user_id) {
+        res.status(400).json({ message: "Informe de quem é o lançamento (user_id)." });
+        return;
+      }
+      const targetUserId = String(user_id);
       const dayDate = dayOnly(String(day));
+
+      // A pessoa precisa ser desta empresa.
+      const alvo = await prisma.membership.findFirst({
+        where: { organizationId: orgId, userId: targetUserId },
+        select: { id: true },
+      });
+      if (!alvo) {
+        res.status(400).json({ message: "Pessoa não encontrada nesta empresa." });
+        return;
+      }
 
       const entry = await prisma.timeEntry.upsert({
         where: {
