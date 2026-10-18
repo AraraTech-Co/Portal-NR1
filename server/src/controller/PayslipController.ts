@@ -1,10 +1,12 @@
 import { Prisma } from "@prisma/client";
 import fs from "fs";
+import { NotificationKind } from "@prisma/client";
 import { Request, Response } from "express";
 import prisma from "../model/prisma";
 import { Payslip } from "../model/schema/Payslip/Payslip";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
+import { notify } from "../helper/notify";
 import { canManageModule } from "../helper/module-access";
 import { checkPayslip } from "../helper/payslip-check";
 import { extractPdfText } from "../helper/pdf-text";
@@ -375,6 +377,21 @@ class PayslipController {
         });
       }
 
+      // Holerite publicado e ninguém sabia: a pessoa tinha de entrar na
+      // tela para descobrir. [CB-29]
+      await notify({
+        organizationId: orgId,
+        userId: user_id,
+        kind: NotificationKind.PAYSLIP_PUBLISHED,
+        title: `Holerite de ${String(reference_month).padStart(2, "0")}/${reference_year}`,
+        body: existing
+          ? "O holerite foi corrigido e está disponível."
+          : "Seu holerite está disponível.",
+        link: "/holerites",
+        entityType: "Payslip",
+        entityId: payslip.id,
+      });
+
       res.status(existing ? 200 : 201).json({
         warnings: conferencia.warnings,
         payslip,
@@ -459,6 +476,20 @@ class PayslipController {
           answeredBy: { select: { id: true, name: true } },
         },
       });
+      // Quem perguntou precisa saber que foi respondido. [S5-E] [CB-29]
+      if (question.askedById !== userId) {
+        await notify({
+          organizationId: orgId,
+          userId: question.askedById,
+          kind: NotificationKind.PAYSLIP_ANSWERED,
+          title: "O RH respondeu a sua dúvida do holerite",
+          body: answer.trim().slice(0, 140),
+          link: "/holerites",
+          entityType: "PayslipQuestion",
+          entityId: question.id,
+        });
+      }
+
       res.json({ question: updated });
     } catch (err) {
       fail(res, err);

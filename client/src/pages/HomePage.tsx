@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { fetchAnnouncements, type AnnouncementListItem } from "@/api/announcements";
+import { fetchNotifications, type Notification } from "@/api/notifications";
 import { fetchHome, type HomeCard, type HomeOverview } from "@/api/home";
 import { useAuth } from "@/auth/AuthContext";
 import { Chip } from "@/components/Chip";
@@ -45,8 +45,13 @@ export function HomePage() {
   const { user } = useAuth();
   const [data, setData] = useState<HomeOverview | null>(null);
   const [carregando, setCarregando] = useState(true);
-  // Aviso não lido aparece com o título, não só a contagem. [S4-G]
-  const [naoLidos, setNaoLidos] = useState<AnnouncementListItem[]>([]);
+  /*
+    Aviso não lido aparece com o título, não só a contagem [S4-G] — e sai da
+    mesma caixa do sino, para que os dois não contem coisas diferentes.
+    [B2-3-A]
+  */
+  const [naoLidos, setNaoLidos] = useState<Notification[]>([]);
+  const [totalNaoLidos, setTotalNaoLidos] = useState(0);
   const modules = user?.modules;
   const { canRead: leDocumentos } = useModuleAccess("documentos_pgr");
 
@@ -69,12 +74,16 @@ export function HomePage() {
 
   useEffect(() => {
     let cancelled = false;
-    fetchAnnouncements()
-      .then((rows) => {
-        if (!cancelled) setNaoLidos(rows.filter((a) => !a.read_at).slice(0, 4));
+    fetchNotifications()
+      .then(({ notifications, unread }) => {
+        if (cancelled) return;
+        setNaoLidos(notifications.filter((n) => !n.readAt).slice(0, 4));
+        setTotalNaoLidos(unread);
       })
       .catch(() => {
-        if (!cancelled) setNaoLidos([]);
+        if (cancelled) return;
+        setNaoLidos([]);
+        setTotalNaoLidos(0);
       });
     return () => {
       cancelled = true;
@@ -130,18 +139,23 @@ export function HomePage() {
       {naoLidos.length > 0 && (
         <section className="home-unread" aria-label="Avisos não lidos">
           <h2>
-            {naoLidos.length === 1
+            {totalNaoLidos === 1
               ? "1 aviso que você ainda não leu"
-              : `${naoLidos.length} avisos que você ainda não leu`}
+              : `${totalNaoLidos} avisos que você ainda não leu`}
           </h2>
           <ul>
-            {naoLidos.map((a) => (
-              <li key={a.id}>
-                <Link to={`/mural?open=${a.id}`}>{a.title}</Link>
-                <span className="muted"> · {a.publishedBy.name}</span>
+            {naoLidos.map((n) => (
+              <li key={n.id}>
+                {n.link ? <Link to={n.link}>{n.title}</Link> : n.title}
+                {n.body && <span className="muted"> · {n.body}</span>}
               </li>
             ))}
           </ul>
+          {totalNaoLidos > naoLidos.length && (
+            <p className="muted">
+              e mais {totalNaoLidos - naoLidos.length} no sino.
+            </p>
+          )}
         </section>
       )}
 
