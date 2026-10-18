@@ -1,44 +1,66 @@
 import { AccountRole, Role } from "@prisma/client";
 
-/** AccountRole → chave da matriz (OWNER = acesso total *naquela* conta). */
-export function accountRoleToPermission(role: AccountRole): string {
-  switch (role) {
-    case "OWNER":
+/**
+ * O papel na empresa é o único que decide o que a pessoa vê e faz.
+ *
+ * Antes eram dois: o papel na conta (OWNER/ADMIN/USER) vencia o papel na
+ * empresa em silêncio, e a mesma pessoa aparecia "Técnico SST" numa tela e
+ * "ADM loja" noutra — sendo que o acesso real era o segundo. Decisão OB-3:
+ * um papel só. O vínculo com a conta (`AccountMembership`) continua, porque é
+ * ele que diz de quais contas a pessoa é membro; o que saiu foi o `role` dele
+ * mandar no acesso. [OB-3] [S1-C] [B2-1-A]
+ *
+ * "owner" é a mesma coluna da matriz que "master" nos 28 módulos; quem era
+ * OWNER na conta vira MASTER na empresa pela migração, sem perder nada.
+ */
+export function effectivePermission(orgRole: Role | null | undefined): string {
+  switch (orgRole) {
+    case Role.MASTER:
+      return "master";
+    // Dono da conta: a mesma coluna da matriz que master, mas o alcance é de
+    // UMA conta — é o `isOrgMaster` que abre as outras. [OB-3]
+    case Role.OWNER:
       return "owner";
-    case "ADMIN":
+    // Fiscal é sempre só consulta. [S7-A]
+    case Role.FISCAL:
+      return "fiscal";
+    case Role.RH:
+      return "rh";
+    case Role.SST:
+      return "sst";
+    case Role.SUPERVISOR:
+      return "supervisor";
+    case Role.GERENTE:
+      return "gerente";
+    case Role.ADM_LOJA:
       return "adm_loja";
-    case "USER":
+    // "Admin (legado)" não é mais oferecido, mas quem tem continua valendo
+    // como gerente. [OB-2]
+    case Role.ADMIN:
+      return "gerente";
     default:
       return "colaborador";
   }
 }
 
 /**
- * Hierarquia de tenancy + papel operacional:
- *   MASTER (empresa) > OWNER (conta) > AccountRole.ADMIN → adm_loja
- *   > RH / SST / SUPERVISOR / GERENTE / ADM_LOJA (Membership)
- *   > Role.ADMIN legado → gerente
- *   > COLABORADOR / USER → colaborador
- *
- * Na matriz de módulos, OWNER usa a coluna Master; AccountRole.ADMIN usa ADM loja.
+ * O papel na conta deixa de ser escolhido à parte: ele acompanha o papel na
+ * empresa, para que os dois nunca mais divirjam. [OB-3] [S1-C]
  */
-export function effectivePermission(
-  orgRole: Role | null | undefined,
-  accountRole: AccountRole | null | undefined,
-): string {
-  if (orgRole === "MASTER") return "master";
-  // Fiscal é sempre só consulta, qualquer que seja o papel na conta. [S7-A]
-  if (orgRole === "FISCAL") return "fiscal";
-  if (accountRole === "OWNER") return "owner";
-  if (accountRole === "ADMIN") return "adm_loja";
-  if (orgRole === "RH") return "rh";
-  if (orgRole === "SST") return "sst";
-  if (orgRole === "SUPERVISOR") return "supervisor";
-  if (orgRole === "GERENTE") return "gerente";
-  if (orgRole === "ADM_LOJA") return "adm_loja";
-  if (orgRole === "ADMIN") return "gerente";
-  if (accountRole === "USER") return "colaborador";
-  return "colaborador";
+export function orgRoleToAccountRole(orgRole: Role): AccountRole {
+  switch (orgRole) {
+    case Role.MASTER:
+    case Role.OWNER:
+      return AccountRole.OWNER;
+    case Role.RH:
+    case Role.SST:
+    case Role.GERENTE:
+    case Role.ADM_LOJA:
+    case Role.ADMIN:
+      return AccountRole.ADMIN;
+    default:
+      return AccountRole.USER;
+  }
 }
 
 export function isOrgMaster(orgRole: Role | null | undefined): boolean {

@@ -1,0 +1,13 @@
+-- Um papel só: o da empresa passa a decidir o acesso. [OB-3] [S1-C] [B2-1-A]
+--
+-- Antes, o papel na conta vencia o da empresa: quem era OWNER na conta usava
+-- a coluna Master da matriz e quem era ADMIN usava a coluna ADM loja, fosse
+-- qual fosse o papel na empresa. Era por isso que a mesma pessoa aparecia
+-- "Técnico SST" na ficha e "ADM loja" em Pessoas e acessos, e o acesso real
+-- era o segundo.
+--
+-- OWNER entra no enum da empresa porque o alcance dele é diferente do de
+-- MASTER: OWNER manda em UMA conta, MASTER alcança todas as contas da
+-- empresa. Transformar um no outro daria a quem era dono de uma conta acesso
+-- às outras.
+ALTER TYPE "Role" ADD VALUE IF NOT EXISTS 'OWNER' BEFORE 'ADMIN';

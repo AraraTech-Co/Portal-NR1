@@ -8,12 +8,10 @@ import {
   loginCandidateFromEmail,
 } from "../helper/login-name";
 import { writeAudit } from "../helper/audit";
+import { orgRoleToAccountRole } from "../helper/auth";
 import {
-  accountRoleToOrgRole,
   assertInviteLinkUsable,
-  assignableAccountRoles,
   assignableOrgRoles,
-  canAssignAccountRole,
   canAssignOrgRole,
   canDecideJoinRequests,
   canManageInviteLinks,
@@ -76,10 +74,7 @@ class AccountInviteController {
       });
       res.json({
         links: links.map(serializeLink),
-        assignable: {
-          account_roles: assignableAccountRoles(actor),
-          org_roles: assignableOrgRoles(actor),
-        },
+        assignable: { org_roles: assignableOrgRoles(actor) },
       });
     } catch (err) {
       fail(res, err);
@@ -104,25 +99,25 @@ class AccountInviteController {
       const roleMode =
         body.role_mode === "FIXED" ? InviteRoleMode.FIXED : InviteRoleMode.ON_APPROVE;
 
-      let role: AccountRole = AccountRole.USER;
+      /*
+        Só se escolhe o papel na empresa; o da conta acompanha. Eram dois
+        seletores, e um anulava o outro em silêncio. [OB-3] [S1-C]
+      */
       let orgRole: Role = Role.COLABORADOR;
 
       if (roleMode === InviteRoleMode.FIXED) {
-        if (!body.role || !body.org_role) {
-          throw httpError(400, "Com papel fixo, role e org_role são obrigatórios.");
-        }
-        if (!Object.values(AccountRole).includes(body.role as AccountRole)) {
-          throw httpError(400, "role inválido.");
+        if (!body.org_role) {
+          throw httpError(400, "Com papel fixo, org_role é obrigatório.");
         }
         if (!Object.values(Role).includes(body.org_role as Role)) {
           throw httpError(400, "org_role inválido.");
         }
-        role = body.role as AccountRole;
         orgRole = body.org_role as Role;
-        if (!canAssignAccountRole(actor, role) || !canAssignOrgRole(actor, orgRole)) {
+        if (!canAssignOrgRole(actor, orgRole)) {
           throw httpError(403, "Você só pode conceder papéis abaixo do seu.");
         }
       }
+      const role: AccountRole = orgRoleToAccountRole(orgRole);
 
       const maxUses =
         typeof body.max_uses === "number" && body.max_uses > 0
@@ -435,15 +430,11 @@ class AccountInviteController {
             created_at: r.createdAt,
             invite_link_id: r.inviteLinkId,
             role_mode: link?.roleMode ?? InviteRoleMode.ON_APPROVE,
-            suggested_role: link?.role ?? null,
             suggested_org_role: link?.orgRole ?? null,
             invite_label: link?.label ?? null,
           };
         }),
-        assignable: {
-          account_roles: assignableAccountRoles(actor),
-          org_roles: assignableOrgRoles(actor),
-        },
+        assignable: { org_roles: assignableOrgRoles(actor) },
       });
     } catch (err) {
       fail(res, err);
@@ -515,24 +506,24 @@ class AccountInviteController {
           })
         : null;
 
-      let role: AccountRole;
+      /*
+        Na aprovação também se escolhe um papel só: o da empresa. Era aqui que
+        o Roberto entrava "Admin" na conta e "Técnico SST" na empresa, e o
+        primeiro vencia sem ninguém ver. [OB-3] [S1-C]
+      */
       let orgRole: Role;
       if (inviteLink?.roleMode === InviteRoleMode.FIXED) {
-        role = inviteLink.role;
         orgRole = inviteLink.orgRole;
       } else {
-        role =
-          body.role && Object.values(AccountRole).includes(body.role as AccountRole)
-            ? (body.role as AccountRole)
-            : AccountRole.USER;
         orgRole =
           body.org_role && Object.values(Role).includes(body.org_role as Role)
             ? (body.org_role as Role)
-            : accountRoleToOrgRole(role);
-        if (!canAssignAccountRole(actor, role) || !canAssignOrgRole(actor, orgRole)) {
+            : Role.COLABORADOR;
+        if (!canAssignOrgRole(actor, orgRole)) {
           throw httpError(403, "Você só pode conceder papéis abaixo do seu.");
         }
       }
+      const role: AccountRole = orgRoleToAccountRole(orgRole);
 
       const fiscalUntil =
         orgRole === Role.FISCAL ? resolveAccessUntil(body.access_until) : null;

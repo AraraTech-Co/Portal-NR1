@@ -3,7 +3,7 @@ import { request } from "@/api/client";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
 import { NAV_GROUPS } from "@/layout/nav";
-import { ACCOUNT_ROLE_LABEL, ORG_ROLE_LABEL, PERMISSION_LABEL } from "@/lib/labels";
+import { ORG_ROLE_LABEL, PERMISSION_LABEL } from "@/lib/labels";
 import "@/components/form.css";
 import "./pessoas-acessos.css";
 
@@ -15,7 +15,6 @@ type Person = {
   active: boolean;
   must_change_password: boolean;
   org_role: string;
-  account_role: string | null;
   permission: string;
   modules: Record<string, "read" | "write">;
   access_expires_at: string | null;
@@ -53,9 +52,9 @@ function semAcento(texto: string): string {
   return texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
 
-type Assignable = { account_roles: string[]; org_roles: string[] };
+type Assignable = { org_roles: string[] };
 
-type Editing = { userId: string; org_role: string; account_role: string | null; access_until: string };
+type Editing = { userId: string; org_role: string; access_until: string };
 
 /** Hoje + n dias, no fuso de Brasília, em AAAA-MM-DD. */
 function isoInDays(days: number): string {
@@ -112,7 +111,7 @@ export function PessoasEAcessos() {
   const [soSemAcesso, setSoSemAcesso] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [reset, setReset] = useState<Reset | null>(null);
-  const [assignable, setAssignable] = useState<Assignable>({ account_roles: [], org_roles: [] });
+  const [assignable, setAssignable] = useState<Assignable>({ org_roles: [] });
   const [editing, setEditing] = useState<Editing | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -127,7 +126,6 @@ export function PessoasEAcessos() {
     setEditing({
       userId: p.id,
       org_role: p.org_role,
-      account_role: p.account_role,
       access_until: p.access_expires_at
         ? new Date(new Date(p.access_expires_at).getTime() - 3 * 3_600_000).toISOString().slice(0, 10)
         : isoInDays(30),
@@ -144,9 +142,6 @@ export function PessoasEAcessos() {
         method: "PATCH",
         body: JSON.stringify({
           org_role: editing.org_role,
-          ...(editing.account_role && editing.account_role !== p.account_role
-            ? { account_role: editing.account_role }
-            : {}),
           ...(editing.org_role === "FISCAL" ? { access_until: editing.access_until } : {}),
         }),
       });
@@ -378,22 +373,6 @@ export function PessoasEAcessos() {
                                   ))}
                                 </select>
                               </label>
-                              {p.account_role && (
-                                <label className="form-field">
-                                  Papel na conta
-                                  <select
-                                    value={editing.account_role ?? p.account_role}
-                                    disabled={!assignable.account_roles.includes(p.account_role)}
-                                    onChange={(e) => setEditing({ ...editing, account_role: e.target.value })}
-                                  >
-                                    {[...new Set([p.account_role, ...assignable.account_roles])].map((r) => (
-                                      <option key={r} value={r}>
-                                        {ACCOUNT_ROLE_LABEL[r] ?? r}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </label>
-                              )}
                               {editing.org_role === "FISCAL" && (
                                 <label className="form-field">
                                   Acesso até
@@ -406,9 +385,11 @@ export function PessoasEAcessos() {
                                 </label>
                               )}
                             </div>
+                            {/* Dizia que o papel na conta vencia o da empresa.
+                                Agora é um só, e é este. [OB-3] [S1-C] */}
                             <p className="muted">
-                              Vale na hora, inclusive se a pessoa estiver com o portal aberto. O papel na
-                              conta, quando é Admin ou Owner, vale mais que o papel na empresa.
+                              Vale na hora, inclusive se a pessoa estiver com o portal aberto. É o
+                              único papel dela: decide o que aparece no menu e o que ela pode fazer.
                             </p>
                             {editError && (
                               <p className="form-error" role="alert">

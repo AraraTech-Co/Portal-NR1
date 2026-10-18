@@ -128,7 +128,7 @@
     "emergencias": "write",
     "documentos_pgr": "read",
     "terceiros": "write",
-    "colaboradores": "write",
+    "colaboradores": "read",
     "documentos_rh": "read",
     "holerites": "none",
     "ferias": "read",

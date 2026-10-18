@@ -22,7 +22,8 @@ import {
   isOverdue,
   ORG_ROLE_LABEL,
 } from "@/lib/labels";
-import { useModuleAccess } from "@/lib/module-access";
+import { useAuth } from "@/auth/AuthContext";
+import { canChangePersonnelRecord, useModuleAccess } from "@/lib/module-access";
 import "@/components/form.css";
 import "./people.css";
 
@@ -152,11 +153,14 @@ function CadastroEditor({
   profileId,
   profile,
   canEdit,
+  cuidaDoQuadro,
   onSaved,
 }: {
   profileId: string;
   profile: EmployeeFile["profile"];
   canEdit: boolean;
+  /** Matrícula e CPF são identidade: só o RH mexe. [OB-8] */
+  cuidaDoQuadro: boolean;
   onSaved: () => Promise<void>;
 }) {
   const [aberto, setAberto] = useState(false);
@@ -184,8 +188,9 @@ function CadastroEditor({
     setErro(null);
     try {
       await updateEmployeeProfile(profileId, {
-        registration: registration.trim(),
-        tax_id: taxId.trim(),
+        ...(cuidaDoQuadro
+          ? { registration: registration.trim(), tax_id: taxId.trim() }
+          : {}),
         phone: phone.trim(),
         job_role_id: jobRoleId || null,
         admitted_at: admittedAt || null,
@@ -218,7 +223,11 @@ function CadastroEditor({
             value={registration}
             onChange={(e) => setRegistration(e.target.value)}
             maxLength={40}
+            disabled={!cuidaDoQuadro}
           />
+          {!cuidaDoQuadro && (
+            <span className="form-hint">Só o RH altera a matrícula.</span>
+          )}
         </label>
         <label className="form-field">
           CPF
@@ -226,10 +235,12 @@ function CadastroEditor({
             value={taxId}
             onChange={(e) => setTaxId(e.target.value)}
             placeholder="000.000.000-00"
+            disabled={!cuidaDoQuadro}
           />
           <span className="form-hint">
-            Obrigatório no ASO (NR-7 7.5.19.1 b). Deixe em branco se ainda não
-            tiver.
+            {cuidaDoQuadro
+              ? "Obrigatório no ASO (NR-7 7.5.19.1 b). Deixe em branco se ainda não tiver."
+              : "Só o RH altera o CPF."}
           </span>
         </label>
       </div>
@@ -393,7 +404,10 @@ function BondEditor({
  */
 export function EmployeeFilePage() {
   const { id = "" } = useParams();
+  const { user } = useAuth();
   const { canManage } = useModuleAccess("colaboradores");
+  // Desligar e mexer em CPF/matrícula são do RH, não de quem escreve. [OB-8]
+  const cuidaDoQuadro = canChangePersonnelRecord(user?.permission);
   const [data, setData] = useState<EmployeeFile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [acao, setAcao] = useState<string | null>(null);
@@ -463,7 +477,7 @@ export function EmployeeFilePage() {
               <div className="muted">Registrado por {profile.dismissedBy.name}</div>
             )}
           </div>
-          {canManage && (
+          {cuidaDoQuadro && (
             <Button type="button" variant="secondary" disabled={acao === "reverter"} onClick={() => void reverter()}>
               {acao === "reverter" ? "Revertendo…" : "Reverter desligamento"}
             </Button>
@@ -513,6 +527,7 @@ export function EmployeeFilePage() {
             profileId={id}
             profile={profile}
             canEdit={canManage && !desligado}
+            cuidaDoQuadro={cuidaDoQuadro}
             onSaved={load}
           />
           <BondEditor
@@ -552,7 +567,7 @@ export function EmployeeFilePage() {
           ) : (
             <p className="muted">Esta pessoa não tem vínculo de acesso nesta empresa.</p>
           )}
-          {canManage && !desligado && (
+          {cuidaDoQuadro && !desligado && (
             <div className="people-dismiss-slot">
               <DismissForm profileId={id} onDone={load} />
             </div>

@@ -1,14 +1,8 @@
-import { AccountRole, Role } from "@prisma/client";
+import { Role } from "@prisma/client";
 import { canWriteModule } from "./module-access";
 import type { Actor } from "../types/auth";
 
-const ACCOUNT_RANK: Record<AccountRole, number> = {
-  USER: 1,
-  ADMIN: 2,
-  OWNER: 3,
-};
-
-/** Ordem: COLABORADOR < SUPERVISOR < ADM_LOJA < GERENTE < RH/SST < ADMIN < MASTER */
+/** Ordem: COLABORADOR < SUPERVISOR < ADM_LOJA < GERENTE < RH/SST < ADMIN < OWNER < MASTER */
 const ORG_RANK: Record<Role, number> = {
   COLABORADOR: 1,
   /** Fora da hierarquia: quem atribui é quem cuida de Conta e usuários. */
@@ -19,7 +13,9 @@ const ORG_RANK: Record<Role, number> = {
   RH: 5,
   SST: 5,
   ADMIN: 6,
-  MASTER: 7,
+  /// Dono de uma conta; abaixo de MASTER, que alcança todas. [OB-3]
+  OWNER: 7,
+  MASTER: 8,
 };
 
 export function canManageInviteLinks(actor: Actor): boolean {
@@ -38,23 +34,16 @@ export function canDecideJoinRequests(actor: Actor): boolean {
   );
 }
 
-export function assignableAccountRoles(actor: Actor): AccountRole[] {
-  if (actor.isMaster) {
-    return [AccountRole.OWNER, AccountRole.ADMIN, AccountRole.USER];
-  }
-  const ceiling = actor.accountRole
-    ? ACCOUNT_RANK[actor.accountRole]
-    : ACCOUNT_RANK.USER;
-  const below = (
-    Object.keys(ACCOUNT_RANK) as AccountRole[]
-  ).filter((r) => ACCOUNT_RANK[r] < ceiling);
-  return below.length > 0 ? below : [AccountRole.USER];
-}
-
 export function assignableOrgRoles(actor: Actor): Role[] {
   const ceiling = ORG_RANK[actor.role] ?? ORG_RANK.COLABORADOR;
   const below = (Object.keys(ORG_RANK) as Role[]).filter(
-    (r) => ORG_RANK[r] < ceiling && r !== Role.MASTER && r !== Role.FISCAL,
+    (r) =>
+      ORG_RANK[r] < ceiling &&
+      r !== Role.MASTER &&
+      r !== Role.FISCAL &&
+      // "Admin (legado)" sai da lista; quem já tem continua valendo como
+      // gerente. Ninguém escolhe de propósito um papel chamado legado. [OB-2]
+      r !== Role.ADMIN,
   );
   // Pela planilha de acessos, só Master e RH cuidam de Conta e usuários —
   // são eles que dão acesso a alguém de fora. [S7-A]
@@ -62,23 +51,8 @@ export function assignableOrgRoles(actor: Actor): Role[] {
   return below.length > 0 ? below : [Role.COLABORADOR];
 }
 
-export function canAssignAccountRole(actor: Actor, target: AccountRole): boolean {
-  return assignableAccountRoles(actor).includes(target);
-}
-
 export function canAssignOrgRole(actor: Actor, target: Role): boolean {
   return assignableOrgRoles(actor).includes(target);
-}
-
-export function accountRoleToOrgRole(role: AccountRole): Role {
-  switch (role) {
-    case AccountRole.OWNER:
-      return Role.ADMIN;
-    case AccountRole.ADMIN:
-      return Role.ADM_LOJA;
-    default:
-      return Role.COLABORADOR;
-  }
 }
 
 export function assertInviteLinkUsable(link: {

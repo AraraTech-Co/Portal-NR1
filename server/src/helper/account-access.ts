@@ -21,13 +21,19 @@ export async function listAccessibleAccounts(
 
   const byId = new Map<string, AccessibleAccount>();
 
+  const orgLinks = await memberships.custom.read.byUser(userId);
+  // O papel na empresa é o único que decide o acesso; o seletor de conta
+  // mostra esse, e não mais o papel na conta. [OB-3] [S1-C]
+  const papelNaEmpresa = new Map<string, Role>();
+  for (const org of orgLinks) papelNaEmpresa.set(org.organizationId, org.role);
+
   const links = await accountMemberships.custom.read.byUser(userId);
   for (const link of links) {
     if (!link.account.active || !link.account.organization.active) continue;
     byId.set(link.accountId, {
       id: link.accountId,
       name: link.account.name,
-      account_role: link.role,
+      org_role: papelNaEmpresa.get(link.account.organizationId) ?? null,
       via_master: false,
       organization: {
         id: link.account.organizationId,
@@ -36,7 +42,6 @@ export async function listAccessibleAccounts(
     });
   }
 
-  const orgLinks = await memberships.custom.read.byUser(userId);
   for (const org of orgLinks) {
     if (!isOrgMaster(org.role) || !org.organization.active) continue;
     const orgAccounts = await accounts.custom.read.activeByOrganization(
@@ -52,7 +57,7 @@ export async function listAccessibleAccounts(
       byId.set(acc.id, {
         id: acc.id,
         name: acc.name,
-        account_role: null,
+        org_role: papelNaEmpresa.get(acc.organizationId) ?? null,
         via_master: true,
         organization: {
           id: acc.organizationId,

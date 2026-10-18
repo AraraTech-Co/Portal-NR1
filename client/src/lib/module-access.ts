@@ -51,3 +51,18 @@ export function useModuleAccess(moduleId: string) {
 export function isReadOnlyPermission(permission: string | undefined): boolean {
   return permission === "fiscal";
 }
+
+/**
+ * Desligar e alterar CPF ou matrícula — espelho do servidor
+ * (`PERSONNEL_RECORD_ROLES`). Escrever em Colaboradores não dá esses dois
+ * poderes. [OB-8]
+ */
+const PERSONNEL_RECORD_ROLES: readonly string[] = ["master", "owner", "rh"];
+
+export function canChangePersonnelRecord(
+  permission: string | undefined,
+): boolean {
+  return PERSONNEL_RECORD_ROLES.includes(
+    permission === "user" ? "colaborador" : (permission ?? ""),
+  );
+}

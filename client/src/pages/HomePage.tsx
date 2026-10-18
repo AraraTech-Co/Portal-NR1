@@ -6,6 +6,7 @@ import { useAuth } from "@/auth/AuthContext";
 import { Chip } from "@/components/Chip";
 import { LoadingState } from "@/components/LoadingState";
 import { PageHeader } from "@/components/PageHeader";
+import { ORG_ROLE_LABEL } from "@/lib/labels";
 import { useModuleAccess } from "@/lib/module-access";
 import "./home.css";
 
@@ -223,9 +224,13 @@ export function HomePage() {
         </div>
         <div>
           <p className="label-cond home-meta-label">Conta</p>
+          <p className="home-meta-value">{user.account.name}</p>
+        </div>
+        <div>
+          {/* Um papel só, e é este que decide o que a pessoa vê. [OB-3] */}
+          <p className="label-cond home-meta-label">Seu papel</p>
           <p className="home-meta-value">
-            {user.account.name}
-            {user.account_role ? ` · ${user.account_role}` : ""}
+            {ORG_ROLE_LABEL[user.role] ?? user.role}
           </p>
         </div>
       </section>
