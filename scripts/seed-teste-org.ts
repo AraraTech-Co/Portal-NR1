@@ -37,6 +37,7 @@ import {
 } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { createHash } from "crypto";
+import { orgRoleToAccountRole } from "../server/src/helper/auth";
 
 const prisma = new PrismaClient();
 
@@ -54,7 +55,8 @@ type Spec = {
   name: string;
   email: string;
   orgRole: Role;
-  accountRole: AccountRole | null;
+  /** Se entra na conta. O papel dentro dela acompanha o da empresa. [OB-3] */
+  naConta: boolean;
 };
 
 const USERS: Spec[] = [
@@ -63,63 +65,65 @@ const USERS: Spec[] = [
     name: "Master Teste",
     email: "teste.master@teste.local",
     orgRole: Role.MASTER,
-    accountRole: AccountRole.USER,
+    naConta: true,
   },
   {
+    // O papel de conta OWNER virou papel de empresa OWNER: mesma coluna da
+    // matriz e mesmo alcance de uma conta só. [OB-3]
     login: "teste.owner",
     name: "Owner Conta Teste",
     email: "teste.owner@teste.local",
-    orgRole: Role.ADMIN,
-    accountRole: AccountRole.OWNER,
+    orgRole: Role.OWNER,
+    naConta: true,
   },
   {
     login: "teste.sst",
     name: "Técnico SST Teste",
     email: "teste.sst@teste.local",
     orgRole: Role.SST,
-    accountRole: AccountRole.USER,
+    naConta: true,
   },
   {
     login: "teste.rh",
     name: "RH Teste",
     email: "teste.rh@teste.local",
     orgRole: Role.RH,
-    accountRole: AccountRole.USER,
+    naConta: true,
   },
   {
     login: "teste.supervisor",
     name: "Supervisor Teste",
     email: "teste.supervisor@teste.local",
     orgRole: Role.SUPERVISOR,
-    accountRole: AccountRole.USER,
+    naConta: true,
   },
   {
     login: "teste.gerente",
     name: "Gerente Teste",
     email: "teste.gerente@teste.local",
     orgRole: Role.GERENTE,
-    accountRole: AccountRole.USER,
+    naConta: true,
   },
   {
     login: "teste.admloja",
     name: "ADM Loja Teste",
     email: "teste.admloja@teste.local",
     orgRole: Role.ADM_LOJA,
-    accountRole: AccountRole.USER,
+    naConta: true,
   },
   {
     login: "teste.colaborador",
     name: "Colaborador Teste",
     email: "teste.colaborador@teste.local",
     orgRole: Role.COLABORADOR,
-    accountRole: AccountRole.USER,
+    naConta: true,
   },
   {
     login: "teste.fiscal",
     name: "Fiscal Teste",
     email: "teste.fiscal@teste.local",
     orgRole: Role.FISCAL,
-    accountRole: AccountRole.USER,
+    naConta: true,
   },
 ];
 
@@ -210,7 +214,8 @@ async function main() {
       },
     });
 
-    if (spec.accountRole) {
+    if (spec.naConta) {
+      const papelNaConta = orgRoleToAccountRole(spec.orgRole);
       await prisma.accountMembership.upsert({
         where: {
           accountId_userId: {
@@ -218,11 +223,11 @@ async function main() {
             userId: user.id,
           },
         },
-        update: { role: spec.accountRole },
+        update: { role: papelNaConta },
         create: {
           accountId: account.id,
           userId: user.id,
-          role: spec.accountRole,
+          role: papelNaConta,
         },
       });
     }
@@ -232,7 +237,7 @@ async function main() {
       password: PASSWORD,
       name: spec.name,
       orgRole: spec.orgRole,
-      accountRole: spec.accountRole,
+      accountRole: spec.naConta ? orgRoleToAccountRole(spec.orgRole) : null,
       id: user.id,
     });
   }

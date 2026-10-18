@@ -10,7 +10,6 @@ export type SessionUser = {
   login: string;
   email: string | null;
   name: string;
-  account_role: string | null;
   is_master: boolean;
   role: string;
   permission: string;

@@ -108,14 +108,31 @@ describe("mudar o papel depois de aprovado [S1-O]", () => {
     expect((await mudar(rh.token, rh.user.id, { org_role: "COLABORADOR" })).status).toBe(400);
   });
 
-  it("o papel na conta segue a mesma regra: o owner dá, o RH não", async () => {
+  /*
+    Este caso afirmava o contrário: que o papel na conta era escolhido à parte
+    e que ADMIN na conta valia como ADM loja. Com um papel só, o papel na
+    conta não se escolhe e não decide nada. [OB-3] [S1-C]
+  */
+  it("o papel na conta pedido no corpo é ignorado", async () => {
     const p = await criarPessoa("conta");
-    expect((await mudar(rh.token, p.id, { org_role: "COLABORADOR", account_role: "ADMIN" })).status).toBe(403);
 
-    const res = await mudar(owner.token, p.id, { org_role: "COLABORADOR", account_role: "ADMIN" });
+    const res = await mudar(owner.token, p.id, {
+      org_role: "COLABORADOR",
+      account_role: "ADMIN",
+    });
     expect(res.status).toBe(200);
-    // ADMIN da conta vale como ADM loja
-    expect(res.body.person.permission).toBe("adm_loja");
+    expect(res.body.person.permission, "vale o papel da empresa").toBe(
+      "colaborador",
+    );
+    expect(res.body.person.account_role).toBeUndefined();
+
+    const link = await prisma.accountMembership.findFirstOrThrow({
+      where: { accountId: ACCOUNT_ID, userId: p.id },
+      select: { role: true },
+    });
+    expect(link.role, "acompanha a empresa, não o pedido").toBe(
+      AccountRole.USER,
+    );
   });
 
   it("quem não cuida de Conta e usuários não muda papel de ninguém", async () => {

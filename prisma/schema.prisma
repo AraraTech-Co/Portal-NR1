@@ -107,6 +107,10 @@ model User {
 /// Demais = papéis operacionais (SST/RH/gestão de loja) na organização.
 enum Role {
   MASTER
+  /// Dono da conta: acesso total DENTRO de uma conta — não é MASTER, que
+  /// alcança todas as contas da empresa. Era o papel de conta OWNER, que
+  /// vencia o papel da empresa em silêncio. [OB-3] [S1-C]
+  OWNER
   ADMIN
   SST
   RH

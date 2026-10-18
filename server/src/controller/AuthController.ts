@@ -26,7 +26,6 @@ function publicUser(actor: NonNullable<AuthRequest["actor"]>) {
     login: actor.login,
     email: actor.email,
     name: actor.name,
-    account_role: actor.accountRole,
     is_master: actor.isMaster,
     role: actor.role,
     permission: actor.permission,
@@ -46,13 +45,12 @@ function publicUser(actor: NonNullable<AuthRequest["actor"]>) {
 function sessionUserFromAccess(
   access: NonNullable<Awaited<ReturnType<typeof resolveAccountAccess>>>,
 ) {
-  const permission = effectivePermission(access.orgRole, access.accountRole);
+  const permission = effectivePermission(access.orgRole);
   return {
     id: access.user.id,
     login: access.user.login,
     email: access.user.email,
     name: access.user.name,
-    account_role: access.accountRole,
     is_master: access.isMaster,
     role: access.orgRole,
     permission,

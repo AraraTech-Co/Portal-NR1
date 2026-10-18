@@ -162,7 +162,7 @@ async function authenticate(
     return false;
   }
 
-  const roleKey = effectivePermission(access.orgRole, access.accountRole);
+  const roleKey = effectivePermission(access.orgRole);
 
   if (gate.kind === "legacy" && gate.permission !== "public") {
     if (!can(roleKey, gate.permission)) {

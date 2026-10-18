@@ -29,7 +29,7 @@ export type AuthRequest = import("express").Request & {
 export type AccessibleAccount = {
   id: string;
   name: string;
-  account_role: AccountRole | null;
+  org_role: Role | null;
   via_master: boolean;
   organization: { id: string; name: string };
 };

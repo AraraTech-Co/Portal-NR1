@@ -7,6 +7,7 @@ import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
 import { isValidCpf, normalizeCpf } from "../helper/cpf";
 import {
+  canChangePersonnelRecord,
   canManageModule,
   canReadModule,
   canSeeAllInModule,
@@ -72,6 +73,14 @@ function dismissalDate(raw: unknown): Date {
 
 function isRh(req: AuthRequest): boolean {
   return Boolean(req.actor && canManageModule(req.actor.permission, "colaboradores"));
+}
+
+/**
+ * Desligar e mexer em CPF ou matrícula: só quem responde pelo quadro de
+ * pessoal. Escrever em Colaboradores, por si, não dá esse poder. [OB-8]
+ */
+function cuidaDoQuadro(req: AuthRequest): boolean {
+  return Boolean(req.actor && canChangePersonnelRecord(req.actor.permission));
 }
 
 function seesAll(req: AuthRequest): boolean {
@@ -507,6 +516,26 @@ class EmployeeProfileController {
           res.status(400).json({ message: "Função (job_role) inválida." });
           return;
         }
+      }
+
+      // CPF e matrícula são identidade: não entram por escrita comum. [OB-8]
+      if (
+        (body.tax_id !== undefined || body.registration !== undefined) &&
+        !cuidaDoQuadro(auth)
+      ) {
+        res.status(403).json({
+          message: "CPF e matrícula só podem ser alterados pelo RH.",
+          code: "PERSONNEL_RECORD_ONLY",
+        });
+        return;
+      }
+      // Encerrar o vínculo tem rota própria, com data e motivo. [S5-H] [OB-8]
+      if (body.dismissed_at !== undefined && !cuidaDoQuadro(auth)) {
+        res.status(403).json({
+          message: "O desligamento só pode ser registrado pelo RH.",
+          code: "PERSONNEL_RECORD_ONLY",
+        });
+        return;
       }
 
       let taxId: string | null | undefined;

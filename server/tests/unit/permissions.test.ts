@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import permissions from "../../config/permissions.json";
+import matriz from "../../config/module-access.json";
 import {
   effectivePermission,
-  accountRoleToPermission,
+  orgRoleToAccountRole,
   isOrgMaster,
 } from "../../src/helper/auth";
 import { can } from "../../src/helper/permissions";
@@ -39,56 +40,50 @@ describe("permissions.json hierarchy", () => {
   });
 });
 
-describe("effectivePermission", () => {
-  it("MASTER org role wins over account role", () => {
-    expect(effectivePermission("MASTER", "USER")).toBe("master");
-    expect(effectivePermission("MASTER", null)).toBe("master");
+describe("effectivePermission: um papel só [OB-3] [S1-C]", () => {
+  /*
+    Antes a função recebia dois papéis e o da conta vencia o da empresa. Os
+    casos abaixo eram "OWNER na conta → owner" e "ADMIN na conta → adm_loja",
+    mesmo com RH ou SST na empresa. Agora só entra o papel da empresa.
+  */
+  it("cada papel da empresa vira a sua coluna da matriz", () => {
+    expect(effectivePermission("MASTER")).toBe("master");
+    expect(effectivePermission("FISCAL")).toBe("fiscal");
+    expect(effectivePermission("RH")).toBe("rh");
+    expect(effectivePermission("SST")).toBe("sst");
+    expect(effectivePermission("SUPERVISOR")).toBe("supervisor");
+    expect(effectivePermission("GERENTE")).toBe("gerente");
+    expect(effectivePermission("ADM_LOJA")).toBe("adm_loja");
   });
 
-  it("OWNER account maps to owner when not master", () => {
-    expect(effectivePermission("ADMIN", "OWNER")).toBe("owner");
-    expect(effectivePermission(null, "OWNER")).toBe("owner");
+  it("Admin (legado) continua valendo como gerente [OB-2]", () => {
+    expect(effectivePermission("ADMIN")).toBe("gerente");
   });
 
-  it("AccountRole.ADMIN maps to adm_loja", () => {
-    expect(effectivePermission("COLABORADOR", "ADMIN")).toBe("adm_loja");
-    expect(effectivePermission(null, "ADMIN")).toBe("adm_loja");
+  it("sem papel na empresa, é colaborador", () => {
+    expect(effectivePermission("COLABORADOR")).toBe("colaborador");
+    expect(effectivePermission(null)).toBe("colaborador");
+    expect(effectivePermission(undefined)).toBe("colaborador");
   });
 
-  it("maps org RH/SST when account is USER", () => {
-    expect(effectivePermission("RH", "USER")).toBe("rh");
-    expect(effectivePermission("SST", "USER")).toBe("sst");
-    expect(effectivePermission("RH", null)).toBe("rh");
+  it("o papel na conta acompanha o da empresa, não o contrário", () => {
+    expect(orgRoleToAccountRole("MASTER")).toBe("OWNER");
+    expect(orgRoleToAccountRole("RH")).toBe("ADMIN");
+    expect(orgRoleToAccountRole("SST")).toBe("ADMIN");
+    expect(orgRoleToAccountRole("GERENTE")).toBe("ADMIN");
+    expect(orgRoleToAccountRole("ADM_LOJA")).toBe("ADMIN");
+    expect(orgRoleToAccountRole("SUPERVISOR")).toBe("USER");
+    expect(orgRoleToAccountRole("COLABORADOR")).toBe("USER");
+    expect(orgRoleToAccountRole("FISCAL")).toBe("USER");
   });
 
-  it("maps new org roles", () => {
-    expect(effectivePermission("SUPERVISOR", "USER")).toBe("supervisor");
-    expect(effectivePermission("GERENTE", "USER")).toBe("gerente");
-    expect(effectivePermission("ADM_LOJA", "USER")).toBe("adm_loja");
-  });
-
-  it("legacy org ADMIN maps to gerente", () => {
-    expect(effectivePermission("ADMIN", "USER")).toBe("gerente");
-  });
-
-  it("account OWNER still beats org RH", () => {
-    expect(effectivePermission("RH", "OWNER")).toBe("owner");
-  });
-
-  it("colaborador is the default employee key", () => {
-    expect(effectivePermission("COLABORADOR", "USER")).toBe("colaborador");
-    expect(effectivePermission(null, "USER")).toBe("colaborador");
-    expect(effectivePermission(null, null)).toBe("colaborador");
-  });
-
-  it("accountRoleToPermission maps correctly", () => {
-    expect(accountRoleToPermission("OWNER")).toBe("owner");
-    expect(accountRoleToPermission("ADMIN")).toBe("adm_loja");
-    expect(accountRoleToPermission("USER")).toBe("colaborador");
-  });
-
-  it("isOrgMaster", () => {
-    expect(isOrgMaster("MASTER")).toBe(true);
-    expect(isOrgMaster("ADMIN")).toBe(false);
+  it("owner e master são a mesma coluna nos 28 módulos", () => {
+    const modulos = Object.keys(matriz.master);
+    expect(modulos.length).toBeGreaterThan(0);
+    for (const m of modulos) {
+      expect(matriz.owner[m as keyof typeof matriz.owner]).toBe(
+        matriz.master[m as keyof typeof matriz.master],
+      );
+    }
   });
 });

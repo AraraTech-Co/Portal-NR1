@@ -1,16 +1,11 @@
 import bcrypt from "bcryptjs";
-import { AccessSuspensionReason, AccountRole, Role } from "@prisma/client";
+import { AccessSuspensionReason, Role } from "@prisma/client";
 import { Request, Response } from "express";
 import prisma from "../model/prisma";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
-import { effectivePermission } from "../helper/auth";
-import {
-  assignableAccountRoles,
-  assignableOrgRoles,
-  canAssignAccountRole,
-  canAssignOrgRole,
-} from "../helper/invite-access";
+import { effectivePermission, orgRoleToAccountRole } from "../helper/auth";
+import { assignableOrgRoles, canAssignOrgRole } from "../helper/invite-access";
 import { modulesForRole } from "../helper/module-access";
 import { accessEnded, resolveAccessUntil } from "../helper/access-period";
 import { temporaryPassword } from "../helper/temporary-password";
@@ -47,10 +42,6 @@ class PeopleAccessController {
               email: true,
               active: true,
               mustChangePassword: true,
-              accountMemberships: {
-                where: { accountId: actor.accountId },
-                select: { role: true },
-              },
               employeeProfiles: {
                 where: { organizationId: orgId },
                 take: 1,
@@ -68,8 +59,7 @@ class PeopleAccessController {
 
       const people = rows
         .map((m) => {
-          const accountRole = m.user.accountMemberships[0]?.role ?? null;
-          const permission = effectivePermission(m.role, accountRole);
+          const permission = effectivePermission(m.role);
           const profile = m.user.employeeProfiles[0] ?? null;
           /*
             Desligado, suspenso e prazo vencido apareciam todos como "Sem
@@ -97,7 +87,6 @@ class PeopleAccessController {
               m.suspendedBy?.name ?? profile?.dismissedBy?.name ?? null,
             must_change_password: m.user.mustChangePassword,
             org_role: m.role,
-            account_role: accountRole,
             permission,
             modules: modulesForRole(permission),
             access_expires_at: m.accessExpiresAt,
@@ -117,10 +106,7 @@ class PeopleAccessController {
 
       res.json({
         people,
-        assignable: {
-          account_roles: assignableAccountRoles(actor),
-          org_roles: assignableOrgRoles(actor),
-        },
+        assignable: { org_roles: assignableOrgRoles(actor) },
       });
     } catch (err) {
       fail(res, err);
@@ -227,7 +213,7 @@ class PeopleAccessController {
       const actor = auth.actor!;
       const orgId = actorOrgId(auth);
       const targetId = req.params.userId;
-      const body = req.body as { org_role?: string; account_role?: string; access_until?: string };
+      const body = req.body as { org_role?: string; access_until?: string };
 
       if (targetId === actorUserId(auth)) {
         res.status(400).json({ message: "Você não pode mudar o seu próprio papel." });
@@ -256,27 +242,16 @@ class PeopleAccessController {
         return;
       }
 
+      /*
+        O papel na conta não se escolhe mais: ele acompanha o da empresa, para
+        que as duas telas nunca mais mostrem papéis diferentes da mesma
+        pessoa. [OB-3] [S1-C]
+      */
       const link = await prisma.accountMembership.findFirst({
         where: { accountId: actor.accountId, userId: targetId },
         select: { id: true, role: true },
       });
-      let accountRole = link?.role ?? null;
-      if (body.account_role !== undefined) {
-        const wanted = body.account_role as AccountRole;
-        if (!Object.values(AccountRole).includes(wanted)) {
-          res.status(400).json({ message: "Papel na conta inválido." });
-          return;
-        }
-        if (!link) {
-          res.status(400).json({ message: "Esta pessoa não está nesta conta." });
-          return;
-        }
-        if (wanted !== link.role && (!canAssignAccountRole(actor, wanted) || !canAssignAccountRole(actor, link.role))) {
-          res.status(403).json({ message: "Você só pode dar papéis de conta abaixo do seu." });
-          return;
-        }
-        accountRole = wanted;
-      }
+      const accountRole = link ? orgRoleToAccountRole(orgRole) : null;
 
       // Fiscal sempre com prazo; quem deixa de ser fiscal perde o prazo. [S7-A]
       const accessExpiresAt =
@@ -306,12 +281,11 @@ class PeopleAccessController {
         after: { orgRole, accountRole, accessExpiresAt },
       });
 
-      const permission = effectivePermission(orgRole, accountRole);
+      const permission = effectivePermission(orgRole);
       res.json({
         person: {
           id: targetId,
           org_role: orgRole,
-          account_role: accountRole,
           permission,
           modules: modulesForRole(permission),
           access_expires_at: accessExpiresAt,

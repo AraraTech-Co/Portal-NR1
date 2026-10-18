@@ -160,11 +160,13 @@ async function main() {
         organizationId: org.id,
       },
     },
-    update: { role: Role.ADMIN },
+    // Dono da conta, num papel só: OWNER manda nesta conta, MASTER alcança
+    // todas as contas da empresa. [OB-3]
+    update: { role: Role.OWNER },
     create: {
       userId: owner.id,
       organizationId: org.id,
-      role: Role.ADMIN,
+      role: Role.OWNER,
     },
   });
 

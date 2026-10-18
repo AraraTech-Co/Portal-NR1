@@ -26,13 +26,11 @@ export type JoinRequest = {
   created_at: string;
   invite_link_id: string | null;
   role_mode: "FIXED" | "ON_APPROVE";
-  suggested_role: string | null;
   suggested_org_role: string | null;
   invite_label: string | null;
 };
 
 export type AssignableRoles = {
-  account_roles: string[];
   org_roles: string[];
 };
 
@@ -46,7 +44,6 @@ export function createInviteLink(input: {
   label?: string;
   max_uses?: number | null;
   role_mode?: "FIXED" | "ON_APPROVE";
-  role?: string;
   org_role?: string;
 }) {
   return request<{ link: InviteLink }>("/api/invite-links", {
@@ -76,7 +73,6 @@ export function decideJoinRequest(
   id: string,
   input: {
     action: "approve" | "reject";
-    role?: string;
     org_role?: string;
     note?: string;
     /** Fim do acesso do fiscal (AAAA-MM-DD). Vazio → 30 dias. */

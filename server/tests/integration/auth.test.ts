@@ -33,7 +33,10 @@ describe("auth API", () => {
     expect(res.status).toBe(200);
     expect(res.body.user.permission).toBe("owner");
     expect(res.body.user.is_master).toBe(false);
-    expect(res.body.user.account_role).toBe("OWNER");
+    // O papel vem do vínculo com a EMPRESA; a sessão não carrega mais papel
+    // de conta, porque ele não decide nada. [OB-3] [S1-C]
+    expect(res.body.user.role).toBe("OWNER");
+    expect(res.body.user.account_role).toBeUndefined();
     expect(res.body.user.modules.conta).toBe("write");
     expect(res.body.user.modules.holerites).toBe("write");
     expect(res.body.accounts).toHaveLength(1);

@@ -321,7 +321,7 @@ export const fetchSummons = () =>
 export type AccessibleAccount = {
   id: string;
   name: string;
-  account_role: string | null;
+  org_role: string | null;
   via_master: boolean;
   organization: { id: string; name: string };
 };

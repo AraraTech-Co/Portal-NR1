@@ -58,6 +58,18 @@ export function canManageModule(roleKey: string, moduleId: ModuleId): boolean {
 }
 
 /**
+ * Desligar corta o acesso na hora, e CPF e matrícula são a identidade da
+ * pessoa dentro do portal: quem entra pela matrícula entra por esse número.
+ * Escrever em Colaboradores não dá esses dois poderes — eles ficam com quem
+ * responde pelo quadro de pessoal. [OB-8]
+ */
+const PERSONNEL_RECORD_ROLES: readonly string[] = ["master", "owner", "rh"];
+
+export function canChangePersonnelRecord(roleKey: string): boolean {
+  return PERSONNEL_RECORD_ROLES.includes(normalizeRoleKey(roleKey));
+}
+
+/**
  * Papéis só de consulta: leem, nunca gravam — nem o próprio registro. O
  * bloqueio de gravação fica no `authenticate`, para valer em toda rota. [S7-A]
  */
@@ -73,6 +85,12 @@ export function isReadOnlyRole(roleKey: string): boolean {
  * quem fez o treinamento, quem está com exame em dia, quem deu ciência.
  */
 const SEES_ALL_READ_ONLY: Record<string, readonly ModuleId[]> = {
+  /*
+    O supervisor deixou de ESCREVER em Colaboradores [P3], mas continua sendo
+    quem conhece o chão: precisa ver a ficha de quem está sob ele — função,
+    treinamento, ordem de serviço. Sem isto, "read" viraria "só a minha".
+  */
+  supervisor: ["colaboradores"],
   fiscal: [
     "colaboradores",
     "documentos_rh",

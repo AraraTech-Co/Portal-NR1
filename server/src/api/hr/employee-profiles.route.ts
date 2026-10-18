@@ -1,6 +1,6 @@
 import { Router } from "express";
 import profiles from "../../controller/EmployeeProfileController";
-import { moduleRead, moduleWrite } from "./middleware";
+import { exigeQuadroDePessoal, moduleRead, moduleWrite } from "./middleware";
 
 const read = moduleRead("colaboradores");
 const writeRh = moduleWrite("colaboradores");
@@ -26,14 +26,14 @@ router.get("/api/employee-profiles/:id/ficha", read, (req, res) =>
 router.patch("/api/employee-profiles/:id", read, (req, res) =>
   profiles.update(req, res),
 );
-router.delete("/api/employee-profiles/:id", writeRh, (req, res) =>
+router.delete("/api/employee-profiles/:id", writeRh, exigeQuadroDePessoal, (req, res) =>
   profiles.dismiss(req, res),
 );
 /** Desligamento com data e motivo — e o acesso cai junto. [S5-H] */
-router.post("/api/employee-profiles/:id/desligamento", writeRh, (req, res) =>
+router.post("/api/employee-profiles/:id/desligamento", writeRh, exigeQuadroDePessoal, (req, res) =>
   profiles.dismiss(req, res),
 );
-router.post("/api/employee-profiles/:id/reverter-desligamento", writeRh, (req, res) =>
+router.post("/api/employee-profiles/:id/reverter-desligamento", writeRh, exigeQuadroDePessoal, (req, res) =>
   profiles.reinstate(req, res),
 );
 

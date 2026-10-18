@@ -20,7 +20,7 @@ import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
-import { ACCOUNT_ROLE_LABEL, formatDay, ORG_ROLE_LABEL } from "@/lib/labels";
+import { formatDay, ORG_ROLE_LABEL } from "@/lib/labels";
 import "@/components/data-table.css";
 import "@/components/form.css";
 import { LoadingState } from "@/components/LoadingState";
@@ -42,21 +42,9 @@ function inviteUrl(path: string): string {
   return `${window.location.origin}${path}`;
 }
 
-/** USER < ADMIN < OWNER: o padrão de um convite é o menor. [B2-1-A] */
-function menorPapelDeConta(papeis: string[]): string {
-  const ordem = ["USER", "ADMIN", "OWNER"];
-  for (const p of ordem) if (papeis.includes(p)) return p;
-  return papeis[0] ?? "USER";
-}
-
 function menorPapelNaEmpresa(papeis: string[]): string {
   if (papeis.includes("COLABORADOR")) return "COLABORADOR";
   return papeis[0] ?? "COLABORADOR";
-}
-
-/** Papel de conta que dá acesso além do papel na empresa. [B2-1-A] */
-function papelForte(role: string): boolean {
-  return role === "OWNER" || role === "ADMIN";
 }
 
 export function AccountPage() {
@@ -65,7 +53,6 @@ export function AccountPage() {
   const [links, setLinks] = useState<InviteLink[]>([]);
   const [requests, setRequests] = useState<JoinRequest[]>([]);
   const [assignable, setAssignable] = useState<AssignableRoles>({
-    account_roles: ["USER"],
     org_roles: ["COLABORADOR"],
   });
   const [canManage, setCanManage] = useState(false);
@@ -77,14 +64,13 @@ export function AccountPage() {
   const [label, setLabel] = useState("");
   const [maxUses, setMaxUses] = useState("");
   const [roleMode, setRoleMode] = useState<"ON_APPROVE" | "FIXED">("ON_APPROVE");
-  const [fixedRole, setFixedRole] = useState("USER");
   const [fixedOrgRole, setFixedOrgRole] = useState("COLABORADOR");
   const [creating, setCreating] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const [decideRoles, setDecideRoles] = useState<
-    Record<string, { role: string; org_role: string; access_until?: string }>
+    Record<string, { org_role: string; access_until?: string }>
   >({});
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -104,7 +90,6 @@ export function AccountPage() {
         OWNER: quem ajustasse só o papel na empresa entregava acesso total da
         conta a todo mundo que usasse o link. O padrão é o menor. [B2-1-A]
       */
-      setFixedRole(menorPapelDeConta(data.assignable.account_roles));
       setFixedOrgRole(menorPapelNaEmpresa(data.assignable.org_roles));
     } catch {
       setLinks([]);
@@ -114,10 +99,9 @@ export function AccountPage() {
       setRequests(data.requests);
       setAssignable((prev) => data.assignable ?? prev);
       decideOk = true;
-      const next: Record<string, { role: string; org_role: string }> = {};
+      const next: Record<string, { org_role: string }> = {};
       for (const r of data.requests) {
         next[r.id] = {
-          role: r.suggested_role ?? menorPapelDeConta(data.assignable.account_roles),
           org_role:
             r.suggested_org_role ?? menorPapelNaEmpresa(data.assignable.org_roles),
         };
@@ -171,7 +155,6 @@ export function AccountPage() {
         label: label.trim() || undefined,
         max_uses: maxUses ? Number(maxUses) : null,
         role_mode: roleMode,
-        role: roleMode === "FIXED" ? fixedRole : undefined,
         org_role: roleMode === "FIXED" ? fixedOrgRole : undefined,
       });
       setLabel("");
@@ -211,7 +194,6 @@ export function AccountPage() {
         action,
         ...(action === "approve" && roleMode === "ON_APPROVE"
           ? {
-              role: roles?.role,
               org_role: roles?.org_role,
               ...(roles?.org_role === "FISCAL"
                 ? { access_until: roles.access_until || defaultFiscalUntil() }
@@ -305,7 +287,7 @@ export function AccountPage() {
                       <td className="muted">
                         {a.via_master
                           ? "Via MASTER"
-                          : (a.account_role ?? "—")}
+                          : (ORG_ROLE_LABEL[a.org_role ?? ""] ?? a.org_role ?? "—")}
                       </td>
                       <td>
                         {active ? (
@@ -371,30 +353,12 @@ export function AccountPage() {
                       <td>
                         {r.role_mode === "FIXED" ? (
                           <span className="muted">
-                            {r.suggested_role} · {r.suggested_org_role}
+                            {ORG_ROLE_LABEL[r.suggested_org_role ?? ""] ??
+                              r.suggested_org_role}
                           </span>
                         ) : (
-                          <div className="form-grid cols-2">
-                            <select
-                              value={decideRoles[r.id]?.role ?? "USER"}
-                              onChange={(e) =>
-                                setDecideRoles((prev) => ({
-                                  ...prev,
-                                  [r.id]: {
-                                    ...prev[r.id],
-                                    role: e.target.value,
-                                    org_role:
-                                      prev[r.id]?.org_role ?? "COLABORADOR",
-                                  },
-                                }))
-                              }
-                            >
-                              {assignable.account_roles.map((role) => (
-                                <option key={role} value={role}>
-                                  {ACCOUNT_ROLE_LABEL[role] ?? role}
-                                </option>
-                              ))}
-                            </select>
+                          /* Um seletor só: o papel na empresa. [OB-3] [S1-C] */
+                          <div className="form-grid">
                             <select
                               value={decideRoles[r.id]?.org_role ?? "COLABORADOR"}
                               onChange={(e) =>
@@ -402,7 +366,6 @@ export function AccountPage() {
                                   ...prev,
                                   [r.id]: {
                                     ...prev[r.id],
-                                    role: prev[r.id]?.role ?? "USER",
                                     org_role: e.target.value,
                                   },
                                 }))
@@ -426,7 +389,6 @@ export function AccountPage() {
                                       ...prev,
                                       [r.id]: {
                                         ...prev[r.id],
-                                        role: prev[r.id]?.role ?? "USER",
                                         org_role: "FISCAL",
                                         access_until: e.target.value,
                                       },
@@ -510,30 +472,10 @@ export function AccountPage() {
               </select>
             </label>
             {roleMode === "FIXED" && (
-              <div className="form-grid cols-2">
+              /* Um papel só: o da empresa. [OB-3] [S1-C] */
+              <div className="form-grid">
                 <label className="form-field">
-                  Papel na conta
-                  <select
-                    value={fixedRole}
-                    onChange={(e) => setFixedRole(e.target.value)}
-                    disabled={creating}
-                  >
-                    {assignable.account_roles.map((role) => (
-                      <option key={role} value={role}>
-                        {ACCOUNT_ROLE_LABEL[role] ?? role}
-                      </option>
-                    ))}
-                  </select>
-                  {papelForte(fixedRole) && (
-                    <span className="form-hint is-warning">
-                      Atenção: este papel dá acesso total à conta a todas as
-                      pessoas que entrarem por este link, qualquer que seja o
-                      papel na empresa.
-                    </span>
-                  )}
-                </label>
-                <label className="form-field">
-                  Papel na organização
+                  Papel na empresa
                   <select
                     value={fixedOrgRole}
                     onChange={(e) => setFixedOrgRole(e.target.value)}
@@ -584,9 +526,7 @@ export function AccountPage() {
                       </td>
                       <td className="muted">
                         {link.role_mode === "FIXED"
-                          ? `${ACCOUNT_ROLE_LABEL[link.role ?? ""] ?? link.role} · ${
-                              ORG_ROLE_LABEL[link.org_role ?? ""] ?? link.org_role
-                            }`
+                          ? (ORG_ROLE_LABEL[link.org_role ?? ""] ?? link.org_role)
                           : "Na aprovação"}
                       </td>
                       <td className="muted">
