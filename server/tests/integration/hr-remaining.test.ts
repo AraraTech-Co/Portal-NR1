@@ -120,6 +120,8 @@ describe("RH restante (compliance → onboarding)", () => {
       .post("/api/time-entries")
       .set("Authorization", `Bearer ${token}`)
       .send({
+        // O lançamento passou a dizer de quem é, sempre. [S5-O]
+        user_id: userId,
         day: "2026-09-24",
         in1: "08:00",
         out1: "12:00",
