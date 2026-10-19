@@ -78,6 +78,7 @@ class MedicalCertificateController {
       const {
         start_date,
         days,
+        hours,
         cid,
         reason,
         file_name,
@@ -86,6 +87,8 @@ class MedicalCertificateController {
       } = req.body as {
         start_date?: string;
         days?: number;
+        /** Declaração de comparecimento: o afastamento é de horas. [S5-C] */
+        hours?: number;
         cid?: string;
         reason?: string;
         file_name?: string;
@@ -93,9 +96,21 @@ class MedicalCertificateController {
         content_base64?: string;
       };
 
-      if (!start_date || !days || days < 1) {
+      /*
+        Duas horas de comparecimento viravam "1 dia" de afastamento. Agora o
+        atestado é medido em dias OU em horas: o que o documento disser. [S5-C]
+      */
+      const horas = Number(hours) > 0 ? Math.floor(Number(hours)) : null;
+      const dias = horas ? 0 : Number(days);
+      if (!start_date || (!horas && (!dias || dias < 1))) {
         res.status(400).json({
-          message: "Informe start_date e days (≥ 1).",
+          message: "Informe a data e quantos dias — ou quantas horas, para declaração de comparecimento.",
+        });
+        return;
+      }
+      if (horas && horas > 24) {
+        res.status(400).json({
+          message: "Mais de 24 horas não cabe num dia: informe em dias.",
         });
         return;
       }
@@ -117,7 +132,8 @@ class MedicalCertificateController {
         organizationId: orgId,
         userId,
         startDate: new Date(start_date),
-        days,
+        days: dias,
+        hours: horas,
         cid: blank(cid),
         reason: blank(reason),
         storagePath,

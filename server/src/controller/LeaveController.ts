@@ -32,6 +32,49 @@ function daysBetween(start: Date, end: Date): number {
   return Math.floor(ms / (24 * 60 * 60 * 1000)) + 1;
 }
 
+/**
+ * Direito a férias: 12 meses de casa fecham o período aquisitivo
+ * (CLT art. 130). Devolve a data de admissão, quando o período fecha e se já
+ * fechou — para a tela dizer, em vez de a pessoa contar de cabeça. [S5-D]
+ */
+async function direitoAFerias(
+  organizationId: string,
+  userIds: string[],
+): Promise<
+  Map<
+    string,
+    { admitted_at: string | null; complete_at: string | null; entitled: boolean }
+  >
+> {
+  const fichas = await prisma.employeeProfile.findMany({
+    where: { organizationId, userId: { in: userIds } },
+    select: { userId: true, admittedAt: true },
+  });
+  const hoje = new Date();
+  const mapa = new Map<
+    string,
+    { admitted_at: string | null; complete_at: string | null; entitled: boolean }
+  >();
+  for (const f of fichas) {
+    if (!f.admittedAt) {
+      mapa.set(f.userId, {
+        admitted_at: null,
+        complete_at: null,
+        entitled: false,
+      });
+      continue;
+    }
+    const fecha = new Date(f.admittedAt);
+    fecha.setUTCFullYear(fecha.getUTCFullYear() + 1);
+    mapa.set(f.userId, {
+      admitted_at: f.admittedAt.toISOString(),
+      complete_at: fecha.toISOString(),
+      entitled: fecha <= hoje,
+    });
+  }
+  return mapa;
+}
+
 class LeaveController {
   async list(req: Request, res: Response) {
     try {
@@ -52,7 +95,21 @@ class LeaveController {
           decidedBy: { select: { id: true, name: true } },
         },
       });
-      res.json({ leaves: rows });
+      /*
+        A tela não dizia se a pessoa tem direito a férias: quem decide tinha
+        de saber de cabeça a data de admissão e contar os 12 meses do período
+        aquisitivo (CLT art. 130). Agora vem junto. [S5-D]
+      */
+      const direito = isRh(auth)
+        ? await direitoAFerias(orgId, [...new Set(rows.map((r) => r.userId))])
+        : await direitoAFerias(orgId, [userId]);
+
+      res.json({
+        leaves: rows.map((r) => ({
+          ...r,
+          vacation_right: direito.get(r.userId) ?? null,
+        })),
+      });
     } catch (err) {
       fail(res, err);
     }

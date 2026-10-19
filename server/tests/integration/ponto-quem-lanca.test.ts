@@ -64,7 +64,7 @@ describe("quem lança no Banco de horas [S5-O]", () => {
       .set(as(colaborador.token))
       .send({ day, balance_minutes: 6000, note: "Saldo que eu quis" });
 
-    expect(res.status).toBe(403);
+    expect(res.status, JSON.stringify(res.body)).toBe(403);
 
     const gravado = await prisma.timeEntry.findFirst({
       where: {
@@ -82,7 +82,7 @@ describe("quem lança no Banco de horas [S5-O]", () => {
       .post("/api/time-entries")
       .set(as(colaborador.token))
       .send({ day, user_id: colaborador.user.id, balance_minutes: 480 });
-    expect(res.status).toBe(403);
+    expect(res.status, JSON.stringify(res.body)).toBe(403);
   });
 
   it("quem só lê o módulo também não lança", async () => {
@@ -91,7 +91,7 @@ describe("quem lança no Banco de horas [S5-O]", () => {
       .post("/api/time-entries")
       .set(as(supervisor.token))
       .send({ day, user_id: colaborador.user.id, balance_minutes: 480 });
-    expect(res.status).toBe(403);
+    expect(res.status, JSON.stringify(res.body)).toBe(403);
   });
 
   it("o RH lança para a pessoa, e o lançamento sai com o dono certo", async () => {
@@ -116,7 +116,7 @@ describe("quem lança no Banco de horas [S5-O]", () => {
       .post("/api/time-entries")
       .set(as(rh.token))
       .send({ day, balance_minutes: 120 });
-    expect(res.status).toBe(400);
+    expect(res.status, JSON.stringify(res.body)).toBe(400);
     expect(res.body.message).toMatch(/user_id/);
   });
 
@@ -130,7 +130,7 @@ describe("quem lança no Banco de horas [S5-O]", () => {
         user_id: "00000000-0000-4000-8000-00000000dead",
         balance_minutes: 60,
       });
-    expect(res.status).toBe(400);
+    expect(res.status, JSON.stringify(res.body)).toBe(400);
     expect(res.body.message).toMatch(/[Pp]essoa/);
   });
 
@@ -138,7 +138,7 @@ describe("quem lança no Banco de horas [S5-O]", () => {
     const res = await request(app)
       .get("/api/time-entries")
       .set(as(colaborador.token));
-    expect(res.status).toBe(200);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
     const meus = res.body.entries as { userId: string }[];
     expect(meus.every((e) => e.userId === colaborador.user.id)).toBe(true);
     expect(meus.some((e) => e.balanceMinutes === 120)).toBe(true);
