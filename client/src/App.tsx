@@ -45,6 +45,7 @@ import { SettingsPage } from "@/pages/SettingsPage";
 import { SummonsPage } from "@/pages/SummonsPage";
 import { TimeEntriesPage } from "@/pages/TimeEntriesPage";
 import { TrainingPage } from "@/pages/TrainingPage";
+import { CertificatePage } from "@/pages/CertificatePage";
 import { TrainingsPage } from "@/pages/TrainingsPage";
 import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 
@@ -124,6 +125,11 @@ function AppRoutes() {
               <Route path="atestados" element={<MedicalCertificatesPage />} />
               <Route path="treinamentos" element={<TrainingsPage />} />
               <Route path="treinamentos/:id" element={<TrainingPage />} />
+              {/* O certificado como documento, para abrir e imprimir. [B2-3-C] */}
+              <Route
+                path="certificados/:enrollmentId"
+                element={<CertificatePage />}
+              />
               <Route path="participacao" element={<ParticipationsPage />} />
               <Route path="denuncia" element={<EthicsReportPage />} />
               <Route path="comite" element={<EthicsPage />} />

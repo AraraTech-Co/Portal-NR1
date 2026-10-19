@@ -212,6 +212,8 @@ export type TrainingEnrollmentRow = {
   score: number | null;
   certificateCode: string | null;
   expiresAt: string | null;
+  /** Emitido antes de existir nota mínima, com nota abaixo dela. [CB-31] */
+  below_minimum: boolean;
   user: { id: string; name: string };
 };
 

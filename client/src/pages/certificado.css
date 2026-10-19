@@ -1,0 +1,94 @@
+/* O certificado é feito para sair no papel: a tela é só a prévia dele. */
+.cert-sheet {
+  background: #fff;
+  color: #141414;
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: 3rem 3.5rem;
+  border: 1px solid #ddd8d0;
+  border-radius: 0.4rem;
+}
+
+.cert-org {
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6a6459;
+}
+
+.cert-title {
+  font-size: 1.6rem;
+  margin: 1.4rem 0 0.4rem;
+}
+
+.cert-body {
+  font-size: 1.02rem;
+  line-height: 1.7;
+  margin: 1.6rem 0;
+}
+
+.cert-name {
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+
+.cert-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 1rem 1.6rem;
+  margin: 2rem 0 0;
+  border-top: 1px solid #e6e1d9;
+  padding-top: 1.4rem;
+}
+
+.cert-facts dt {
+  font-size: 0.72rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #6a6459;
+}
+
+.cert-facts dd {
+  margin: 0.15rem 0 0;
+  font-size: 0.95rem;
+}
+
+.cert-code {
+  margin-top: 2rem;
+  font-size: 0.8rem;
+  color: #6a6459;
+}
+
+.cert-warning {
+  margin-top: 1.4rem;
+  padding: 0.7rem 0.9rem;
+  border-left: 3px solid #b8860b;
+  background: #fdf6e3;
+  font-size: 0.88rem;
+}
+
+.cert-actions {
+  max-width: 48rem;
+  margin: 0 auto 1rem;
+  display: flex;
+  gap: 0.6rem;
+}
+
+@media print {
+  .cert-actions,
+  .app-sidebar,
+  .app-topbar {
+    display: none !important;
+  }
+  .cert-sheet {
+    border: none;
+    padding: 0;
+    max-width: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .cert-sheet {
+    padding: 1.6rem 1.3rem;
+  }
+}

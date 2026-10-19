@@ -153,7 +153,22 @@ export function TrainingPage() {
                 {matricula.expiresAt && (
                   <span className="muted"> · vale até {formatDay(matricula.expiresAt)}</span>
                 )}
+                {/* Era só o código: não havia o que abrir, imprimir ou
+                    entregar. [B2-3-C] */}
+                <div>
+                  <Link to={`/certificados/${matricula.id}`}>
+                    Abrir certificado
+                  </Link>
+                </div>
               </div>
+            )}
+            {/* Vale até vencer, mas abaixo da nota de hoje: a pessoa pode
+                refazer, e antes ouvia "Treinamento já concluído". [CB-31] */}
+            {matricula.below_minimum && (
+              <p className="tr-retry">
+                Este certificado foi emitido antes da nota mínima atual. Vale
+                até o vencimento; para renovar, refaça o treinamento.
+              </p>
             )}
           </div>
         </section>

@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import request from "supertest";
 import { createApp } from "../../src/app";
+import prisma from "../../src/model/prisma";
 import type { Express } from "express";
 
 const JOB_ID = "00000000-0000-4000-8000-000000000012";
@@ -17,12 +18,19 @@ describe("RH restante (compliance → onboarding)", () => {
   let app: Express;
   let token: string;
   let userId: string;
+  let outroUserId: string;
 
   beforeAll(async () => {
     app = createApp();
     const s = await login(app);
     token = s.token;
     userId = s.user.id;
+    /* Alguém que não seja quem revisa: ninguém aceita o próprio. [OB-9] */
+    const outro = await prisma.user.findFirstOrThrow({
+      where: { login: "master" },
+      select: { id: true },
+    });
+    outroUserId = outro.id;
   });
 
   it("requirement, worker cert, exam", async () => {
@@ -40,10 +48,15 @@ describe("RH restante (compliance → onboarding)", () => {
       .post("/api/worker-certificates")
       .set("Authorization", `Bearer ${token}`)
       .send({
+        /*
+          O comprovante passa a ser de OUTRA pessoa: ninguém aceita o
+          próprio, e antes este caso criava e aprovava com a mesma. [OB-9]
+        */
+        user_id: outroUserId,
         name: "CNH D",
         requirement_id: reqr.body.requirement.id,
       });
-    expect(cert.status).toBe(201);
+    expect(cert.status, JSON.stringify(cert.body)).toBe(201);
 
     const review = await request(app)
       .post(`/api/worker-certificates/${cert.body.certificate.id}/review`)

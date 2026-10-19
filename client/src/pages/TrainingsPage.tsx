@@ -67,8 +67,20 @@ function Enrollments({ trainingId, reloadKey }: { trainingId: string; reloadKey:
             <td>{e.completedAt ? formatDay(e.completedAt) : "—"}</td>
             <td>{e.score != null ? e.score : "—"}</td>
             <td>
-              {e.certificateCode ?? "—"}
+              {/* Era só o código na lista: o RH também não tinha o que
+                  entregar nem o que mostrar à fiscalização. [B2-3-C] */}
+              {e.certificateCode ? (
+                <Link to={`/certificados/${e.id}`}>{e.certificateCode}</Link>
+              ) : (
+                "—"
+              )}
               {e.expiresAt && <span className="muted training-sub">vale até {formatDay(e.expiresAt)}</span>}
+              {/* Abaixo da nota de hoje: vale até vencer, mas marcado. [CB-31] */}
+              {e.below_minimum && (
+                <span className="muted training-sub">
+                  abaixo da nota mínima de hoje
+                </span>
+              )}
             </td>
           </tr>
         ))}
