@@ -46,6 +46,7 @@ import { SummonsPage } from "@/pages/SummonsPage";
 import { TimeEntriesPage } from "@/pages/TimeEntriesPage";
 import { TrainingPage } from "@/pages/TrainingPage";
 import { CertificatePage } from "@/pages/CertificatePage";
+import { PublicEthicsPage } from "@/pages/PublicEthicsPage";
 import { TrainingsPage } from "@/pages/TrainingsPage";
 import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 
@@ -92,6 +93,9 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/convite/:token" element={<ConvitePage />} />
+      {/* O canal de denúncia fora do portal, sem login: é o que torna o
+          anonimato verificável por quem denuncia. [S4-L] */}
+      <Route path="/canal/:organizationId" element={<PublicEthicsPage />} />
       <Route element={<RequireAuth />}>
         <Route path="/trocar-senha" element={<ChangePasswordPage />} />
         <Route element={<RequirePasswordOk />}>

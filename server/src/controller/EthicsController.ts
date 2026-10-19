@@ -366,6 +366,22 @@ class EthicsController {
         _count: { _all: true },
       });
       const unreadBy = new Map(unread.map((u) => [u.reportId, u._count._all]));
+
+      /*
+        Quantas vezes o comitê já falou nesta denúncia. Sem isso, a lista não
+        distingue a que nunca teve resposta da que já foi tratada — e foi
+        respondendo na denúncia errada que a pergunta foi parar com outra
+        pessoa. [B2-3-D]
+      */
+      const doComite = await prisma.ethicsReportMessage.groupBy({
+        by: ["reportId"],
+        where: {
+          reportId: { in: rows.map((r) => r.id) },
+          side: REPORT_AUTHOR_SIDES.COMMITTEE,
+        },
+        _count: { _all: true },
+      });
+      const respondidas = new Map(doComite.map((u) => [u.reportId, u._count._all]));
       // Nunca devolver accessCodeHash nem reporter em listagens anônimas.
       res.json({
         reports: rows.map((r) => ({
@@ -385,6 +401,8 @@ class EthicsController {
           updatedAt: r.updatedAt,
           _count: r._count,
           unread_from_reporter: unreadBy.get(r.id) ?? 0,
+          /** Zero = o comitê nunca falou nesta denúncia. [B2-3-D] */
+          committee_messages: respondidas.get(r.id) ?? 0,
         })),
       });
     } catch (err) {
@@ -593,10 +611,27 @@ class EthicsController {
   }
 
   /** Catálogo de categorias para a UI pública. */
-  async listCategories(_req: Request, res: Response) {
+  /**
+   * O que a tela do canal precisa saber antes de alguém relatar.
+   *
+   * Com `organization_id`, devolve também o nome da empresa: o canal passou
+   * a ser público, e quem abre o link precisa ver de que empresa é antes de
+   * escrever. O id vem no link que a empresa divulga — não é segredo, como
+   * o do convite. [S4-L]
+   */
+  async listCategories(req: Request, res: Response) {
+    const orgId = (req.query.organization_id as string | undefined) ?? null;
+    const organization = orgId
+      ? await prisma.organization.findFirst({
+          where: { id: orgId, active: true },
+          select: { id: true, name: true },
+        })
+      : null;
+
     res.json({
       categories: REPORT_CATEGORY_VALUES.map((id) => ({ id })),
       statuses: REPORT_STATUS_VALUES.map((id) => ({ id })),
+      organization,
     });
   }
 }

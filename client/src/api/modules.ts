@@ -229,12 +229,16 @@ export const fetchEthicsReports = () =>
       id: string;
       protocol: string;
       category: string;
+      /** O começo do relato, para a lista não ser só protocolos. [B2-3-D] */
+      description: string;
       status: string;
       isAnonymous: boolean;
       createdAt: string;
       establishment: { name: string } | null;
       _count: { messages: number };
       unread_from_reporter: number;
+      /** Zero = o comitê nunca falou nesta denúncia. [B2-3-D] */
+      committee_messages: number;
     }>;
   }>("/api/ethics-reports").then((d) => d.reports);
 

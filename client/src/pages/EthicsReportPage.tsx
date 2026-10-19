@@ -12,15 +12,30 @@ import { Button } from "@/components/Button";
 import { PageHeader } from "@/components/PageHeader";
 import { REPORT_CATEGORY_LABEL, REPORT_STATUS_LABEL } from "@/lib/labels";
 import "@/components/form.css";
+import "./denuncia.css";
 
 type Mode = "new" | "track";
 
-export function EthicsReportPage() {
+/**
+ * O canal de denúncia.
+ *
+ * Dentro do portal, quem está logado pode relatar com o nome ou anônimo;
+ * fora dele, pelo link público, só existe o anônimo — e é por isso que a
+ * página recebe a empresa por fora. [S4-L]
+ */
+export function EthicsReportPage({
+  organizationId,
+  publico = false,
+}: {
+  organizationId?: string;
+  publico?: boolean;
+} = {}) {
   const { user } = useAuth();
   const [mode, setMode] = useState<Mode>("new");
   const [categories, setCategories] = useState<string[]>([]);
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
+  // Fora do portal não há nome a vincular: a denúncia é sempre anônima.
   const [isAnonymous, setIsAnonymous] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,14 +63,14 @@ export function EthicsReportPage() {
   const [answerError, setAnswerError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchEthicsMeta()
+    fetchEthicsMeta(organizationId)
       .then((meta) => {
         const ids = meta.categories.map((c) => c.id);
         setCategories(ids);
         if (ids[0]) setCategory(ids[0]);
       })
       .catch(() => setCategories(Object.keys(REPORT_CATEGORY_LABEL)));
-  }, []);
+  }, [organizationId]);
 
   async function onSubmitNew(e: FormEvent) {
     e.preventDefault();
@@ -75,7 +90,8 @@ export function EthicsReportPage() {
       const data = await createEthicsReport({
         category,
         description,
-        is_anonymous: isAnonymous,
+        is_anonymous: publico ? true : isAnonymous,
+        ...(organizationId ? { organization_id: organizationId } : {}),
       });
       setResult({
         protocol: data.report.protocol,
@@ -129,6 +145,9 @@ export function EthicsReportPage() {
     }
   }
 
+  /** Plano B da cópia: mostrar, em vez de mandar apertar Ctrl+C. [S4-I] */
+  const [mostrarChaves, setMostrarChaves] = useState(false);
+
   async function copyProtocolAndCode() {
     if (!result) return;
     setCopyError(null);
@@ -139,17 +158,14 @@ export function EthicsReportPage() {
       await navigator.clipboard.writeText(text);
       setCopiedKeys(true);
     } catch {
-      const ok = window.prompt(
-        "Copie o protocolo e o código (Ctrl+C) e guarde em local seguro:",
-        text,
-      );
-      if (ok !== null) {
-        setCopiedKeys(true);
-      } else {
-        setCopyError(
-          "É obrigatório copiar o protocolo e o código antes de continuar.",
-        );
-      }
+      /*
+        Quando o navegador não deixa copiar sozinho (endereço sem cadeado,
+        permissão negada), o plano B falava em "Ctrl+C" — instrução de
+        computador para quem está no celular. Agora a tela mostra o protocolo
+        e o código em letra grande, para a pessoa anotar ou dar um print, e
+        pede a confirmação de que guardou. [S4-I]
+      */
+      setMostrarChaves(true);
     }
   }
 
@@ -174,7 +190,11 @@ export function EthicsReportPage() {
     <div>
       <PageHeader
         title="Fazer denúncia"
-        description="Canal confidencial. Por padrão o relato é anônimo."
+        description={
+          publico
+            ? "Canal confidencial e anônimo. O portal não guarda quem enviou."
+            : "Canal confidencial. Por padrão o relato é anônimo."
+        }
         actions={
           <div className="form-actions">
             <Button
@@ -234,6 +254,21 @@ export function EthicsReportPage() {
                 : "Copiar protocolo e código"}
             </Button>
           </div>
+          {/* O navegador não deixou copiar: mostramos em letra grande para
+              anotar ou dar um print, e confirmamos. [S4-I] */}
+          {mostrarChaves && !copiedKeys && (
+            <div className="ethics-keys">
+              <p className="muted">
+                Não consegui copiar por você. Anote ou tire um print desta
+                tela — é a única forma de acompanhar a denúncia anônima.
+              </p>
+              <p className="ethics-keys-value">{result.protocol}</p>
+              <p className="ethics-keys-value">{result.access_code}</p>
+              <Button type="button" onClick={() => setCopiedKeys(true)}>
+                Guardei o protocolo e o código
+              </Button>
+            </div>
+          )}
           {copyError && <p className="form-error">{copyError}</p>}
           {result.is_anonymous && !copiedKeys && (
             <p className="form-hint">
@@ -263,9 +298,13 @@ export function EthicsReportPage() {
       {mode === "new" && !result && (
         <section className="form-section">
           <h2>Novo relato</h2>
+          {/* Fora do portal não existe a escolha: prometer que existe
+              seria mentir na tela. [S4-L] */}
           <p className="muted">
-            Descreva o fato com o máximo de detalhes possível. Você pode optar
-            por se identificar ou permanecer anônimo.
+            Descreva o fato com o máximo de detalhes possível.{" "}
+            {publico
+              ? "Este canal é anônimo."
+              : "Você pode optar por se identificar ou permanecer anônimo."}
           </p>
           <form className="form-grid" onSubmit={onSubmitNew}>
             <label className="form-field">
@@ -292,28 +331,43 @@ export function EthicsReportPage() {
                 placeholder="O que aconteceu, quando, onde e quem estava envolvido…"
               />
             </label>
-            <label className="form-field" style={{ flexDirection: "row", alignItems: "center", gap: "0.55rem" }}>
-              <input
-                type="checkbox"
-                checked={isAnonymous}
-                onChange={(e) => setIsAnonymous(e.target.checked)}
-              />
-              <span>Enviar de forma anônima (recomendado)</span>
-            </label>
-            {!isAnonymous && (
-              <p className="form-hint" role="note">
-                Se desmarcar o anonimato, a denúncia será vinculada ao seu nome
-                ({user?.name}). Uma confirmação será pedida antes do envio.
+            {/* Fora do portal não há nome a vincular: o canal público é
+                anônimo, e dizê-lo é o ponto do S4-L. */}
+            {publico ? (
+              <p className="form-hint">
+                Esta denúncia é anônima. O portal não guarda quem a enviou —
+                nem o seu nome, nem o seu usuário.
               </p>
+            ) : (
+              <>
+                <label className="form-field" style={{ flexDirection: "row", alignItems: "center", gap: "0.55rem" }}>
+                  <input
+                    type="checkbox"
+                    checked={isAnonymous}
+                    onChange={(e) => setIsAnonymous(e.target.checked)}
+                  />
+                  <span>Enviar de forma anônima (recomendado)</span>
+                </label>
+                {!isAnonymous && (
+                  <p className="form-hint" role="note">
+                    Se desmarcar o anonimato, a denúncia será vinculada ao seu
+                    nome ({user?.name}). Uma confirmação será pedida antes do
+                    envio.
+                  </p>
+                )}
+              </>
             )}
             {error && <p className="form-error">{error}</p>}
             <div className="form-actions">
               <Button type="submit" disabled={saving}>
                 {saving ? "Enviando…" : "Enviar denúncia"}
               </Button>
-              <Link to="/" className="muted">
-                Voltar
-              </Link>
+              {/* Fora do portal não há para onde "voltar". [S4-L] */}
+              {!publico && (
+                <Link to="/" className="muted">
+                  Voltar
+                </Link>
+              )}
             </div>
           </form>
         </section>
