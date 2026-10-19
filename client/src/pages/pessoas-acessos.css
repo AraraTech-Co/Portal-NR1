@@ -83,6 +83,15 @@
   white-space: nowrap;
 }
 
+/*
+  Quatro ações empilhadas em coluna estreita deixavam a linha alta e a tela
+  carregada. Com largura para duas por vez, a linha volta ao tamanho do
+  conteúdo. [B2-1-J]
+*/
+.people-row-actions {
+  min-width: 15rem;
+}
+
 .people-edit {
   display: grid;
   gap: 0.6rem;

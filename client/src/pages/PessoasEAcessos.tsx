@@ -313,10 +313,12 @@ export function PessoasEAcessos() {
                         )}
                       </td>
                       <td>
-                        <div className="form-actions">
+                        {/* As ações da linha ficam lado a lado, não empilhadas. [B2-1-J] */}
+                        <div className="form-actions people-row-actions">
                           <Button
                             type="button"
                             variant="ghost"
+                            size="compact"
                             aria-expanded={open}
                             onClick={() => setOpenId(open ? null : p.id)}
                           >
@@ -326,6 +328,7 @@ export function PessoasEAcessos() {
                             <Button
                               type="button"
                               variant="ghost"
+                              size="compact"
                               disabled={busyId === p.id}
                               onClick={() => void toggleAcesso(p)}
                             >
@@ -336,6 +339,7 @@ export function PessoasEAcessos() {
                             <Button
                               type="button"
                               variant="secondary"
+                              size="compact"
                               disabled={busyId === p.id}
                               onClick={() => (editing?.userId === p.id ? setEditing(null) : startEdit(p))}
                             >
@@ -346,6 +350,7 @@ export function PessoasEAcessos() {
                             <Button
                               type="button"
                               variant="secondary"
+                              size="compact"
                               disabled={busyId === p.id}
                               onClick={() => void onReset(p)}
                             >

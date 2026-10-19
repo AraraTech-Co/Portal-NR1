@@ -117,8 +117,9 @@ function QuickAdd({
             placeholder={placeholder}
             disabled={saving}
           />
+          {/* "Add" não é palavra de quem usa a tela. [B2-1-J] */}
           <Button type="submit" variant="secondary" disabled={saving}>
-            {saving ? "…" : "Add"}
+            {saving ? "Salvando…" : "+ Adicionar"}
           </Button>
         </div>
       </label>

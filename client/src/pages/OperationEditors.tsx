@@ -9,6 +9,7 @@ import {
   type JobRole,
 } from "@/api/operation";
 import { Button } from "@/components/Button";
+import { Dialog } from "@/components/Dialog";
 
 /** Ações de editar e arquivar ficam em componentes próprios. [S2-G] [S1-H] */
 
@@ -83,36 +84,40 @@ export function EstablishmentCard({
     else await onChanged();
   }
 
-  if (editing) {
-    return (
-      <form className="op-card op-edit" onSubmit={onSave}>
-        <label className="form-field">
-          Nome
-          <input value={name} onChange={(e) => setName(e.target.value)} required />
-        </label>
-        <label className="form-field">
-          CNPJ
-          <input value={cnpj} onChange={(e) => setCnpj(e.target.value)} inputMode="numeric" placeholder="00.000.000/0000-00" />
-        </label>
-        <label className="form-field">
-          Endereço
-          <textarea value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Rua, número, bairro, cidade/UF" />
-        </label>
-        {error && <p className="form-error">{error}</p>}
-        <div className="form-actions">
-          <Button type="submit" disabled={saving}>
-            {saving ? "Salvando…" : "Salvar"}
-          </Button>
-          <Button type="button" variant="ghost" onClick={() => setEditing(false)}>
-            Cancelar
-          </Button>
-        </div>
-      </form>
-    );
-  }
-
   return (
     <div className="op-card">
+      {/* O endereço é texto de várias linhas: edita-se com espaço. [B2-1-J] */}
+      {editing && (
+        <Dialog
+          title={`Editar ${establishment.name}`}
+          description="O endereço vai no PGR e na ordem de serviço."
+          onClose={() => setEditing(false)}
+        >
+          <form className="form-grid" onSubmit={onSave}>
+            <label className="form-field">
+              Nome
+              <input value={name} onChange={(e) => setName(e.target.value)} required />
+            </label>
+            <label className="form-field">
+              CNPJ
+              <input value={cnpj} onChange={(e) => setCnpj(e.target.value)} inputMode="numeric" placeholder="00.000.000/0000-00" />
+            </label>
+            <label className="form-field">
+              Endereço
+              <textarea value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Rua, número, bairro, cidade/UF" />
+            </label>
+            {error && <p className="form-error">{error}</p>}
+            <div className="form-actions">
+              <Button type="submit" disabled={saving}>
+                {saving ? "Salvando…" : "Salvar"}
+              </Button>
+              <Button type="button" variant="ghost" onClick={() => setEditing(false)}>
+                Cancelar
+              </Button>
+            </div>
+          </form>
+        </Dialog>
+      )}
       <dl className="op-facts">
         <div>
           <dt>CNPJ</dt>
@@ -126,10 +131,10 @@ export function EstablishmentCard({
       {error && <p className="form-error">{error}</p>}
       {canEdit && (
         <div className="op-row-actions">
-          <Button type="button" variant="secondary" onClick={start}>
+          <Button type="button" variant="secondary" size="compact" onClick={start}>
             Editar
           </Button>
-          <Button type="button" variant="ghost" onClick={() => void onArchive()}>
+          <Button type="button" variant="ghost" size="compact" onClick={() => void onArchive()}>
             Arquivar
           </Button>
         </div>
@@ -199,6 +204,7 @@ export function NameActions({
           <Button
             type="button"
             variant="ghost"
+            size="compact"
             onClick={() => {
               setValue(name);
               setError(null);
@@ -207,7 +213,7 @@ export function NameActions({
           >
             Renomear
           </Button>
-          <Button type="button" variant="ghost" onClick={() => void archive()}>
+          <Button type="button" variant="ghost" size="compact" onClick={() => void archive()}>
             Arquivar
           </Button>
         </div>
@@ -267,9 +273,8 @@ export function ActivityCard({
     else await onChanged();
   }
 
-  if (editing) {
-    return (
-      <form className="op-activity op-edit" onSubmit={onSave}>
+  const formulario = (
+      <form className="form-grid" onSubmit={onSave}>
         <label className="form-field">
           Atividade
           <input value={name} onChange={(e) => setName(e.target.value)} required />
@@ -307,11 +312,23 @@ export function ActivityCard({
           </Button>
         </div>
       </form>
-    );
-  }
+  );
 
   return (
     <div className="op-activity">
+      {/*
+        "Como é feita" é texto longo, e era editado numa caixa de três
+        linhas dentro da coluna. Agora abre em janela própria. [B2-1-J]
+      */}
+      {editing && (
+        <Dialog
+          title={`Editar ${activity.name}`}
+          description="A descrição é o que diz ao inventário de onde vem o risco."
+          onClose={() => setEditing(false)}
+        >
+          {formulario}
+        </Dialog>
+      )}
       <strong>{activity.name}</strong>
       {activity.description ? (
         <p className="muted">{activity.description}</p>
@@ -325,6 +342,7 @@ export function ActivityCard({
           <Button
             type="button"
             variant="ghost"
+            size="compact"
             onClick={() => {
               setName(activity.name);
               setDescription(activity.description ?? "");
@@ -335,7 +353,7 @@ export function ActivityCard({
           >
             Editar
           </Button>
-          <Button type="button" variant="ghost" onClick={() => void onArchive()}>
+          <Button type="button" variant="ghost" size="compact" onClick={() => void onArchive()}>
             Arquivar
           </Button>
         </div>
