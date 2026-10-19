@@ -18,7 +18,13 @@ import {
 import "./document-view.css";
 import "./service-orders.css";
 
-type AckRow = { id: string; name: string; acknowledged_at: string | null };
+type AckRow = {
+  id: string;
+  name: string;
+  /** Identifica a pessoa no papel, onde dois homônimos não se distinguem. */
+  registration: string | null;
+  acknowledged_at: string | null;
+};
 
 function formatDateTime(value: string): string {
   const d = new Date(value);
@@ -57,27 +63,22 @@ function Paragraphs({ text }: { text: string }) {
   );
 }
 
-/** Quem deu ciência e quem falta — só para quem emite e para a fiscalização. */
-function Acknowledgements({ id }: { id: string }) {
-  const [rows, setRows] = useState<AckRow[] | null>(null);
-  const [denied, setDenied] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchServiceOrderAcks(id)
-      .then((data) => {
-        if (!cancelled) setRows(data.people);
-      })
-      .catch(() => {
-        if (!cancelled) setDenied(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
-
-  if (denied || !rows) return null;
-
+/**
+ * Quem deu ciência e quem falta — só para quem emite e para a fiscalização.
+ *
+ * Vai também no papel, como anexo no fim: se o fiscal pede a prova em PDF,
+ * ou a empresa arquiva a ordem, a ciência tem de ir junto. A folha solta se
+ * identifica sozinha, com função, versão e emissão repetidas. [B2-4-G]
+ */
+function Acknowledgements({
+  order,
+  rows,
+  onReceipt,
+}: {
+  order: ServiceOrderFull;
+  rows: AckRow[];
+  onReceipt: (userId: string) => void;
+}) {
   const deram = rows.filter((r) => r.acknowledged_at).length;
 
   return (
@@ -88,22 +89,102 @@ function Acknowledgements({ id }: { id: string }) {
           {deram} de {rows.length}
         </span>
       </h2>
+      <p className="so-annex-id">
+        {order.jobRole.name} · v{order.version} · emitida em{" "}
+        {formatDateTime(order.issuedAt)} · {order.organization.name}
+      </p>
       {rows.length === 0 ? (
         <p className="doc-empty">Nenhum trabalhador ativo nesta função.</p>
       ) : (
         <ul className="so-ack-list">
           {rows.map((r) => (
             <li key={r.id}>
-              <span>{r.name}</span>
-              {r.acknowledged_at ? (
-                <span className="so-ack-ok">{formatDateTime(r.acknowledged_at)}</span>
-              ) : (
-                <span className="so-pending">sem ciência</span>
-              )}
+              <span>
+                {r.name}
+                {r.registration && (
+                  <span className="doc-sub-inline"> · {r.registration}</span>
+                )}
+              </span>
+              <span className="so-ack-right">
+                {r.acknowledged_at ? (
+                  <span className="so-ack-ok">{formatDateTime(r.acknowledged_at)}</span>
+                ) : (
+                  <span className="so-pending">sem ciência</span>
+                )}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="so-receipt-button"
+                  onClick={() => onReceipt(r.id)}
+                >
+                  Comprovante
+                </Button>
+              </span>
             </li>
           ))}
         </ul>
       )}
+    </section>
+  );
+}
+
+/**
+ * O comprovante de uma pessoa, para assinar no papel.
+ *
+ * A ciência no portal já fica com data e hora; o comprovante é para quem
+ * precisa da assinatura — auditoria, arquivo, quem não usa o portal. [B2-4-G]
+ */
+function Receipt({
+  order,
+  person,
+  only,
+}: {
+  order: ServiceOrderFull;
+  person: AckRow;
+  only: boolean;
+}) {
+  return (
+    <section className={`so-receipt${only ? " is-only" : ""}`}>
+      <h2>Comprovante de ciência — ordem de serviço</h2>
+      <dl className="so-receipt-facts">
+        <div>
+          <dt>Empresa</dt>
+          <dd>{order.organization.name}</dd>
+        </div>
+        <div>
+          <dt>Função</dt>
+          <dd>{order.jobRole.name}</dd>
+        </div>
+        <div>
+          <dt>Versão</dt>
+          <dd>
+            v{order.version} · emitida em {formatDateTime(order.issuedAt)}
+          </dd>
+        </div>
+        <div>
+          <dt>Trabalhador</dt>
+          <dd>
+            {person.name}
+            {person.registration ? ` · matrícula ${person.registration}` : ""}
+          </dd>
+        </div>
+      </dl>
+      <p className="so-text">
+        Declaro que recebi, li e entendi a ordem de serviço acima, que diz a
+        que estou exposto, como me proteger e o que devo fazer.
+      </p>
+      <p className="so-receipt-state">
+        {person.acknowledged_at
+          ? `Ciência registrada no portal em ${formatDateTime(person.acknowledged_at)}.`
+          : "Ciência ainda não registrada no portal."}
+      </p>
+      <div className="so-receipt-sign">
+        <span>Assinatura</span>
+        <span>Data</span>
+      </div>
+      <p className="doc-id">
+        Ordem de serviço emitida no Portal NR-1 · identificador {order.id}
+      </p>
     </section>
   );
 }
@@ -119,6 +200,12 @@ export function ServiceOrderViewPage() {
   const [error, setError] = useState<string | null>(null);
   const [ackError, setAckError] = useState<string | null>(null);
   const [acking, setAcking] = useState(false);
+  /** A lista de ciência — nula para quem não pode vê-la. [B2-4-G] */
+  const [acks, setAcks] = useState<AckRow[] | null>(null);
+  /** Sai um comprovante por pessoa junto com a ordem. */
+  const [comComprovantes, setComComprovantes] = useState(true);
+  /** Imprimir só o comprovante desta pessoa. */
+  const [apenas, setApenas] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const data = await fetchServiceOrder(id);
@@ -134,6 +221,33 @@ export function ServiceOrderViewPage() {
       cancelled = true;
     };
   }, [load]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchServiceOrderAcks(id)
+      .then((data) => {
+        if (!cancelled) setAcks(data.people);
+      })
+      .catch(() => {
+        // Quem não emite nem fiscaliza não vê a lista: não é erro de tela.
+        if (!cancelled) setAcks(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  /*
+    Imprimir um comprovante só: o estado precisa estar na tela ANTES de
+    chamar a impressão, por isso ela sai daqui e não do clique.
+  */
+  useEffect(() => {
+    if (!apenas) return;
+    const limpar = () => setApenas(null);
+    window.addEventListener("afterprint", limpar, { once: true });
+    window.print();
+    return () => window.removeEventListener("afterprint", limpar);
+  }, [apenas]);
 
   useEffect(() => {
     if (!order) return;
@@ -172,8 +286,10 @@ export function ServiceOrderViewPage() {
   const cnpj = formatCnpj(order.organization.taxId);
   const { content } = order;
 
+  const comprovantes = comComprovantes ? (acks ?? []) : [];
+
   return (
-    <div className="doc-view">
+    <div className={`doc-view${apenas ? " so-print-one" : ""}`}>
       <div className="doc-toolbar">
         <Link to="/ordens-servico" className="doc-back">
           ← Ordens de serviço
@@ -182,6 +298,19 @@ export function ServiceOrderViewPage() {
           Imprimir ou salvar em PDF
         </Button>
       </div>
+
+      {/* O que sai no papel além do documento. [B2-4-G] */}
+      {acks && acks.length > 0 && (
+        <label className="so-print-option">
+          <input
+            type="checkbox"
+            checked={comComprovantes}
+            onChange={(e) => setComComprovantes(e.target.checked)}
+          />
+          Incluir um comprovante por pessoa para assinar ({acks.length}{" "}
+          {acks.length === 1 ? "folha" : "folhas"})
+        </label>
+      )}
 
       {!order.is_current && (
         <p className="filter-meta so-alert">
@@ -410,7 +539,18 @@ export function ServiceOrderViewPage() {
         </footer>
       </article>
 
-      <Acknowledgements id={order.id} />
+      {acks && (
+        <Acknowledgements order={order} rows={acks} onReceipt={setApenas} />
+      )}
+
+      {(apenas ? (acks ?? []) : comprovantes).map((p) => (
+        <Receipt
+          key={p.id}
+          order={order}
+          person={p}
+          only={apenas === p.id}
+        />
+      ))}
     </div>
   );
 }

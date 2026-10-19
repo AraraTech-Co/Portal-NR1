@@ -128,9 +128,13 @@ async function peopleInRole(organizationId: string, jobRoleId: string) {
       dismissedAt: null,
       user: { active: true },
     },
-    select: { user: { select: { id: true, name: true } } },
+    /*
+      A matrícula vai junto: é ela que identifica a pessoa no comprovante
+      que sai no papel, onde dois homônimos não se distinguem. [B2-4-G]
+    */
+    select: { registration: true, user: { select: { id: true, name: true } } },
   });
-  return rows.map((r) => r.user);
+  return rows.map((r) => ({ ...r.user, registration: r.registration }));
 }
 
 class ServiceOrderController {
@@ -298,6 +302,7 @@ class ServiceOrderController {
         .map((p) => ({
           id: p.id,
           name: p.name,
+          registration: p.registration,
           acknowledged_at: quando.get(p.id) ?? null,
         }))
         .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
