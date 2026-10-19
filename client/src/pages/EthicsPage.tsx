@@ -5,6 +5,7 @@ import { ListShell } from "@/components/ListShell";
 import { Chip } from "@/components/Chip";
 import { formatDay, REPORT_CATEGORY_LABEL, REPORT_STATUS_LABEL } from "@/lib/labels";
 import "@/components/ethics-thread.css";
+import "./denuncia.css";
 
 function statusTone(status: string): "warning" | "info" | "success" | "neutral" {
   if (status === "RECEIVED") return "warning";
@@ -60,6 +61,15 @@ export function EthicsPage() {
                 >
                   <td>
                     <strong>{r.protocol}</strong>
+                    {/* A lista não mostrava uma linha sequer do relato: com
+                        duas denúncias parecidas, o comitê respondeu na
+                        errada e a pergunta foi parar com outra pessoa.
+                        [B2-3-D] [CB-35] */}
+                    <div className="ethics-excerpt">
+                      {r.description.length > 110
+                        ? `${r.description.slice(0, 110)}…`
+                        : r.description}
+                    </div>
                   </td>
                   <td>{REPORT_CATEGORY_LABEL[r.category] ?? r.category}</td>
                   <td>
@@ -72,6 +82,12 @@ export function EthicsPage() {
                     {r.unread_from_reporter > 0 && (
                       <Chip tone="warning" className="ethics-unread">
                         {r.unread_from_reporter === 1 ? "1 nova" : `${r.unread_from_reporter} novas`}
+                      </Chip>
+                    )}
+                    {/* Quem ainda não ouviu nada do comitê fica à vista. */}
+                    {r.committee_messages === 0 && (
+                      <Chip tone="danger" className="ethics-unread">
+                        Sem resposta
                       </Chip>
                     )}
                   </td>

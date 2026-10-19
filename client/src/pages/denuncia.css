@@ -1,0 +1,66 @@
+/* O canal de denúncia, inclusive fora do portal, sem login. [S4-L] */
+.ethics-keys {
+  margin: 1rem 0;
+  padding: 0.9rem 1rem;
+  border-left: 3px solid #b8860b;
+  background: #fdf6e3;
+}
+
+/* O protocolo e o código em letra grande: dá para anotar ou dar um print,
+   em vez de mandar apertar Ctrl+C no celular. [S4-I] */
+.ethics-keys-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 1.35rem;
+  letter-spacing: 0.06em;
+  margin: 0.4rem 0;
+  color: #141414;
+}
+
+.canal-page {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  padding: 2.5rem 1rem 4rem;
+}
+
+.canal-sheet {
+  width: 100%;
+  max-width: 40rem;
+}
+
+.canal-eyebrow {
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.canal-org {
+  margin: 0.2rem 0 1.4rem;
+  font-size: 1.05rem;
+}
+
+/* O começo do relato na lista do comitê: sem isso, duas denúncias parecidas
+   são indistinguíveis e a resposta vai para a errada. [B2-3-D] */
+.ethics-excerpt {
+  margin-top: 0.25rem;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: var(--text-muted, #6a6459);
+  /* A coluna do protocolo é estreita: sem largura mínima, o trecho sai
+     quebrado numa palavra por linha e não ajuda a distinguir nada. */
+  min-width: 16rem;
+  max-width: 28rem;
+}
+
+/* No celular o título e os dois botões brigavam pela mesma linha e saíam da
+   tela. Aqui eles empilham. */
+.canal-sheet .page-header {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.8rem;
+}
+
+.canal-sheet .page-actions,
+.canal-sheet .page-actions .form-actions {
+  flex-wrap: wrap;
+}

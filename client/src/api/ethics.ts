@@ -2,11 +2,16 @@ import { request } from "./client";
 
 export type EthicsCategory = { id: string };
 
-export function fetchEthicsMeta() {
+/** Com a empresa, o canal público sabe de quem é antes de alguém escrever. [S4-L] */
+export function fetchEthicsMeta(organizationId?: string) {
+  const qs = organizationId
+    ? `?organization_id=${encodeURIComponent(organizationId)}`
+    : "";
   return request<{
     categories: EthicsCategory[];
     statuses: EthicsCategory[];
-  }>("/api/ethics-reports/meta");
+    organization: { id: string; name: string } | null;
+  }>(`/api/ethics-reports/meta${qs}`);
 }
 
 export function createEthicsReport(input: {
@@ -14,6 +19,8 @@ export function createEthicsReport(input: {
   description: string;
   is_anonymous: boolean;
   establishment_id?: string;
+  /** Fora do portal não há sessão: a empresa vem do link. [S4-L] */
+  organization_id?: string;
 }) {
   return request<{
     report: {
