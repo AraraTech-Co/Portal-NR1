@@ -8,7 +8,10 @@ import { Evidence } from "../model/schema/Evidence/Evidence";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
 import { notify } from "../helper/notify";
-import { canManageModule } from "../helper/module-access";
+import {
+  canCloseOccurrenceAnalysis,
+  canManageModule,
+} from "../helper/module-access";
 import {
   assertSize,
   buildEvidenceStoragePath,
@@ -329,8 +332,22 @@ class OccurrenceController {
    */
   async analyze(req: Request, res: Response) {
     try {
-      const orgId = actorOrgId(req as AuthRequest);
-      const userId = actorUserId(req as AuthRequest);
+      const auth = req as AuthRequest;
+      const orgId = actorOrgId(auth);
+      const userId = actorUserId(auth);
+      /*
+        Quem viu registra; quem responde tecnicamente analisa e encerra. O
+        supervisor relatava e encerrava sozinho o próprio quase-acidente, e a
+        ocorrência passava a "Analisada" sem o técnico olhar. [S3-E]
+      */
+      if (!auth.actor || !canCloseOccurrenceAnalysis(auth.actor.permission)) {
+        res.status(403).json({
+          message:
+            "A análise da ocorrência é de quem responde tecnicamente pelo SST.",
+          code: "OCCURRENCE_ANALYSIS_SST_ONLY",
+        });
+        return;
+      }
       const current = await new Occurrence().read.one({
         id: req.params.id,
         organizationId: orgId,

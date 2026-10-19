@@ -19,6 +19,8 @@ export type InventoryRisk = {
 
 export type InventoryItem = {
   hazard_id: string;
+  /** Só na projeção viva, para a tela levar direto à avaliação. [CB-22] */
+  activity_id?: string | null;
   description: string;
   source: string | null;
   consequences: string | null;

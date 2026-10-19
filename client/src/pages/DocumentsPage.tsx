@@ -251,9 +251,12 @@ export function DocumentsPage() {
                   if (member?.jobRoleName) {
                     setResponsibleRole(member.jobRoleName);
                   }
-                  if (member?.registration) {
-                    setResponsibleRegistration(member.registration);
-                  }
+                  /*
+                    A matrícula vinha para cá: 13 virava "registro
+                    profissional" no documento assinado. Matrícula é número
+                    da folha; registro profissional é CREA, CRM, MTE. Quem
+                    tem um digita; quem não tem deixa em branco. [S2-D]
+                  */
                 }}
               />
             </label>
@@ -272,7 +275,12 @@ export function DocumentsPage() {
               value={responsibleRegistration}
               onChange={(e) => setResponsibleRegistration(e.target.value)}
               disabled={saving}
+              placeholder="Ex.: CREA-SP 1234567 · MTE 12345"
             />
+            <span className="form-hint">
+              Conselho de classe ou registro no MTE. Não é a matrícula da
+              empresa.
+            </span>
           </label>
           <label className="form-field">
             Declaração de assinatura

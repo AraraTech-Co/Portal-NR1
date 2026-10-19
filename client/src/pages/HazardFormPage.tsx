@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   archiveHazard,
   archiveRisk,
@@ -223,7 +223,9 @@ export function HazardFormPage() {
 
   const [establishmentId, setEstablishmentId] = useState("");
   const [sectorId, setSectorId] = useState("");
-  const [activityId, setActivityId] = useState("");
+  /** Vindo do Inventário: a atividade já chega escolhida. [CB-22] */
+  const [parametros] = useSearchParams();
+  const [activityId, setActivityId] = useState(parametros.get("atividade") ?? "");
 
   const [hazards, setHazards] = useState<Hazard[]>([]);
   const [form, setForm] = useState<HazardInput>(EMPTY);
@@ -243,6 +245,19 @@ export function HazardFormPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  /*
+    Chegando do Inventário com a atividade na URL, os dois seletores de cima
+    se preenchem sozinhos: sem isso a pessoa cairia numa tela com a atividade
+    escolhida e as listas acima vazias. [CB-22]
+  */
+  useEffect(() => {
+    if (!activityId || establishmentId) return;
+    const a = activities.find((x) => x.id === activityId);
+    if (!a) return;
+    setEstablishmentId(a.establishmentId);
+    setSectorId(a.sectorId);
+  }, [activityId, establishmentId, activities]);
+
   const reloadHazards = useCallback(async () => {
     if (!activityId) {
       setHazards([]);
@@ -259,6 +274,21 @@ export function HazardFormPage() {
   const visibleSectors = sectors.filter((s) => !establishmentId || s.establishmentId === establishmentId);
   const visibleActivities = activities.filter((a) => (sectorId ? a.sectorId === sectorId : false));
   const activity = activities.find((a) => a.id === activityId) ?? null;
+
+  /*
+    Escolhida a atividade, o número de expostos vem sugerido pelas pessoas
+    que estão nas funções dela — editável, porque pode haver exposto de outra
+    área. Só preenche o que está em branco: não sobrescreve o que o técnico
+    já corrigiu. [CB-22]
+  */
+  useEffect(() => {
+    if (!activity || editingId) return;
+    setForm((f) =>
+      f.exposed_workers_count == null
+        ? { ...f, exposed_workers_count: activity.people_count }
+        : f,
+    );
+  }, [activity, editingId]);
 
   function set<K extends keyof HazardInput>(key: K, value: HazardInput[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -494,7 +524,9 @@ export function HazardFormPage() {
                     <input
                       value={form.exposed_group ?? ""}
                       onChange={(e) => set("exposed_group", e.target.value)}
-                      placeholder="Ex.: repositores do turno da tarde"
+                      /* O exemplo era de varejo numa tela usada por indústria
+                         também. [CB-22] */
+                      placeholder="Ex.: operadores do torno no turno da tarde"
                     />
                   </label>
                   <label className="form-field">
@@ -508,7 +540,13 @@ export function HazardFormPage() {
                         set("exposed_workers_count", e.target.value === "" ? null : Number(e.target.value))
                       }
                     />
-                    <span className="form-hint">Quanto mais gente exposta, mais urgente é a ação.</span>
+                    {/* O número era digitado, e o portal já sabia quantas
+                        pessoas estão nas funções da atividade. [CB-22] */}
+                    <span className="form-hint">
+                      {activity
+                        ? `${activity.people_count} pessoa(s) nas funções desta atividade. Corrija se houver gente de outra área exposta.`
+                        : "Quanto mais gente exposta, mais urgente é a ação."}
+                    </span>
                   </label>
                 </div>
                 <div className="form-grid cols-2">

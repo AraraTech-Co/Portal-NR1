@@ -56,6 +56,8 @@ function flattenRows(items: InventoryItem[]) {
   const rows: {
     key: string;
     riskId: string | null;
+    /** Para avaliar sem procurar a atividade na mão. [CB-22] */
+    activityId: string | null;
     hazard: string;
     risk: string;
     level: string | null;
@@ -68,6 +70,7 @@ function flattenRows(items: InventoryItem[]) {
       rows.push({
         key: item.hazard_id,
         riskId: null,
+        activityId: item.activity_id ?? null,
         hazard: item.description,
         risk: "—",
         level: null,
@@ -79,6 +82,7 @@ function flattenRows(items: InventoryItem[]) {
     for (const risk of item.risks) {
       rows.push({
         key: `${item.hazard_id}-${risk.risk_id}`,
+        activityId: item.activity_id ?? null,
         riskId: risk.risk_id,
         hazard: item.description,
         risk: risk.description,
@@ -224,7 +228,18 @@ export function InventoryPage() {
                       </td>
                       <td>{row.status}</td>
                       <td className="muted">{row.place}</td>
-                      <td>
+                      <td className="inventory-actions">
+                        {/* Avaliar só se fazia pela tela de registro, perigo
+                            a perigo. O Inventário é onde o técnico olha os
+                            riscos: daqui ele chega direto. [CB-22] */}
+                        {canWrite && row.activityId && (
+                          <Link
+                            to={`/inventario/registrar?atividade=${encodeURIComponent(row.activityId)}`}
+                            className="inventory-history-btn"
+                          >
+                            {row.level ? "Reavaliar" : "Avaliar"}
+                          </Link>
+                        )}
                         {row.riskId && (
                           <button
                             type="button"

@@ -70,6 +70,17 @@ export function canChangePersonnelRecord(roleKey: string): boolean {
 }
 
 /**
+ * Encerrar a análise da ocorrência. Quem está no fato relata; quem responde
+ * tecnicamente analisa e encerra — a mesma separação que já vale na avaliação
+ * de risco e na validação da ação. [S3-E]
+ */
+const OCCURRENCE_ANALYSIS_ROLES: readonly string[] = ["master", "owner", "sst"];
+
+export function canCloseOccurrenceAnalysis(roleKey: string): boolean {
+  return OCCURRENCE_ANALYSIS_ROLES.includes(normalizeRoleKey(roleKey));
+}
+
+/**
  * Papéis só de consulta: leem, nunca gravam — nem o próprio registro. O
  * bloqueio de gravação fica no `authenticate`, para valer em toda rota. [S7-A]
  */
