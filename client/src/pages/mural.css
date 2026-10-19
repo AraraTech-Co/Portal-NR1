@@ -116,3 +116,30 @@
   justify-content: space-between;
   gap: 0.4rem;
 }
+
+/* Para quais unidades vai o aviso. [CB-33] */
+.mural-units {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.75rem 1rem 1rem;
+  margin: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.mural-units legend {
+  font-weight: 600;
+  padding: 0 0.35rem;
+}
+
+.mural-unit {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.mural-unit-list {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.25rem 0 0.25rem 1.6rem;
+}

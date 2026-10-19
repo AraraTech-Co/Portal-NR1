@@ -9,6 +9,7 @@ import {
   type AnnouncementListItem,
   type AnnouncementReader,
 } from "@/api/announcements";
+import { fetchEstablishments, type Establishment } from "@/api/operation";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
 import { EmptyState } from "@/components/EmptyState";
@@ -55,10 +56,21 @@ export function AnnouncementsPage() {
   const [body, setBody] = useState("");
   const [happensAt, setHappensAt] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
+  /** Para quais unidades vai o aviso. Nenhuma marcada = a empresa toda. [CB-33] */
+  const [units, setUnits] = useState<Establishment[]>([]);
+  const [chosen, setChosen] = useState<string[]>([]);
+  const [scope, setScope] = useState<"empresa" | "unidades">("empresa");
   const [publishing, setPublishing] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [formOk, setFormOk] = useState<string | null>(null);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!canPublish) return;
+    fetchEstablishments()
+      .then((d) => setUnits(d.establishments.filter((u) => !u.archivedAt)))
+      .catch(() => setUnits([]));
+  }, [canPublish]);
 
   const reload = useCallback(async () => {
     const list = await fetchAnnouncements();
@@ -107,7 +119,7 @@ export function AnnouncementsPage() {
             ? {
                 ...r,
                 read_at: new Date().toISOString(),
-                _count: { reads: r._count.reads + (r.read_at ? 0 : 1) },
+                read_count: r.read_count + (r.read_at ? 0 : 1),
               }
             : r,
         ),
@@ -137,21 +149,35 @@ export function AnnouncementsPage() {
     setShareUrl(null);
     setPublishing(true);
     try {
-      const created = await createAnnouncement({
+      const { announcement: created, notified } = await createAnnouncement({
         kind,
         title,
         body,
         happens_at: happensAt || null,
         expires_at: expiresAt || null,
+        establishment_ids: scope === "unidades" ? chosen : [],
       });
       const url = `${window.location.origin}/mural?open=${created.id}`;
       setShareUrl(url);
-      setFormOk("Aviso publicado.");
+      /*
+        Quantas pessoas receberam, na hora. Antes a tela mandava compartilhar
+        um link, e quem publicava não sabia a quem o aviso tinha chegado.
+        [CB-33] [S3-G]
+      */
+      setFormOk(
+        notified === 0
+          ? "Aviso publicado. Ninguém foi avisado: não há pessoas no público escolhido."
+          : `Aviso publicado e enviado a ${notified} ${
+              notified === 1 ? "pessoa" : "pessoas"
+            }.`,
+      );
       setTitle("");
       setBody("");
       setHappensAt("");
       setExpiresAt("");
       setKind("NOTICE");
+      setChosen([]);
+      setScope("empresa");
       setOpenId(created.id);
       setSearchParams({ open: created.id }, { replace: true });
       await reload();
@@ -183,8 +209,9 @@ export function AnnouncementsPage() {
         <section className="form-section">
           <h2>Publicar aviso</h2>
           <p className="muted">
-            O conteúdo aceita Markdown (títulos, listas, negrito). Após
-            publicar, compartilhe o link com a equipe.
+            O conteúdo aceita Markdown (títulos, listas, negrito). Ao publicar,
+            o portal avisa sozinho quem é do público — não é preciso
+            compartilhar o link.
           </p>
           <form className="form-grid" onSubmit={onPublish}>
             <div className="form-grid cols-2">
@@ -221,6 +248,61 @@ export function AnnouncementsPage() {
                 placeholder={"## Título\n\nTexto do aviso, **negrito**, listas…"}
               />
             </label>
+            <fieldset className="mural-units">
+              <legend>Quem recebe</legend>
+              <label className="mural-unit">
+                <input
+                  type="radio"
+                  name="publico"
+                  checked={scope === "empresa"}
+                  onChange={() => {
+                    setScope("empresa");
+                    setChosen([]);
+                  }}
+                />
+                A empresa toda
+              </label>
+              <label className="mural-unit">
+                <input
+                  type="radio"
+                  name="publico"
+                  checked={scope === "unidades"}
+                  onChange={() => setScope("unidades")}
+                  disabled={units.length === 0}
+                />
+                Só estas unidades
+              </label>
+              {scope === "unidades" && (
+                <div className="mural-unit-list">
+                  {units.map((u) => (
+                    <label key={u.id} className="mural-unit">
+                      <input
+                        type="checkbox"
+                        checked={chosen.includes(u.id)}
+                        onChange={(e) =>
+                          setChosen((prev) =>
+                            e.target.checked
+                              ? [...prev, u.id]
+                              : prev.filter((id) => id !== u.id),
+                          )
+                        }
+                      />
+                      {u.name}
+                    </label>
+                  ))}
+                </div>
+              )}
+              {scope === "unidades" && chosen.length === 0 && (
+                <p className="form-hint is-warning">
+                  Marque pelo menos uma unidade.
+                </p>
+              )}
+              <p className="form-hint">
+                O fiscal e quem foi desligado nunca recebem aviso do mural. Num
+                aviso de unidade, quem não está ligado a uma função — acesso só
+                administrativo, por exemplo — também não recebe.
+              </p>
+            </fieldset>
             <div className="form-grid cols-2">
               <label className="form-field">
                 Data do evento (opcional)
@@ -252,7 +334,12 @@ export function AnnouncementsPage() {
               </div>
             )}
             <div className="form-actions">
-              <Button type="submit" disabled={publishing}>
+              <Button
+                type="submit"
+                disabled={
+                  publishing || (scope === "unidades" && chosen.length === 0)
+                }
+              >
                 {publishing ? "Publicando…" : "Publicar"}
               </Button>
             </div>
@@ -311,7 +398,10 @@ export function AnnouncementsPage() {
                         <Chip>{ANNOUNCEMENT_KIND_LABEL[r.kind] ?? r.kind}</Chip>
                       </td>
                       <td>{r.publishedBy.name}</td>
-                      <td>{r._count.reads}</td>
+                      {/* "12 leituras" não dizia de quantos. [CB-36] */}
+                      <td>
+                        {r.read_count} de {r.audience_count}
+                      </td>
                       <td>
                         {r.read_at ? (
                           <Chip tone="success">Sim</Chip>
@@ -336,6 +426,14 @@ export function AnnouncementsPage() {
                           <div className="mural-expand-clip">
                             <div className="mural-expand-body">
                               <div className="mural-expand-meta">
+                                {/* Para quem foi o aviso. [CB-33] */}
+                                <Chip>
+                                  {r.establishments.length === 0
+                                    ? "Empresa toda"
+                                    : r.establishments
+                                        .map((u) => u.name)
+                                        .join(", ")}
+                                </Chip>
                                 {r.happensAt && (
                                   <Chip>Evento: {formatDay(r.happensAt)}</Chip>
                                 )}
@@ -387,7 +485,21 @@ export function AnnouncementsPage() {
                                     <>
                                       <p className="muted">
                                         {readers.filter((p) => p.read_at).length} de {readers.length}{" "}
-                                        leram.
+                                        leram.{" "}
+                                        {/*
+                                          A conta é sobre quem devia receber:
+                                          sem o fiscal, sem quem foi desligado
+                                          e sem as outras unidades. [CB-36]
+                                        */}
+                                        <span>
+                                          A conta é de quem recebeu o aviso
+                                          {r.establishments.length > 0
+                                            ? ` em ${r.establishments
+                                                .map((u) => u.name)
+                                                .join(", ")}`
+                                            : ""}
+                                          .
+                                        </span>
                                       </p>
                                       <ul>
                                         {readers.map((p) => (
