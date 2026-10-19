@@ -12,7 +12,11 @@ export type AnnouncementListItem = {
   createdAt: string;
   read_at: string | null;
   publishedBy: { id: string; name: string };
-  _count: { reads: number };
+  /** As unidades que recebem o aviso. Vazio = a empresa toda. [CB-33] */
+  establishments: Array<{ id: string; name: string }>;
+  /** Quantas pessoas do público leram, e quantas são. [CB-36] */
+  read_count: number;
+  audience_count: number;
 };
 
 export function fetchAnnouncements(includeExpired = false) {
@@ -22,8 +26,11 @@ export function fetchAnnouncements(includeExpired = false) {
   ).then((d) => d.announcements);
 }
 
+/** Um aviso só. A lista é que traz a contagem de leitura. */
 export function fetchAnnouncement(id: string) {
-  return request<{ announcement: AnnouncementListItem }>(
+  return request<{
+    announcement: Omit<AnnouncementListItem, "read_count" | "audience_count">;
+  }>(
     `/api/announcements/${id}`,
   ).then((d) => d.announcement);
 }
@@ -41,11 +48,17 @@ export function createAnnouncement(input: {
   body: string;
   happens_at?: string | null;
   expires_at?: string | null;
+  /** Vazio ou ausente: o aviso vai para a empresa toda. [CB-33] */
+  establishment_ids?: string[];
 }) {
-  return request<{ announcement: AnnouncementListItem }>("/api/announcements", {
+  return request<{
+    announcement: AnnouncementListItem;
+    /** Quantas pessoas receberam o aviso. [CB-33] */
+    notified: number;
+  }>("/api/announcements", {
     method: "POST",
     body: JSON.stringify(input),
-  }).then((d) => d.announcement);
+  });
 }
 
 export type AnnouncementReader = {
@@ -57,7 +70,11 @@ export type AnnouncementReader = {
 /** Quem leu e quem ainda não leu — para quem publica. [S3-H] */
 export function fetchAnnouncementReaders(id: string) {
   return request<{
-    announcement: { id: string; title: string };
+    announcement: {
+      id: string;
+      title: string;
+      establishments: Array<{ id: string; name: string }>;
+    };
     readers: AnnouncementReader[];
     read: number;
     pending: number;

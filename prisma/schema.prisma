@@ -400,6 +400,7 @@ model Establishment {
   emergencyPlans EmergencyProcedure[]
   contractors    Contractor[]
   ethicsReports  EthicsReport[]
+  announcements  AnnouncementEstablishment[]
 
   @@index([organizationId, archivedAt])
 }
@@ -1502,8 +1503,26 @@ model Announcement {
   organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   publishedBy  User              @relation("AnnouncementAuthor", fields: [publishedById], references: [id])
   reads        AnnouncementRead[]
+  /// Para quais unidades vai o aviso. Nenhuma linha = a empresa toda. [CB-33]
+  establishments AnnouncementEstablishment[]
 
   @@index([organizationId, createdAt])
+}
+
+/// As unidades que recebem um aviso do mural.
+///
+/// O aviso ia para todo mundo da empresa, de todas as unidades, e quem
+/// publicava não tinha como escolher. Sem nenhuma linha aqui, continua indo
+/// para a empresa toda. [CB-33]
+model AnnouncementEstablishment {
+  announcementId  String
+  establishmentId String
+
+  announcement  Announcement  @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  establishment Establishment @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+
+  @@id([announcementId, establishmentId])
+  @@index([establishmentId])
 }
 
 /// Confirmação de leitura por pessoa — é o que prova comunicação de risco

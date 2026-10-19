@@ -6,6 +6,11 @@ import { writeAudit } from "../helper/audit";
 import { notifyMany } from "../helper/notify";
 import { canManageModule } from "../helper/module-access";
 import {
+  announcementAudience,
+  announcementEstablishmentIds,
+  announcementVisibility,
+} from "../helper/announcement-audience";
+import {
   ANNOUNCEMENT_KIND_DEFAULT,
   ANNOUNCEMENT_KIND_VALUES,
   isAnnouncementKind,
@@ -27,14 +32,27 @@ class AnnouncementController {
       const includeExpired = req.query.include_expired === "true";
       const now = new Date();
 
+      /*
+        Quem cuida do mural vê tudo; os demais veem o que é para a sua
+        unidade e o que é para a empresa toda. [CB-33]
+      */
+      const recorte = await announcementVisibility(
+        orgId,
+        userId,
+        Boolean(auth.actor && canManageModule(auth.actor.permission, "mural")),
+      );
+
       const rows = await prisma.announcement.findMany({
         where: {
           organizationId: orgId,
+          ...recorte,
           ...(kind && isAnnouncementKind(kind) ? { kind } : {}),
           ...(includeExpired
             ? {}
             : {
-                OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+                AND: [
+                  { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+                ],
               }),
         },
         orderBy: { createdAt: "desc" },
@@ -44,16 +62,56 @@ class AnnouncementController {
             where: { userId },
             select: { readAt: true },
           },
-          _count: { select: { reads: true } },
+          establishments: {
+            select: { establishment: { select: { id: true, name: true } } },
+          },
         },
       });
 
+      /*
+        "12 leituras" contava qualquer pessoa que tivesse aberto o aviso,
+        inclusive quem não era do público — e discordava do "x de y" de quem
+        leu. A contagem da lista passa a ser a mesma: sobre o público. [CB-36]
+      */
+      const porChave = new Map<string, string[]>();
+      for (const a of rows) {
+        const ids = a.establishments.map((e) => e.establishment.id).sort();
+        porChave.set(ids.join(","), ids);
+      }
+      const publicoPorChave = new Map<string, Set<string>>();
+      for (const [chave, ids] of porChave) {
+        publicoPorChave.set(chave, new Set(await announcementAudience(orgId, ids)));
+      }
+      const leituras = await prisma.announcementRead.findMany({
+        where: { announcementId: { in: rows.map((a) => a.id) } },
+        select: { announcementId: true, userId: true },
+      });
+      const quemLeu = new Map<string, string[]>();
+      for (const l of leituras) {
+        quemLeu.set(l.announcementId, [
+          ...(quemLeu.get(l.announcementId) ?? []),
+          l.userId,
+        ]);
+      }
+
       res.json({
-        announcements: rows.map((a) => ({
-          ...a,
-          read_at: a.reads[0]?.readAt ?? null,
-          reads: undefined,
-        })),
+        announcements: rows.map((a) => {
+          const chave = a.establishments
+            .map((e) => e.establishment.id)
+            .sort()
+            .join(",");
+          const publico = publicoPorChave.get(chave) ?? new Set<string>();
+          const leram = (quemLeu.get(a.id) ?? []).filter((id) => publico.has(id));
+          return {
+            ...a,
+            read_at: a.reads[0]?.readAt ?? null,
+            reads: undefined,
+            establishments: a.establishments.map((e) => e.establishment),
+            /** Quantas pessoas do público leram, e quantas são. [CB-36] */
+            read_count: leram.length,
+            audience_count: publico.size,
+          };
+        }),
       });
     } catch (err) {
       fail(res, err);
@@ -74,16 +132,29 @@ class AnnouncementController {
       }
       const announcement = await prisma.announcement.findFirst({
         where: { id: req.params.id, organizationId: orgId },
-        select: { id: true, title: true },
+        select: {
+          id: true,
+          title: true,
+          establishments: {
+            select: { establishment: { select: { id: true, name: true } } },
+          },
+        },
       });
       if (!announcement) {
         res.status(404).json({ message: "Aviso não encontrado." });
         return;
       }
-      const [membros, leituras] = await Promise.all([
-        prisma.membership.findMany({
-          where: { organizationId: orgId, user: { active: true } },
-          select: { user: { select: { id: true, name: true } } },
+      /*
+        A base é quem devia receber o aviso, não "todo usuário ativo da
+        organização". Antes, "2 de 19 leram" contava como não lido o fiscal,
+        o desligado e as outras unidades. [CB-36]
+      */
+      const unidades = announcement.establishments.map((e) => e.establishment.id);
+      const publico = await announcementAudience(orgId, unidades);
+      const [nomes, leituras] = await Promise.all([
+        prisma.user.findMany({
+          where: { id: { in: publico } },
+          select: { id: true, name: true },
         }),
         prisma.announcementRead.findMany({
           where: { announcementId: announcement.id },
@@ -91,15 +162,19 @@ class AnnouncementController {
         }),
       ]);
       const quando = new Map(leituras.map((l) => [l.userId, l.readAt]));
-      const pessoas = membros
-        .map((m) => ({
-          id: m.user.id,
-          name: m.user.name,
-          read_at: quando.get(m.user.id) ?? null,
+      const pessoas = nomes
+        .map((u) => ({
+          id: u.id,
+          name: u.name,
+          read_at: quando.get(u.id) ?? null,
         }))
         .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
       res.json({
-        announcement,
+        announcement: {
+          id: announcement.id,
+          title: announcement.title,
+          establishments: announcement.establishments.map((e) => e.establishment),
+        },
         readers: pessoas,
         read: pessoas.filter((p) => p.read_at).length,
         pending: pessoas.filter((p) => !p.read_at).length,
@@ -114,13 +189,22 @@ class AnnouncementController {
       const auth = req as AuthRequest;
       const orgId = actorOrgId(auth);
       const userId = actorUserId(auth);
+      // O mesmo recorte da lista: abrir pelo link não contorna a unidade. [CB-33]
+      const recorte = await announcementVisibility(
+        orgId,
+        userId,
+        Boolean(auth.actor && canManageModule(auth.actor.permission, "mural")),
+      );
       const announcement = await prisma.announcement.findFirst({
-        where: { id: req.params.id, organizationId: orgId },
+        where: { id: req.params.id, organizationId: orgId, ...recorte },
         include: {
           publishedBy: { select: { id: true, name: true } },
           reads: {
             where: { userId },
             select: { readAt: true },
+          },
+          establishments: {
+            select: { establishment: { select: { id: true, name: true } } },
           },
           _count: { select: { reads: true } },
         },
@@ -134,6 +218,7 @@ class AnnouncementController {
           ...announcement,
           read_at: announcement.reads[0]?.readAt ?? null,
           reads: undefined,
+          establishments: announcement.establishments.map((e) => e.establishment),
         },
       });
     } catch (err) {
@@ -146,13 +231,16 @@ class AnnouncementController {
       const auth = req as AuthRequest;
       const orgId = actorOrgId(auth);
       const userId = actorUserId(auth);
-      const { kind, title, body, happens_at, expires_at } = req.body as {
-        kind?: string;
-        title?: string;
-        body?: string;
-        happens_at?: string;
-        expires_at?: string;
-      };
+      const { kind, title, body, happens_at, expires_at, establishment_ids } =
+        req.body as {
+          kind?: string;
+          title?: string;
+          body?: string;
+          happens_at?: string;
+          expires_at?: string;
+          /** Vazio ou ausente: o aviso vai para a empresa toda. [CB-33] */
+          establishment_ids?: string[];
+        };
 
       if (!title?.trim() || !body?.trim()) {
         res.status(400).json({ message: "Informe title e body." });
@@ -171,6 +259,24 @@ class AnnouncementController {
         return;
       }
 
+      /*
+        As unidades escolhidas têm de ser desta empresa e estar ativas —
+        senão o aviso nasce com um público que não existe. [CB-33]
+      */
+      const pedidas = [...new Set(establishment_ids ?? [])].filter(Boolean);
+      if (pedidas.length > 0) {
+        const validas = await prisma.establishment.findMany({
+          where: { id: { in: pedidas }, organizationId: orgId, archivedAt: null },
+          select: { id: true },
+        });
+        if (validas.length !== pedidas.length) {
+          res.status(400).json({
+            message: "Escolha unidades desta empresa que estejam ativas.",
+          });
+          return;
+        }
+      }
+
       const announcement = await new Announcement().create.new({
         organizationId: orgId,
         kind: resolvedKind,
@@ -181,22 +287,32 @@ class AnnouncementController {
         publishedById: userId,
       });
 
+      if (pedidas.length > 0) {
+        await prisma.announcementEstablishment.createMany({
+          data: pedidas.map((establishmentId) => ({
+            announcementId: announcement.id,
+            establishmentId,
+          })),
+        });
+      }
+
       await writeAudit({
         organizationId: orgId,
         actorId: userId,
         action: "announcement.create",
         entityType: "Announcement",
         entityId: announcement.id,
-        after: { kind: announcement.kind },
+        after: { kind: announcement.kind, establishmentIds: pedidas },
       });
 
-      // Todo mundo da organização fica sabendo, sem precisar procurar. [S3-G] [S4-G]
-      const membros = await prisma.membership.findMany({
-        where: { organizationId: orgId, user: { active: true } },
-        select: { userId: true },
-      });
+      /*
+        Quem é do público fica sabendo sem precisar procurar [S3-G] [S4-G] —
+        e só quem é do público: nem o fiscal, nem quem foi desligado, nem as
+        outras unidades. [CB-33]
+      */
+      const publico = await announcementAudience(orgId, pedidas);
       await notifyMany(
-        membros.map((m) => m.userId).filter((id) => id !== userId),
+        publico.filter((id) => id !== userId),
         {
           organizationId: orgId,
           kind: "ANNOUNCEMENT_PUBLISHED",
@@ -208,7 +324,11 @@ class AnnouncementController {
         },
       );
 
-      res.status(201).json({ announcement });
+      res.status(201).json({
+        announcement: { ...announcement, establishmentIds: pedidas },
+        /** Quantas pessoas receberam, para a tela dizer na hora. [CB-33] */
+        notified: publico.filter((id) => id !== userId).length,
+      });
     } catch (err) {
       fail(res, err);
     }
