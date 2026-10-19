@@ -1,4 +1,9 @@
-import { AssessmentStatus, ControlStatus, ControlType } from "@prisma/client";
+import {
+  ActionPriority,
+  AssessmentStatus,
+  ControlStatus,
+  ControlType,
+} from "@prisma/client";
 import { Request, Response } from "express";
 import prisma from "../model/prisma";
 import { Activity } from "../model/schema/Activity/Activity";
@@ -12,6 +17,11 @@ import { writeAudit } from "../helper/audit";
 import { notify } from "../helper/notify";
 import { formatCalendarDay } from "../helper/calendar-day";
 import { resolveLevel } from "../helper/risk-methodology";
+import {
+  RISK_LEVEL_LABEL,
+  deadlineLimit,
+  hojeEmBrasilia,
+} from "../helper/action-deadline";
 import type { AuthRequest } from "../types/auth";
 
 function fail(res: Response, err: unknown) {
@@ -42,6 +52,19 @@ async function audit(
 
 function textOrNull(raw: unknown): string | null {
   return typeof raw === "string" && raw.trim() !== "" ? raw.trim() : null;
+}
+
+/** Nível vigente do risco: a última avaliação validada. [S2-M] */
+async function nivelDoRisco(
+  organizationId: string,
+  riskId: string,
+): Promise<string | null> {
+  const avaliacao = await prisma.riskAssessment.findFirst({
+    where: { organizationId, riskId, status: AssessmentStatus.VALIDATED },
+    orderBy: { assessedAt: "desc" },
+    select: { resultingLevel: true },
+  });
+  return avaliacao?.resultingLevel ?? null;
 }
 
 class RiskController {
@@ -772,6 +795,7 @@ class RiskController {
         priority,
         assignee_id,
         due_date,
+        deadline_justification,
         effectiveness_criteria,
       } = req.body as {
         title?: string;
@@ -781,6 +805,7 @@ class RiskController {
         priority?: string;
         assignee_id?: string;
         due_date?: string;
+        deadline_justification?: string;
         effectiveness_criteria?: string;
       };
       if (!title?.trim()) {
@@ -800,7 +825,7 @@ class RiskController {
         return;
       }
       const responsavel = await prisma.membership.findFirst({
-        where: { userId: assignee_id, organizationId: orgId },
+        where: { userId: assignee_id, organizationId: orgId, suspendedAt: null },
         select: { accessExpiresAt: true, user: { select: { active: true } } },
       });
       if (!responsavel || !responsavel.user.active) {
@@ -829,6 +854,44 @@ class RiskController {
           return;
         }
       }
+
+      /*
+        O prazo sugerido pelo nível do risco virou limite: passar dele exige
+        dizer por quê, e o motivo fica junto da ação. Data no passado é
+        recusada sempre — é erro de digitação, não escolha. [S2-M] [CB-21]
+      */
+      const prazo = new Date(`${String(due_date).slice(0, 10)}T00:00:00.000Z`);
+      if (Number.isNaN(prazo.getTime())) {
+        res.status(400).json({ message: "Prazo inválido. Use AAAA-MM-DD." });
+        return;
+      }
+      const hoje = hojeEmBrasilia();
+      if (prazo < hoje) {
+        res.status(400).json({
+          message: "O prazo não pode ser uma data que já passou.",
+          code: "DEADLINE_IN_THE_PAST",
+        });
+        return;
+      }
+
+      /*
+        O limite é o do NÍVEL DO RISCO. Ação sem risco avaliado não tem nível
+        e segue sem limite: a decisão é sobre o prazo que o nível pede, não
+        sobre inventar um teto para toda ação do portal.
+      */
+      const nivel = risk_id ? await nivelDoRisco(orgId, risk_id) : null;
+      const justificativa = deadline_justification?.trim() || null;
+      const { days, limit } = deadlineLimit(nivel, hoje);
+      const passouDoLimite = Boolean(nivel) && prazo > limit;
+      if (passouDoLimite && !justificativa) {
+        res.status(400).json({
+          message: `Risco ${RISK_LEVEL_LABEL[nivel as never] ?? nivel} pede prazo de até ${days} dias (${formatCalendarDay(limit)}). Para ir além, diga por quê.`,
+          code: "DEADLINE_NEEDS_JUSTIFICATION",
+          limit_days: days,
+          limit_date: limit.toISOString().slice(0, 10),
+        });
+        return;
+      }
       const row = await new Action().create.new({
         organizationId: orgId,
         title: title.trim(),
@@ -838,7 +901,9 @@ class RiskController {
         controlId: control_id ?? null,
         priority: (priority as never) ?? "MEDIUM",
         assigneeId: assignee_id ?? null,
-        dueDate: due_date ? new Date(due_date) : null,
+        dueDate: prazo,
+        // Só guarda o motivo quando ele foi de fato necessário.
+        deadlineJustification: passouDoLimite ? justificativa : null,
         effectivenessCriteria: effectiveness_criteria ?? null,
         createdById: userId,
       });
@@ -846,6 +911,7 @@ class RiskController {
         title: row.title,
         priority: row.priority,
         dueDate: row.dueDate,
+        deadlineJustification: row.deadlineJustification,
         assigneeId: row.assigneeId,
       });
       // Quem vai executar precisa saber que a ação é dele. [S3-A]

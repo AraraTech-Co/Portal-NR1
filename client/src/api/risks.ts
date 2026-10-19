@@ -194,6 +194,8 @@ export async function createRiskAction(input: {
   priority: string;
   assignee_id: string;
   due_date: string;
+  /** Por que o prazo passa do limite do nível do risco. [S2-M] */
+  deadline_justification?: string;
   effectiveness_criteria?: string;
 }) {
   return request<{ action: { id: string; title: string } }>("/api/actions", {

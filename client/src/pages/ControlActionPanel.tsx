@@ -31,6 +31,14 @@ const PRIORITY_BY_LEVEL: Record<string, string> = {
   TRIVIAL: "LOW",
 };
 
+const RISK_LEVEL_LABEL: Record<string, string> = {
+  INTOLERABLE: "Intolerável",
+  SUBSTANTIAL: "Substancial",
+  MODERATE: "Moderado",
+  TOLERABLE: "Tolerável",
+  TRIVIAL: "Trivial",
+};
+
 /** Prazo sugerido: quanto pior o risco, mais curto. */
 const DAYS_BY_PRIORITY: Record<string, number> = {
   CRITICAL: 7,
@@ -41,6 +49,17 @@ const DAYS_BY_PRIORITY: Record<string, number> = {
 
 function isoInDays(days: number): string {
   return new Date(Date.now() - 3 * 3_600_000 + days * 86_400_000).toISOString().slice(0, 10);
+}
+
+/** Hoje em Brasília: o prazo não pode ser uma data que já passou. [CB-21] */
+function hojeIso(): string {
+  return isoInDays(0);
+}
+
+/** O que o nível do risco pede: prioridade e dias. [B2-2-A] [S2-M] */
+function sugestaoDoNivel(nivel: string | null) {
+  const prioridade = PRIORITY_BY_LEVEL[nivel ?? ""] ?? "MEDIUM";
+  return { prioridade, dias: DAYS_BY_PRIORITY[prioridade] ?? 90 };
 }
 
 /** Medidas de prevenção e as ações que as implantam. [S2-A] */
@@ -71,6 +90,8 @@ export function ControlActionPanel({
     isoInDays(DAYS_BY_PRIORITY[PRIORITY_BY_LEVEL[riskLevel ?? ""] ?? "MEDIUM"] ?? 90),
   );
   const [criteria, setCriteria] = useState("");
+  /** Só aparece quando o prazo passa do que o nível do risco pede. [S2-M] */
+  const [justificativa, setJustificativa] = useState("");
   const [savingAction, setSavingAction] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -101,10 +122,20 @@ export function ControlActionPanel({
     }
   }
 
+  /*
+    A sugestão era calculada uma vez, ao abrir o painel — e nesse momento o
+    risco recém-registrado ainda não tinha nível, então vinha sempre "Média,
+    90 dias". Avaliar em seguida não a atualizava. Agora ela é recalculada
+    aqui, com o nível que o risco tem neste instante. [B2-2-A]
+  */
   function startAction(controlId: string | null, suggestion?: string) {
+    const { prioridade, dias } = sugestaoDoNivel(riskLevel);
     setOpenAction(controlId ?? "__sem_controle__");
     setTitle(suggestion ?? "");
     setCriteria("");
+    setJustificativa("");
+    setPriority(prioridade);
+    setDueDate(isoInDays(dias));
     setActionError(null);
   }
 
@@ -132,11 +163,13 @@ export function ControlActionPanel({
         priority,
         assignee_id: assignee,
         due_date: dueDate,
+        deadline_justification: justificativa.trim() || undefined,
         effectiveness_criteria: criteria.trim() || undefined,
       });
       setOpenAction(null);
       setTitle("");
       setCriteria("");
+      setJustificativa("");
       await reload();
       await onChanged?.();
     } catch (err) {
@@ -147,6 +180,14 @@ export function ControlActionPanel({
   }
 
   const actionsOf = (controlId: string) => actions.filter((a) => a.controlId === controlId);
+
+  /*
+    O limite é o do nível do risco. A prioridade continua editável e não
+    aperta nem afrouxa o prazo: sem risco avaliado, não há limite. [S2-M]
+  */
+  const limiteDias = riskLevel ? sugestaoDoNivel(riskLevel).dias : null;
+  const passouDoLimite =
+    limiteDias !== null && Boolean(dueDate) && dueDate > isoInDays(limiteDias);
 
   return (
     <div className="ctrl">
@@ -173,14 +214,24 @@ export function ControlActionPanel({
                 <Chip tone={c.status === "IMPLEMENTED" ? "success" : "warning"}>
                   {CONTROL_STATUS_LABEL[c.status] ?? c.status}
                 </Chip>
-                {canWrite && c.status !== "IMPLEMENTED" && (
+                {/*
+                    Os dois botões se chamavam "Abrir ação": o de cima abria o
+                    formulário e o de baixo gravava. Clicar de novo no de cima,
+                    com o formulário aberto, apagava o que já tinha sido
+                    escrito. Agora ele tem nome próprio e some enquanto o
+                    formulário daquela medida está aberto. [CB-26]
+                  */}
+                {canWrite && c.status !== "IMPLEMENTED" && openAction !== c.id && (
                   <Button
                     type="button"
                     variant="ghost"
                     onClick={() => startAction(c.id, `Implantar: ${c.description}`)}
                   >
-                    Abrir ação
+                    Planejar esta medida
                   </Button>
+                )}
+                {openAction === c.id && (
+                  <Chip tone="info">Preenchendo a ação abaixo</Chip>
                 )}
               </div>
               {actionsOf(c.id).map((a) => (
@@ -220,7 +271,12 @@ export function ControlActionPanel({
 
       {canWrite && (
         <div className="ctrl-free-action">
-          <Button type="button" variant="ghost" onClick={() => startAction(null)}>
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={openAction === "__sem_controle__"}
+            onClick={() => startAction(null)}
+          >
             Abrir ação sem medida ligada
           </Button>
         </div>
@@ -240,7 +296,22 @@ export function ControlActionPanel({
             </label>
             <label className="form-field">
               Prazo
-              <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} required />
+              <input
+                type="date"
+                value={dueDate}
+                /* Data no passado é erro de digitação, não escolha. [CB-21] */
+                min={hojeIso()}
+                onChange={(e) => setDueDate(e.target.value)}
+                required
+              />
+              <span className="form-hint">
+                {riskLevel
+                  ? `${RISK_LEVEL_LABEL[riskLevel] ?? riskLevel} → ${
+                      ACTION_PRIORITY_LABEL[sugestaoDoNivel(riskLevel).prioridade] ??
+                      sugestaoDoNivel(riskLevel).prioridade
+                    } → até ${sugestaoDoNivel(riskLevel).dias} dias.`
+                  : "Sem risco avaliado, o prazo é livre — só não pode ser uma data que já passou."}
+              </span>
             </label>
             <label className="form-field">
               Prioridade
@@ -249,6 +320,7 @@ export function ControlActionPanel({
                 onChange={(e) => {
                   setPriority(e.target.value);
                   setDueDate(isoInDays(DAYS_BY_PRIORITY[e.target.value] ?? 90));
+                  setJustificativa("");
                 }}
               >
                 {Object.entries(ACTION_PRIORITY_LABEL).map(([id, label]) => (
@@ -270,6 +342,19 @@ export function ControlActionPanel({
               />
             </label>
           </div>
+          {/* O prazo do nível virou limite: passar dele exige dizer por quê,
+              e o motivo fica junto da ação. [S2-M] */}
+          {passouDoLimite && (
+            <label className="form-field">
+              Por que este prazo passa de {limiteDias} dias
+              <input
+                value={justificativa}
+                onChange={(e) => setJustificativa(e.target.value)}
+                placeholder="Ex.: depende da parada de máquina de janeiro"
+                required
+              />
+            </label>
+          )}
           {actionError && (
             <p className="form-error" role="alert">
               {actionError}
@@ -277,7 +362,7 @@ export function ControlActionPanel({
           )}
           <div className="form-actions">
             <Button type="submit" disabled={savingAction}>
-              {savingAction ? "Salvando…" : "Abrir ação"}
+              {savingAction ? "Salvando…" : "Gravar a ação"}
             </Button>
             <Button type="button" variant="ghost" onClick={() => setOpenAction(null)}>
               Cancelar

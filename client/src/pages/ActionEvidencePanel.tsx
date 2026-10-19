@@ -159,6 +159,13 @@ export function ActionEvidencePanel({ action, userId, canReview, onReviewed }: P
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [sending, setSending] = useState<"approve" | "reject" | null>(null);
+  /*
+    O servidor sempre aceitou marcar o risco para reavaliar na aprovação, mas
+    nenhuma tela mandava: a proteção era instalada e o risco continuava com o
+    nível de antes, enquanto o Inventário passava a dizer "Controles ok".
+    [S3-N] [CB-20]
+  */
+  const [pedirReavaliacao, setPedirReavaliacao] = useState(true);
   const [reviewError, setReviewError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -207,7 +214,11 @@ export function ActionEvidencePanel({ action, userId, canReview, onReviewed }: P
       const { action: updated } = await reviewAction(
         action.id,
         decision === "approve"
-          ? { decision, effectiveness_result: note.trim() || undefined }
+          ? {
+              decision,
+              effectiveness_result: note.trim() || undefined,
+              flag_reassessment: pedirReavaliacao,
+            }
           : { decision, rejection_reason: note.trim() },
       );
       setNote("");
@@ -340,6 +351,25 @@ export function ActionEvidencePanel({ action, userId, canReview, onReviewed }: P
               placeholder="Ao aprovar: o que confirmou na evidência. Ao recusar: o que falta."
             />
           </label>
+          {action.riskId && (
+            <label
+              className="form-field"
+              style={{ flexDirection: "row", alignItems: "center", gap: "0.55rem" }}
+            >
+              <input
+                type="checkbox"
+                checked={pedirReavaliacao}
+                onChange={(e) => setPedirReavaliacao(e.target.checked)}
+              />
+              <span>
+                Pedir reavaliação do risco
+                <span className="form-hint">
+                  {" "}
+                  Com a medida no lugar, o risco que sobra pode ser outro.
+                </span>
+              </span>
+            </label>
+          )}
           {reviewError && (
             <p className="form-error" role="alert">
               {reviewError}

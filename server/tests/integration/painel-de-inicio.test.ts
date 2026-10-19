@@ -106,7 +106,8 @@ describe("o que está na minha mesa [S5-A]", () => {
       .send({
         title: `Trocar o piso ${SUFIXO}`,
         assignee_id: supervisor.user.id,
-        due_date: "2026-01-10",
+        // Data fixa que virou passado; o prazo agora é recusado. [CB-21]
+        due_date: "2027-01-10",
         priority: "HIGH",
       });
     expect(criada.status).toBe(201);

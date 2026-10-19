@@ -63,7 +63,13 @@ export function fetchEvidenceBlob(id: string): Promise<Blob> {
 }
 
 export type ActionReview =
-  | { decision: "approve"; effectiveness_result?: string }
+  | {
+      decision: "approve";
+      effectiveness_result?: string;
+      /** Pedir a reavaliação do risco: o controle mudou o risco residual. [S3-N] */
+      flag_reassessment?: boolean;
+      reassessment_reason?: string;
+    }
   | { decision: "reject"; rejection_reason: string };
 
 export function reviewAction(id: string, body: ActionReview) {
