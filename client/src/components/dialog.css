@@ -1,0 +1,67 @@
+/* Janela própria para editar texto longo. [B2-1-J] */
+
+.dlg {
+  width: min(42rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 4rem);
+  padding: 1.25rem 1.5rem 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--foreground);
+  overflow: auto;
+}
+
+.dlg::backdrop {
+  background: rgb(0 0 0 / 0.45);
+}
+
+.dlg-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.dlg-head h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.dlg-close {
+  flex: 0 0 auto;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--foreground);
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.dlg-close:hover {
+  background: var(--muted);
+}
+
+.dlg-desc {
+  margin: 0.35rem 0 0;
+  color: var(--muted-foreground);
+  font-size: 0.9rem;
+  max-width: 60ch;
+}
+
+.dlg-body {
+  margin-top: 1rem;
+}
+
+/* Na janela, o texto longo tem altura de texto longo. */
+.dlg-body textarea {
+  min-height: 10rem;
+}
+
+@media (max-width: 560px) {
+  .dlg {
+    width: calc(100vw - 1rem);
+    padding: 1rem;
+  }
+}
