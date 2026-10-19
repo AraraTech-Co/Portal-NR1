@@ -17,8 +17,6 @@ export function ConvitePage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [isExternal, setIsExternal] = useState(false);
-  const [registration, setRegistration] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -46,18 +44,12 @@ export function ConvitePage() {
     setSaving(true);
     setFormError(null);
     try {
-      if (!isExternal && !registration.trim()) {
-        setFormError("Informe o número de cadastro ou selecione Externo.");
-        setSaving(false);
-        return;
-      }
-      await acceptPublicInvite(token, {
-        name,
-        email,
-        password,
-        registration: isExternal ? undefined : registration.trim(),
-        is_external: isExternal,
-      });
+      /*
+        Matrícula e vínculo saíram daqui: quem aprova é que define. Marcar-se
+        externo mudava o próprio vínculo, e matrícula é número que o RH
+        atribui. [S1-M] [S1-Q]
+      */
+      await acceptPublicInvite(token, { name, email, password });
       setDone(true);
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Falha ao enviar");
@@ -112,41 +104,16 @@ export function ConvitePage() {
                 />
               </label>
               <label className="login-field">
-                E-mail
+                {/* O portal não envia nem confirma e-mail, e metade do chão
+                    de fábrica não tem e-mail corporativo. [OB-1] */}
+                E-mail <span className="muted">(se tiver)</span>
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  required
                   autoComplete="email"
                 />
               </label>
-              <label
-                className="login-field"
-                style={{ flexDirection: "row", alignItems: "center", gap: "0.55rem" }}
-              >
-                <input
-                  type="checkbox"
-                  checked={isExternal}
-                  onChange={(e) => {
-                    setIsExternal(e.target.checked);
-                    if (e.target.checked) setRegistration("");
-                  }}
-                />
-                <span>Sou externo (sem número de cadastro)</span>
-              </label>
-              {!isExternal && (
-                <label className="login-field">
-                  Número de cadastro
-                  <input
-                    value={registration}
-                    onChange={(e) => setRegistration(e.target.value)}
-                    required
-                    autoComplete="off"
-                    placeholder="Ex.: 000056"
-                  />
-                </label>
-              )}
               <label className="login-field">
                 Senha
                 <input

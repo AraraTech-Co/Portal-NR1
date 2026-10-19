@@ -190,12 +190,15 @@ export function LoginPage() {
         <p className="login-eyebrow label-cond">Arara · SST</p>
         <h1 className="login-brand">Portal NR-1</h1>
         <p className="login-lead muted">
-          Entre com seu login ou e-mail para acessar inventário, ações e
-          conformidade.
+          {/* Dizia só "login ou e-mail", e quem entrou pela planilha não tem
+              esse login de cor. [B2-1-F] */}
+          Entre com a sua matrícula, o seu CPF, o seu login ou o seu e-mail.
         </p>
         <form className="login-form" onSubmit={onSubmit}>
           <label className="login-field">
-            Login ou e-mail
+            {/* Dizia "Login ou e-mail", e quem entrou pela planilha precisava
+                decorar um nome.sobrenome que nunca viu. [B2-1-F] */}
+            Matrícula, CPF, login ou e-mail
             <input
               value={loginId}
               onChange={(e) => setLoginId(e.target.value)}

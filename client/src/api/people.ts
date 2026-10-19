@@ -40,7 +40,9 @@ export type ImportRow = {
 export type ImportResult = {
   line: number;
   name: string;
-  status: "created" | "skipped" | "error";
+  status: "created" | "completed" | "skipped" | "error";
+  /** O que a planilha preencheu na ficha de quem já existia. [CB-2] */
+  filled?: string[];
   message?: string;
   login?: string;
   temporary_password?: string;
@@ -50,6 +52,7 @@ export type ImportReport = {
   dry_run: boolean;
   rows: number;
   created: number;
+  completed: number;
   skipped: number;
   errors: number;
   results: ImportResult[];
