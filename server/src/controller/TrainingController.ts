@@ -88,10 +88,20 @@ class TrainingController {
         res.status(404).json({ message: "Treinamento não encontrado." });
         return;
       }
+      const minha = training.enrollments[0] ?? null;
       res.json({
         training: {
           ...training,
-          my_enrollment: training.enrollments[0] ?? null,
+          my_enrollment: minha
+            ? {
+                ...minha,
+                /** Vale até vencer, mas abaixo da nota de hoje. [CB-31] */
+                below_minimum:
+                  minha.status === ENROLLMENT_STATUSES.COMPLETED &&
+                  minha.score !== null &&
+                  minha.score < training.passingScore,
+              }
+            : null,
           enrollments: undefined,
         },
       });
@@ -114,7 +124,12 @@ class TrainingController {
       const orgId = actorOrgId(auth);
       const training = await prisma.training.findFirst({
         where: { id: req.params.id, organizationId: orgId },
-        select: { id: true, title: true, validityMonths: true },
+        select: {
+          id: true,
+          title: true,
+          validityMonths: true,
+          passingScore: true,
+        },
       });
       if (!training) {
         res.status(404).json({ message: "Treinamento não encontrado." });
@@ -134,7 +149,158 @@ class TrainingController {
           user: { select: { id: true, name: true } },
         },
       });
-      res.json({ training, enrollments: rows });
+      /*
+        Certificado emitido antes de existir nota mínima, com nota abaixo
+        dela: vale até vencer, mas sai marcado — a lista não podia tratá-lo
+        como igual aos outros. [CB-31]
+      */
+      res.json({
+        training,
+        enrollments: rows.map((r) => ({
+          ...r,
+          below_minimum:
+            r.status === ENROLLMENT_STATUSES.COMPLETED &&
+            r.score !== null &&
+            r.score < training.passingScore,
+        })),
+      });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
+  /**
+   * O certificado como documento, não como código solto.
+   *
+   * A pessoa via o número e a validade e não tinha o que abrir, imprimir ou
+   * entregar; a empresa emitia o certificado fora do portal para mostrar à
+   * fiscalização. Isto devolve o que vai no papel: quem fez, o quê, quando,
+   * por quanto tempo vale, e — no presencial — a turma, a carga horária e o
+   * instrutor com o registro dele. [B2-3-C]
+   */
+  async certificate(req: Request, res: Response) {
+    try {
+      const auth = req as AuthRequest;
+      const orgId = actorOrgId(auth);
+      const userId = actorUserId(auth);
+
+      const enrollment = await prisma.trainingEnrollment.findFirst({
+        where: { id: req.params.enrollmentId, training: { organizationId: orgId } },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              employeeProfiles: {
+                where: { organizationId: orgId },
+                take: 1,
+                select: { registration: true, jobRole: { select: { name: true } } },
+              },
+            },
+          },
+          training: {
+            select: {
+              id: true,
+              title: true,
+              kind: true,
+              summary: true,
+              durationMinutes: true,
+              passingScore: true,
+              validityMonths: true,
+            },
+          },
+        },
+      });
+      if (!enrollment) {
+        res.status(404).json({ message: "Certificado não encontrado." });
+        return;
+      }
+      /*
+        O certificado é da pessoa. Quem cuida de Treinamentos também abre,
+        porque é quem entrega o papel e quem mostra à fiscalização.
+        [B2-3-C] [S7-A]
+      */
+      const cuida =
+        auth.actor && canSeeAllInModule(auth.actor.permission, "treinamentos");
+      if (enrollment.userId !== userId && !cuida) {
+        res.status(403).json({ message: "Este certificado é de outra pessoa." });
+        return;
+      }
+      if (
+        enrollment.status !== ENROLLMENT_STATUSES.COMPLETED ||
+        !enrollment.certificateCode
+      ) {
+        res.status(409).json({
+          message: "Este treinamento ainda não foi concluído.",
+          code: "NO_CERTIFICATE",
+        });
+        return;
+      }
+
+      // Presencial: a turma é que diz a data, a carga horária e o instrutor.
+      const turma =
+        enrollment.training.kind === TrainingKind.CLASSROOM
+          ? await prisma.trainingAttendance.findFirst({
+              where: {
+                userId: enrollment.userId,
+                present: true,
+                session: { trainingId: enrollment.trainingId },
+              },
+              orderBy: { createdAt: "desc" },
+              include: {
+                session: {
+                  select: {
+                    heldAt: true,
+                    durationMinutes: true,
+                    location: true,
+                    instructorName: true,
+                    instructorRegistration: true,
+                  },
+                },
+              },
+            })
+          : null;
+
+      const ficha = enrollment.user.employeeProfiles[0] ?? null;
+      const organizacao = await prisma.organization.findFirst({
+        where: { id: orgId },
+        select: { name: true, taxId: true },
+      });
+
+      res.json({
+        certificate: {
+          code: enrollment.certificateCode,
+          completed_at: enrollment.completedAt,
+          expires_at: enrollment.expiresAt,
+          score: enrollment.score,
+          passing_score: enrollment.training.passingScore,
+          below_minimum:
+            enrollment.score !== null &&
+            enrollment.score < enrollment.training.passingScore,
+          person: {
+            name: enrollment.user.name,
+            registration: ficha?.registration ?? null,
+            job_role: ficha?.jobRole?.name ?? null,
+          },
+          training: {
+            title: enrollment.training.title,
+            kind: enrollment.training.kind,
+            summary: enrollment.training.summary,
+            duration_minutes:
+              turma?.session.durationMinutes ?? enrollment.training.durationMinutes,
+            validity_months: enrollment.training.validityMonths,
+          },
+          session: turma
+            ? {
+                held_at: turma.session.heldAt,
+                location: turma.session.location,
+                instructor_name: turma.session.instructorName,
+                instructor_registration: turma.session.instructorRegistration,
+              }
+            : null,
+          organization: organizacao,
+        },
+      });
     } catch (err) {
       fail(res, err);
     }
@@ -368,7 +534,16 @@ class TrainingController {
         res.status(400).json({ message: "Matricule-se antes de concluir." });
         return;
       }
-      if (enrollment.status === ENROLLMENT_STATUSES.COMPLETED) {
+      /*
+        Certificado emitido antes de existir nota mínima, com nota abaixo
+        dela, continua valendo até vencer — mas a pessoa precisa poder
+        refazer, e antes ouvia "Treinamento já concluído". [CB-31]
+      */
+      const abaixoDaMinima =
+        enrollment.status === ENROLLMENT_STATUSES.COMPLETED &&
+        enrollment.score !== null &&
+        enrollment.score < training.passingScore;
+      if (enrollment.status === ENROLLMENT_STATUSES.COMPLETED && !abaixoDaMinima) {
         res.status(409).json({ message: "Treinamento já concluído." });
         return;
       }

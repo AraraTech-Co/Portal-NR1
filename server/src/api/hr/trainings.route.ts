@@ -9,6 +9,10 @@ const router = Router();
 
 router.get("/api/trainings", read, (req, res) => trainings.list(req, res));
 router.post("/api/trainings", writeRh, (req, res) => trainings.create(req, res));
+/** O certificado como documento, para abrir e imprimir. [B2-3-C] */
+router.get("/api/certificados/:enrollmentId", read, (req, res) =>
+  trainings.certificate(req, res),
+);
 router.get("/api/trainings/:id/enrollments", read, (req, res) =>
   trainings.listEnrollments(req, res),
 );

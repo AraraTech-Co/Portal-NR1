@@ -234,6 +234,19 @@ class ComplianceController {
         res.status(404).json({ message: "Certificado não encontrado." });
         return;
       }
+      /*
+        Quem manda o comprovante não é quem o aceita. A trava já existia no
+        atestado ("Outra pessoa do RH decide o seu") e faltava aqui: alguém
+        do RH podia aprovar o próprio certificado. [OB-9]
+      */
+      if (current.userId === reviewerId) {
+        res.status(403).json({
+          message: "Outra pessoa precisa aceitar o seu comprovante.",
+          code: "OWN_CERTIFICATE_REVIEW",
+        });
+        return;
+      }
+
       const { status } = req.body as { status?: string };
       if (
         status !== CERTIFICATE_STATUSES.APPROVED &&
