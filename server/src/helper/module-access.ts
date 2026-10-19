@@ -74,6 +74,20 @@ export function canChangePersonnelRecord(roleKey: string): boolean {
  * tecnicamente analisa e encerra — a mesma separação que já vale na avaliação
  * de risco e na validação da ação. [S3-E]
  */
+/**
+ * Responder a queixa ergonômica — transformá-la em avaliação ou encerrá-la
+ * com um motivo.
+ *
+ * Queixa de dor é informação de saúde, e a decisão técnica é do SST: o
+ * supervisor e o gerente escrevem no módulo, mas nem leem a queixa dos
+ * outros nem decidem sobre ela. [P1]
+ */
+const ERGONOMIC_COMPLAINT_ROLES: readonly string[] = ["master", "owner", "sst"];
+
+export function canHandleErgonomicComplaint(roleKey: string): boolean {
+  return ERGONOMIC_COMPLAINT_ROLES.includes(normalizeRoleKey(roleKey));
+}
+
 const OCCURRENCE_ANALYSIS_ROLES: readonly string[] = ["master", "owner", "sst"];
 
 export function canCloseOccurrenceAnalysis(roleKey: string): boolean {

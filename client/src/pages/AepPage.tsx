@@ -3,9 +3,10 @@ import { fetchAeps } from "@/api/modules";
 import { ListShell } from "@/components/ListShell";
 import { Chip } from "@/components/Chip";
 import { formatDay } from "@/lib/labels";
+import { ErgonomicComplaints } from "./ErgonomicComplaints";
 
 export function AepPage() {
-  const { rows, loading, error } = useResourceList(fetchAeps);
+  const { rows, loading, error, reload } = useResourceList(fetchAeps);
 
   return (
     <ListShell
@@ -16,6 +17,8 @@ export function AepPage() {
       empty={rows.length === 0}
       emptyTitle="Nenhuma AEP registrada"
       emptyDescription="Quando houver avaliações ergonômicas, elas aparecem aqui."
+      /* Quem trabalha diz onde dói; o SST decide o que vira avaliação. [P1] */
+      before={<ErgonomicComplaints onEvaluated={reload} />}
     >
       <div className="data-table-wrap">
         <table className="data-table">
