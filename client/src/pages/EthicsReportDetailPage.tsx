@@ -1,8 +1,10 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
+  fetchEthicsPeople,
   fetchEthicsReport,
   sendCommitteeMessage,
+  setEthicsReportCited,
   updateEthicsStatus,
   type EthicsReportDetail,
 } from "@/api/ethics";
@@ -36,6 +38,12 @@ export function EthicsReportDetailPage() {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  /** Quem a denúncia envolve — marcar tira a pessoa deste caso. [CB-27] */
+  const [people, setPeople] = useState<
+    Array<{ id: string; name: string; active: boolean }>
+  >([]);
+  const [citado, setCitado] = useState("");
+  const [citeError, setCiteError] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     const data = await fetchEthicsReport(id);
@@ -45,6 +53,28 @@ export function EthicsReportDetailPage() {
   useEffect(() => {
     reload().catch((err) => setError(err instanceof Error ? err.message : "Falha ao carregar"));
   }, [reload]);
+
+  useEffect(() => {
+    if (!canWrite) return;
+    // Lista só de nomes: o comitê pode não ler Colaboradores. [CB-27]
+    fetchEthicsPeople()
+      .then(setPeople)
+      .catch(() => setPeople([]));
+  }, [canWrite]);
+
+  async function marcarCitado(userId: string, cited: boolean) {
+    setBusy(true);
+    setCiteError(null);
+    try {
+      await setEthicsReportCited(id, userId, cited);
+      setCitado("");
+      await reload();
+    } catch (err) {
+      setCiteError(err instanceof Error ? err.message : "Falha ao salvar");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function onReply(e: FormEvent) {
     e.preventDefault();
@@ -122,6 +152,93 @@ export function EthicsReportDetailPage() {
           </p>
         )}
       </section>
+
+      {canWrite && (
+        <section className="form-section">
+          <h2>Quem a denúncia envolve</h2>
+          <p className="muted" style={{ maxWidth: "70ch" }}>
+            Marcar alguém aqui tira a pessoa <em>deste</em> caso: ela não o vê
+            na lista, não o abre e não responde. Serve para quando a denúncia é
+            contra alguém do próprio comitê.
+          </p>
+          {report.cited.length > 0 && (
+            <ul
+              style={{
+                listStyle: "none",
+                padding: 0,
+                margin: "1rem 0",
+                display: "grid",
+                gap: "0.5rem",
+              }}
+            >
+              {report.cited.map((c) => (
+                <li
+                  key={c.userId}
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "0.5rem",
+                  }}
+                >
+                  <span>
+                    <strong>{c.user.name}</strong>{" "}
+                    <span className="muted">
+                      marcado em {formatDay(c.markedAt)}
+                      {c.markedBy ? ` · por ${c.markedBy.name}` : ""}
+                    </span>
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={() => marcarCitado(c.userId, false)}
+                  >
+                    Desmarcar
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="form-grid">
+            <label className="form-field">
+              Marcar quem a denúncia envolve
+              <select
+                value={citado}
+                onChange={(e) => setCitado(e.target.value)}
+              >
+                <option value="">Escolha a pessoa</option>
+                {people
+                  .filter(
+                    (p) => !report.cited.some((c) => c.userId === p.id),
+                  )
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                      {p.active ? "" : " (sem acesso)"}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <div className="form-actions">
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={!citado || busy}
+                onClick={() => marcarCitado(citado, true)}
+              >
+                Marcar
+              </Button>
+            </div>
+          </div>
+          {citeError && (
+            <p className="form-error" role="alert">
+              {citeError}
+            </p>
+          )}
+        </section>
+      )}
 
       <section className="form-section">
         <h2>Conversa</h2>

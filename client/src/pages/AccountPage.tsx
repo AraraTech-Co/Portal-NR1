@@ -26,6 +26,7 @@ import "@/components/form.css";
 import { LoadingState } from "@/components/LoadingState";
 import { ConsultaAcessos, FiscaisComAcesso } from "./ConsultaAcessos";
 import { ImportPeople } from "./ImportPeople";
+import { EthicsCommitteeSection } from "./EthicsCommitteeSection";
 import { PessoasEAcessos } from "./PessoasEAcessos";
 
 /** Hoje no fuso de Brasília, em AAAA-MM-DD. */
@@ -631,6 +632,8 @@ export function AccountPage() {
 
       {canManage && <ImportPeople />}
       {canManage && <PessoasEAcessos />}
+      {/* Quem é o comitê de ética é decisão de acesso. [CB-27] */}
+      {canManage && <EthicsCommitteeSection />}
       {canManage && <FiscaisComAcesso />}
       {canManage && <ConsultaAcessos />}
     </div>

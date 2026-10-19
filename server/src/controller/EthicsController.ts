@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { NotificationKind } from "@prisma/client";
 import { Request, Response } from "express";
 import prisma from "../model/prisma";
+import { citedReportIds } from "../helper/ethics-access";
 import { notify } from "../helper/notify";
 import { EthicsReport } from "../model/schema/EthicsReport/EthicsReport";
 import { EthicsReportMessage } from "../model/schema/EthicsReportMessage/EthicsReportMessage";
@@ -114,6 +115,12 @@ async function findByProtocolAndCode(
     if (ok) return report;
   }
   return null;
+}
+
+/** A pessoa é citada nesta denúncia? Então está fora do caso. [CB-27] */
+async function estouImpedido(req: Request, reportId: string): Promise<boolean> {
+  const impedidas = await citedReportIds(actorUserId(req as AuthRequest));
+  return impedidas.includes(reportId);
 }
 
 class EthicsController {
@@ -344,9 +351,16 @@ class EthicsController {
     try {
       const orgId = actorOrgId(req as AuthRequest);
       const status = req.query.status as string | undefined;
+      /*
+        Quem é citado numa denúncia sai do caso: nem na lista ela aparece.
+        Era a denúncia contra alguém do RH indo parar na mesa dele. [CB-27]
+      */
+      const impedidas = await citedReportIds(actorUserId(req as AuthRequest));
+
       const rows = await prisma.ethicsReport.findMany({
         where: {
           organizationId: orgId,
+          ...(impedidas.length > 0 ? { id: { notIn: impedidas } } : {}),
           ...(status && isReportStatus(status) ? { status } : {}),
         },
         orderBy: { createdAt: "desc" },
@@ -410,13 +424,241 @@ class EthicsController {
     }
   }
 
+  /**
+   * Nomes da empresa, para o comitê marcar quem a denúncia envolve.
+   *
+   * O comitê não necessariamente lê Colaboradores nem Conta; a lista é só
+   * id e nome, o suficiente para marcar. [CB-27]
+   */
+  async listPeople(req: Request, res: Response) {
+    try {
+      const orgId = actorOrgId(req as AuthRequest);
+      const rows = await prisma.membership.findMany({
+        where: { organizationId: orgId },
+        orderBy: { user: { name: "asc" } },
+        select: {
+          suspendedAt: true,
+          user: { select: { id: true, name: true } },
+        },
+      });
+      res.json({
+        people: rows.map((m) => ({
+          id: m.user.id,
+          name: m.user.name,
+          active: m.suspendedAt === null,
+        })),
+      });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
+  /** Quem é o comitê de ética desta empresa. [CB-27] */
+  async listCommittee(req: Request, res: Response) {
+    try {
+      const orgId = actorOrgId(req as AuthRequest);
+      const rows = await prisma.ethicsCommitteeMember.findMany({
+        where: { organizationId: orgId },
+        orderBy: { addedAt: "asc" },
+        select: {
+          userId: true,
+          addedAt: true,
+          user: { select: { id: true, name: true } },
+          addedBy: { select: { id: true, name: true } },
+        },
+      });
+      /*
+        Os nomes vêm junto: quem administra a conta pode não estar no comitê
+        designado, e aí a lista de pessoas do comitê (que é fechada ao
+        comitê) não abriria para ele.
+      */
+      const pessoas = await prisma.membership.findMany({
+        where: { organizationId: orgId },
+        orderBy: { user: { name: "asc" } },
+        select: { suspendedAt: true, user: { select: { id: true, name: true } } },
+      });
+      res.json({
+        members: rows,
+        people: pessoas.map((m) => ({
+          id: m.user.id,
+          name: m.user.name,
+          active: m.suspendedAt === null,
+        })),
+        /*
+          Sem ninguém designado, vale a regra antiga (quem lê o módulo
+          comite). A tela precisa dizer isso, senão parece que ninguém vê as
+          denúncias.
+        */
+        falling_back: rows.length === 0,
+      });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
+  /** Designar ou tirar alguém do comitê. [CB-27] */
+  async setCommittee(req: Request, res: Response) {
+    try {
+      const auth = req as AuthRequest;
+      const orgId = actorOrgId(auth);
+      const actorId = actorUserId(auth);
+      const { user_id, member } = req.body as {
+        user_id?: string;
+        member?: boolean;
+      };
+      if (!user_id) {
+        res.status(400).json({ message: "Informe de quem é a decisão (user_id)." });
+        return;
+      }
+      const daEmpresa = await prisma.membership.findFirst({
+        where: { organizationId: orgId, userId: user_id, suspendedAt: null },
+        select: { id: true },
+      });
+      if (!daEmpresa) {
+        res.status(400).json({ message: "Pessoa não encontrada nesta empresa." });
+        return;
+      }
+
+      if (member === false) {
+        await prisma.ethicsCommitteeMember
+          .delete({
+            where: { organizationId_userId: { organizationId: orgId, userId: user_id } },
+          })
+          .catch(() => {
+            /* já não era do comitê */
+          });
+      } else {
+        await prisma.ethicsCommitteeMember.upsert({
+          where: { organizationId_userId: { organizationId: orgId, userId: user_id } },
+          create: { organizationId: orgId, userId: user_id, addedById: actorId },
+          update: {},
+        });
+      }
+
+      await writeAudit({
+        organizationId: orgId,
+        actorId,
+        action: "ethics_committee.set",
+        entityType: "User",
+        entityId: user_id,
+        after: { member: member !== false },
+      });
+
+      res.json({ ok: true });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
+  /**
+   * Marcar quem a denúncia envolve — e tirar essa pessoa do caso.
+   *
+   * Quem relata escreve texto livre e pode ser anônimo: quem marca é o
+   * comitê, ao triar. A partir daqui, quem é citado não vê a denúncia na
+   * lista, não a abre e não responde. [CB-27]
+   */
+  async setCited(req: Request, res: Response) {
+    try {
+      const auth = req as AuthRequest;
+      const orgId = actorOrgId(auth);
+      const actorId = actorUserId(auth);
+
+      if (await estouImpedido(req, req.params.id)) {
+        res.status(404).json({ message: "Relato não encontrado." });
+        return;
+      }
+      const report = await prisma.ethicsReport.findFirst({
+        where: { id: req.params.id, organizationId: orgId },
+        select: { id: true },
+      });
+      if (!report) {
+        res.status(404).json({ message: "Relato não encontrado." });
+        return;
+      }
+
+      const { user_id, cited } = req.body as {
+        user_id?: string;
+        cited?: boolean;
+      };
+      if (!user_id) {
+        res.status(400).json({ message: "Informe quem a denúncia envolve (user_id)." });
+        return;
+      }
+      const daEmpresa = await prisma.membership.findFirst({
+        where: { organizationId: orgId, userId: user_id },
+        select: { id: true },
+      });
+      if (!daEmpresa) {
+        res.status(400).json({ message: "Pessoa não encontrada nesta empresa." });
+        return;
+      }
+      if (user_id === actorId && cited !== false) {
+        /*
+          Marcar a si mesmo tiraria a pessoa do caso que ela está tratando —
+          sem querer, e sem volta pela tela. Melhor dizer.
+        */
+        res.status(400).json({
+          message:
+            "Você sairia deste caso ao se marcar. Peça a outra pessoa do comitê.",
+          code: "CITED_SELF",
+        });
+        return;
+      }
+
+      if (cited === false) {
+        await prisma.ethicsReportCited
+          .delete({ where: { reportId_userId: { reportId: report.id, userId: user_id } } })
+          .catch(() => {
+            /* já não estava marcado */
+          });
+      } else {
+        await prisma.ethicsReportCited.upsert({
+          where: { reportId_userId: { reportId: report.id, userId: user_id } },
+          create: { reportId: report.id, userId: user_id, markedById: actorId },
+          update: {},
+        });
+      }
+
+      await writeAudit({
+        organizationId: orgId,
+        actorId,
+        action: "ethics_report.cited",
+        entityType: "EthicsReport",
+        entityId: report.id,
+        after: { userId: user_id, cited: cited !== false },
+      });
+
+      res.json({ ok: true });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
   async get(req: Request, res: Response) {
     try {
       const orgId = actorOrgId(req as AuthRequest);
+      /*
+        Citado na denúncia é parte, não julgador: 404 e não 403, para não
+        confirmar a existência do caso a quem está fora dele. [CB-27]
+      */
+      if (await estouImpedido(req, req.params.id)) {
+        res.status(404).json({ message: "Relato não encontrado." });
+        return;
+      }
       const report = await prisma.ethicsReport.findFirst({
         where: { id: req.params.id, organizationId: orgId },
         include: {
           establishment: { select: { id: true, name: true } },
+          /** Quem a denúncia envolve — e por isso está fora do caso. [CB-27] */
+          cited: {
+            orderBy: { markedAt: "asc" },
+            select: {
+              userId: true,
+              markedAt: true,
+              user: { select: { id: true, name: true } },
+              markedBy: { select: { id: true, name: true } },
+            },
+          },
           messages: {
             orderBy: { createdAt: "asc" },
             include: {
@@ -456,6 +698,14 @@ class EthicsController {
     try {
       const orgId = actorOrgId(req as AuthRequest);
       const userId = actorUserId(req as AuthRequest);
+      /*
+        Citado na denúncia é parte, não julgador: 404 e não 403, para não
+        confirmar a existência do caso a quem está fora dele. [CB-27]
+      */
+      if (await estouImpedido(req, req.params.id)) {
+        res.status(404).json({ message: "Relato não encontrado." });
+        return;
+      }
       const current = await new EthicsReport().read.one({
         id: req.params.id,
         organizationId: orgId,
@@ -548,6 +798,14 @@ class EthicsController {
     try {
       const orgId = actorOrgId(req as AuthRequest);
       const userId = actorUserId(req as AuthRequest);
+      /*
+        Citado na denúncia é parte, não julgador: 404 e não 403, para não
+        confirmar a existência do caso a quem está fora dele. [CB-27]
+      */
+      if (await estouImpedido(req, req.params.id)) {
+        res.status(404).json({ message: "Relato não encontrado." });
+        return;
+      }
       const report = await new EthicsReport().read.one({
         id: req.params.id,
         organizationId: orgId,

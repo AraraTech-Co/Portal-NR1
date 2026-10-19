@@ -94,6 +94,13 @@ export type EthicsReportDetail = {
   createdAt: string;
   establishment: { id: string; name: string } | null;
   messages: EthicsMessage[];
+  /** Quem a denúncia envolve — e por isso está fora do caso. [CB-27] */
+  cited: Array<{
+    userId: string;
+    markedAt: string;
+    user: { id: string; name: string };
+    markedBy: { id: string; name: string } | null;
+  }>;
 };
 
 /** Comitê abre o relato (e marca como lidas as mensagens do denunciante). [S5-L] */
@@ -113,4 +120,46 @@ export function updateEthicsStatus(id: string, input: { status: string; resoluti
     method: "PATCH",
     body: JSON.stringify(input),
   });
+}
+
+export type CommitteeMember = {
+  userId: string;
+  addedAt: string;
+  user: { id: string; name: string };
+  addedBy: { id: string; name: string } | null;
+};
+
+/** Quem é o comitê de ética desta empresa. [CB-27] */
+export function fetchEthicsCommittee() {
+  return request<{
+    members: CommitteeMember[];
+    people: Array<{ id: string; name: string; active: boolean }>;
+    falling_back: boolean;
+  }>("/api/ethics-committee");
+}
+
+export function setEthicsCommitteeMember(userId: string, member: boolean) {
+  return request<{ ok: true }>("/api/ethics-committee", {
+    method: "POST",
+    body: JSON.stringify({ user_id: userId, member }),
+  });
+}
+
+/** Marcar quem a denúncia envolve — e tirar essa pessoa do caso. [CB-27] */
+export function setEthicsReportCited(
+  reportId: string,
+  userId: string,
+  cited: boolean,
+) {
+  return request<{ ok: true }>(
+    `/api/ethics-reports/${encodeURIComponent(reportId)}/citados`,
+    { method: "POST", body: JSON.stringify({ user_id: userId, cited }) },
+  );
+}
+
+/** Nomes da empresa, para o comitê marcar quem a denúncia envolve. [CB-27] */
+export function fetchEthicsPeople() {
+  return request<{
+    people: Array<{ id: string; name: string; active: boolean }>;
+  }>("/api/ethics-reports/pessoas").then((d) => d.people);
 }

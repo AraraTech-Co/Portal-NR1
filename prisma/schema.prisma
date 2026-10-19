@@ -58,6 +58,10 @@ model User {
   occurrencesReviewed Occurrence[]        @relation("OccurrenceAnalyst")
   drillsRecorded    EmergencyDrill[]      @relation("DrillRecorder")
   reportsFiled      EthicsReport[]        @relation("ReportReporter")
+  ethicsCommittee   EthicsCommitteeMember[] @relation("EthicsCommitteeMember")
+  ethicsCommitteeAdded EthicsCommitteeMember[] @relation("EthicsCommitteeAdder")
+  ethicsCited       EthicsReportCited[]   @relation("EthicsCited")
+  ethicsCitedMarked EthicsReportCited[]   @relation("EthicsCitedMarker")
   reportMessages    EthicsReportMessage[] @relation("ReportMessageAuthor")
   employeeProfiles  EmployeeProfile[]
   ideasAuthored     Idea[]                @relation("IdeaAuthor")
@@ -172,6 +176,7 @@ model Organization {
   occurrences     Occurrence[]
   emergencyPlans  EmergencyProcedure[]
   contractors     Contractor[]
+  ethicsCommittee EthicsCommitteeMember[]
   ethicsReports   EthicsReport[]
   employeeProfiles EmployeeProfile[]
   ideas           Idea[]
@@ -1298,6 +1303,45 @@ enum ReportStatus {
   ARCHIVED
 }
 
+/// Quem é o comitê de ética desta empresa.
+///
+/// Antes, comitê era "todo mundo com leitura no módulo comite" — na prática,
+/// o RH inteiro: uma denúncia contra alguém do RH ia parar na mesa dele.
+/// Agora a empresa designa quem é. Sem ninguém designado, vale a regra
+/// antiga, para que ligar a funcionalidade não tranque a empresa fora das
+/// próprias denúncias. [CB-27]
+model EthicsCommitteeMember {
+  organizationId String
+  userId         String
+  addedById      String
+  addedAt        DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation("EthicsCommitteeMember", fields: [userId], references: [id], onDelete: Cascade)
+  addedBy      User         @relation("EthicsCommitteeAdder", fields: [addedById], references: [id])
+
+  @@id([organizationId, userId])
+}
+
+/// Quem a denúncia envolve, marcado pelo comitê ao triar.
+///
+/// Quem é citado perde o acesso ao caso: não o vê na lista, não o abre e não
+/// responde. Quem relata escreve texto livre e pode ser anônimo, então quem
+/// marca é o comitê. [CB-27]
+model EthicsReportCited {
+  reportId    String
+  userId      String
+  markedById  String
+  markedAt    DateTime @default(now())
+
+  report   EthicsReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  user     User         @relation("EthicsCited", fields: [userId], references: [id], onDelete: Cascade)
+  markedBy User         @relation("EthicsCitedMarker", fields: [markedById], references: [id])
+
+  @@id([reportId, userId])
+  @@index([userId])
+}
+
 model EthicsReport {
   id             String         @id @default(uuid())
   organizationId String
@@ -1324,6 +1368,7 @@ model EthicsReport {
   establishment Establishment?       @relation(fields: [establishmentId], references: [id])
   reporter      User?                @relation("ReportReporter", fields: [reporterUserId], references: [id])
   messages      EthicsReportMessage[]
+  cited         EthicsReportCited[]
 
   @@unique([organizationId, protocol])
   @@index([organizationId, status])
