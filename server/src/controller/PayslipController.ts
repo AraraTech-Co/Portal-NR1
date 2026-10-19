@@ -118,6 +118,19 @@ class PayslipController {
               answeredBy: { select: { id: true, name: true } },
             },
           },
+          /** As versões anteriores, que deixaram de ser apagadas. [S5-F] */
+          versions: {
+            orderBy: { replacedAt: "desc" },
+            select: {
+              id: true,
+              fileName: true,
+              publishedAt: true,
+              viewedAt: true,
+              replacedAt: true,
+              replacedBy: { select: { id: true, name: true } },
+            },
+          },
+          overriddenBy: { select: { id: true, name: true } },
         },
       });
       if (!payslip) {
@@ -130,13 +143,11 @@ class PayslipController {
         });
         return;
       }
-      if (!payslip.viewedAt) {
-        await prisma.payslip.update({
-          where: { id: payslip.id },
-          data: { viewedAt: new Date() },
-        });
-        payslip.viewedAt = new Date();
-      }
+      /*
+        "Visto" era marcado ao abrir o detalhe: entrar na tela e voltar sem
+        abrir o arquivo já contava como visto. O que prova entrega é abrir o
+        documento, e isso acontece no download. [S4-E]
+      */
       res.json({ payslip });
     } catch (err) {
       fail(res, err);
@@ -236,6 +247,7 @@ class PayslipController {
         file_name,
         mime_type,
         content_base64,
+        override_reason,
       } = req.body as {
         user_id?: string;
         reference_month?: number;
@@ -243,6 +255,8 @@ class PayslipController {
         file_name?: string;
         mime_type?: string;
         content_base64?: string;
+        /** Por que publicar apesar de o documento não conferir. [CB-28] */
+        override_reason?: string;
       };
 
       if (
@@ -311,9 +325,25 @@ class PayslipController {
         referenceYear: reference_year,
         admittedAt: ficha.admittedAt ?? null,
       });
-      if (!conferencia.ok) {
+      /*
+        A conferência pegou um erro real e não pode cair. Mas holerite correto
+        de outra contabilidade, ou digitalizado, travava o RH para sempre:
+        agora dá para publicar assim mesmo dizendo por quê, e quem publicou e
+        o motivo ficam gravados. A tela mostra o que não conferiu, em vez de
+        só "não confere". [CB-28] [B2-3-B]
+      */
+      /*
+        O motivo só vale — e só fica gravado — quando a conferência de fato
+        recusou. Mandar um motivo num holerite que confere não pode marcar o
+        documento como exceção.
+      */
+      const motivoForaDoPadrao = conferencia.ok
+        ? null
+        : override_reason?.trim() || null;
+      if (!conferencia.ok && !motivoForaDoPadrao) {
         res.status(422).json({
           message: "O documento não confere com a pessoa escolhida.",
+          code: "PAYSLIP_CHECK_FAILED",
           reasons: conferencia.blockers,
         });
         return;
@@ -337,26 +367,44 @@ class PayslipController {
 
       let payslip;
       if (existing) {
-        const oldAbs = resolveStoragePath(existing.storagePath);
-        payslip = await prisma.payslip.update({
-          where: { id: existing.id },
-          data: {
-            storagePath,
-            fileName: file_name.trim(),
-            publishedById: publisherId,
-            publishedAt: new Date(),
-            viewedAt: null,
-          },
+        /*
+          A versão de antes deixa de ser apagada: ela vira histórico, com o
+          arquivo no lugar e a data em que a pessoa a abriu. É o que prova o
+          que foi entregue antes da correção. [S5-F]
+        */
+        payslip = await prisma.$transaction(async (tx) => {
+          await tx.payslipVersion.create({
+            data: {
+              payslipId: existing.id,
+              storagePath: existing.storagePath,
+              fileName: existing.fileName,
+              publishedById: existing.publishedById,
+              publishedAt: existing.publishedAt,
+              viewedAt: existing.viewedAt,
+              replacedById: publisherId,
+            },
+          });
+          return tx.payslip.update({
+            where: { id: existing.id },
+            data: {
+              storagePath,
+              fileName: file_name.trim(),
+              publishedById: publisherId,
+              publishedAt: new Date(),
+              viewedAt: null,
+              overrideReason: motivoForaDoPadrao,
+              overriddenById: motivoForaDoPadrao ? publisherId : null,
+            },
+          });
         });
-        if (fs.existsSync(oldAbs) && oldAbs !== absolutePath) {
-          fs.unlinkSync(oldAbs);
-        }
         await writeAudit({
           organizationId: orgId,
           actorId: publisherId,
           action: "payslip.replace",
           entityType: "Payslip",
           entityId: payslip.id,
+          before: { fileName: existing.fileName, viewedAt: existing.viewedAt },
+          after: { fileName: payslip.fileName },
         });
       } else {
         payslip = await new Payslip().create.new({
@@ -367,6 +415,8 @@ class PayslipController {
           storagePath,
           fileName: file_name.trim(),
           publishedById: publisherId,
+          overrideReason: motivoForaDoPadrao,
+          overriddenById: motivoForaDoPadrao ? publisherId : null,
         });
         await writeAudit({
           organizationId: orgId,
@@ -394,9 +444,40 @@ class PayslipController {
 
       res.status(existing ? 200 : 201).json({
         warnings: conferencia.warnings,
+        /** O que não conferiu, quando foi publicado assim mesmo. [CB-28] */
+        overridden_reasons: motivoForaDoPadrao ? conferencia.blockers : [],
         payslip,
         replaced: Boolean(existing),
       });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
+  /** Baixar a versão que foi substituída — a que a pessoa viu antes. [S5-F] */
+  async downloadVersion(req: Request, res: Response) {
+    try {
+      const auth = req as AuthRequest;
+      const orgId = actorOrgId(auth);
+      const userId = actorUserId(auth);
+      const versao = await prisma.payslipVersion.findFirst({
+        where: { id: req.params.versionId, payslip: { organizationId: orgId } },
+        include: { payslip: { select: { userId: true } } },
+      });
+      if (!versao) {
+        res.status(404).json({ message: "Versão não encontrada." });
+        return;
+      }
+      if (versao.payslip.userId !== userId) {
+        res.status(403).json({ message: "Só o titular pode baixar o holerite." });
+        return;
+      }
+      const abs = resolveStoragePath(versao.storagePath);
+      if (!fs.existsSync(abs)) {
+        res.status(404).json({ message: "Arquivo não encontrado." });
+        return;
+      }
+      res.download(abs, versao.fileName);
     } catch (err) {
       fail(res, err);
     }

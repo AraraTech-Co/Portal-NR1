@@ -16,6 +16,10 @@ router.get("/api/payslips/open-questions", writeRh, (req, res) =>
 );
 router.post("/api/payslips", writeRh, (req, res) => payslips.create(req, res));
 router.get("/api/payslips/:id", read, (req, res) => payslips.get(req, res));
+/** A versão que foi substituída, para o trabalhador e para a prova. [S5-F] */
+router.get("/api/payslips/:id/versoes/:versionId/file", read, (req, res) =>
+  payslips.downloadVersion(req, res),
+);
 router.get("/api/payslips/:id/file", read, (req, res) =>
   payslips.download(req, res),
 );

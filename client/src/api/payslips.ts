@@ -36,7 +36,46 @@ export type PayslipDetail = {
   user: { id: string; name: string };
   publishedBy: { id: string; name: string };
   questions: PayslipQuestion[];
+  /** Publicado fora do padrão da conferência, com motivo e autor. [CB-28] */
+  overrideReason: string | null;
+  overriddenBy: { id: string; name: string } | null;
+  /** As versões que foram substituídas. [S5-F] */
+  versions: Array<{
+    id: string;
+    fileName: string;
+    publishedAt: string;
+    viewedAt: string | null;
+    replacedAt: string;
+    replacedBy: { id: string; name: string };
+  }>;
 };
+
+/** Baixa a versão que foi substituída — a que a pessoa viu antes. [S5-F] */
+export async function downloadPayslipVersion(
+  payslipId: string,
+  versionId: string,
+  fileName: string,
+) {
+  const headers = new Headers();
+  const token = getToken();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const res = await fetch(
+    `/api/payslips/${payslipId}/versoes/${versionId}/file`,
+    { headers },
+  );
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(
+      (data as { message?: string }).message || `Erro ${res.status}`,
+    );
+  }
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 export function fetchPayslipRecipients() {
   return request<{
@@ -82,8 +121,14 @@ export function publishPayslip(input: {
   file_name: string;
   mime_type: string;
   content_base64: string;
+  /** Por que publicar apesar de o documento não conferir. [CB-28] */
+  override_reason?: string;
 }) {
-  return request<{ payslip: PayslipDetail; replaced: boolean }>(
+  return request<{
+    payslip: PayslipDetail;
+    replaced: boolean;
+    overridden_reasons: string[];
+  }>(
     "/api/payslips",
     {
       method: "POST",
