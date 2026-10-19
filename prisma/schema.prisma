@@ -60,6 +60,8 @@ model User {
   reportsFiled      EthicsReport[]        @relation("ReportReporter")
   ethicsCommittee   EthicsCommitteeMember[] @relation("EthicsCommitteeMember")
   ethicsCommitteeAdded EthicsCommitteeMember[] @relation("EthicsCommitteeAdder")
+  ergonomicComplaints ErgonomicComplaint[] @relation("ErgonomicComplaintAuthor")
+  ergonomicComplaintsHandled ErgonomicComplaint[] @relation("ErgonomicComplaintHandler")
   ethicsCited       EthicsReportCited[]   @relation("EthicsCited")
   ethicsCitedMarked EthicsReportCited[]   @relation("EthicsCitedMarker")
   reportMessages    EthicsReportMessage[] @relation("ReportMessageAuthor")
@@ -171,6 +173,7 @@ model Organization {
   auditEvents     AuditEvent[]
   documents       PgrDocument[]
   aeps            Aep[]
+  ergonomicComplaints ErgonomicComplaint[]
   participations  ParticipationRecord[]
   surveys         PreliminarySurvey[]
   occurrences     Occurrence[]
@@ -401,6 +404,7 @@ model Establishment {
   contractors    Contractor[]
   ethicsReports  EthicsReport[]
   announcements  AnnouncementEstablishment[]
+  ergonomicComplaints ErgonomicComplaint[]
 
   @@index([organizationId, archivedAt])
 }
@@ -1052,9 +1056,58 @@ model Aep {
   conductedBy   User          @relation("AepConductor", fields: [conductedById], references: [id])
   hazards       Hazard[]
   evidences     Evidence[]
+  /// As queixas que levaram a esta avaliação. [P1]
+  complaints    ErgonomicComplaint[]
 
   @@index([organizationId, status])
   @@index([establishmentId])
+}
+
+/// Em que pé está a queixa ergonômica de quem trabalha. [P1]
+enum ErgonomicComplaintStatus {
+  /// Registrada, ainda sem resposta do SST.
+  OPEN
+  /// Virou avaliação ergonômica.
+  IN_EVALUATION
+  /// Encerrada sem avaliação, com o motivo escrito para quem registrou.
+  CLOSED
+}
+
+/// A queixa ergonômica de quem faz o trabalho.
+///
+/// Quem sente a dor é quem trabalha, e ela não tinha onde dizer isso: a
+/// Avaliação ergonômica era só lista. Agora registra a queixa; transformá-la
+/// em avaliação continua sendo do SST. [P1]
+model ErgonomicComplaint {
+  id             String @id @default(uuid())
+  organizationId String
+  /// Quem registrou. A queixa é de saúde: só ela e quem cuida do módulo veem.
+  userId         String
+  /// Onde incomoda, nas palavras de quem registrou.
+  bodyPart       String?
+  /// O que incomoda e em que tarefa.
+  description    String
+  /// Unidade e função no momento do registro — a pessoa pode mudar depois.
+  establishmentId String?
+  jobRoleName     String?
+  status         ErgonomicComplaintStatus @default(OPEN)
+  /// A avaliação aberta a partir desta queixa.
+  aepId          String?
+  handledById    String?
+  handledAt      DateTime?
+  /// O que o SST respondeu — é o que quem registrou lê.
+  handlingNote   String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user          User           @relation("ErgonomicComplaintAuthor", fields: [userId], references: [id], onDelete: Cascade)
+  establishment Establishment? @relation(fields: [establishmentId], references: [id])
+  aep           Aep?           @relation(fields: [aepId], references: [id])
+  handledBy     User?          @relation("ErgonomicComplaintHandler", fields: [handledById], references: [id])
+
+  @@index([organizationId, status])
+  @@index([userId])
 }
 
 // ============================================================
@@ -1555,6 +1608,10 @@ enum NotificationKind {
   TRAINING_COMPLETED
   /// Convocado para uma turma de treinamento marcada. [CB-34]
   TRAINING_SCHEDULED
+  /// Alguém registrou uma queixa ergonômica. [P1]
+  ERGONOMIC_COMPLAINT_OPENED
+  /// O SST respondeu à queixa ergonômica. [P1]
+  ERGONOMIC_COMPLAINT_HANDLED
 }
 
 model Notification {
