@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { useAuth } from "@/auth/AuthContext";
 import {
   fetchEmployees,
   WORKER_BOND_LABEL,
@@ -10,7 +11,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
 import { PageHeader } from "@/components/PageHeader";
 import { formatDay } from "@/lib/labels";
-import { useModuleAccess } from "@/lib/module-access";
+import { isReadOnlyPermission, useModuleAccess } from "@/lib/module-access";
 import "@/components/data-table.css";
 import "@/components/form.css";
 import "./people.css";
@@ -24,6 +25,7 @@ function semAcento(texto: string): string {
  * Desligado some da lista por padrão, mas nunca do registro. [S5-H] [S6-C]
  */
 export function EmployeesPage() {
+  const { user } = useAuth();
   const { canManage } = useModuleAccess("colaboradores");
   const [rows, setRows] = useState<EmployeeRow[]>([]);
   const [incluirDesligados, setIncluirDesligados] = useState(false);
@@ -76,7 +78,14 @@ export function EmployeesPage() {
         description={
           canManage
             ? "Quem trabalha na empresa. Abra a ficha para ver função, treinamentos, ordem de serviço e registrar o desligamento."
-            : "Sua ficha na empresa."
+            : /*
+                A consulta vê a lista inteira, não a própria ficha: dizer
+                "sua ficha" numa tela com nove pessoas é descrever outra
+                tela. [CB-43]
+              */
+              isReadOnlyPermission(user?.permission)
+              ? "Quem trabalha na empresa: nome, matrícula, função e admissão. Sem CPF, contato nem motivo de desligamento."
+              : "Sua ficha na empresa."
         }
       />
 

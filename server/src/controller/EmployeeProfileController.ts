@@ -89,18 +89,26 @@ function seesAll(req: AuthRequest): boolean {
 
 /**
  * A consulta (fiscal) vê quem é quem — nome, matrícula, função, setor,
- * admissão — sem CPF, telefone, login nem e-mail. [S7-A]
+ * admissão — sem CPF, telefone, login nem e-mail [S7-A], e sem o motivo do
+ * desligamento: por que alguém saiu da empresa não é assunto da
+ * fiscalização de segurança, e já era regra não expor isso a quem está do
+ * lado de fora. [CB-43] [CB-39]
  */
-function forViewer<T extends { taxId?: unknown; phone?: unknown; user?: unknown }>(
-  req: AuthRequest,
-  profile: T,
-): T {
+function forViewer<
+  T extends {
+    taxId?: unknown;
+    phone?: unknown;
+    user?: unknown;
+    dismissalReason?: unknown;
+  },
+>(req: AuthRequest, profile: T): T {
   if (!req.actor || !isReadOnlyRole(req.actor.permission)) return profile;
   const user = profile.user as { id: string; name: string } | undefined;
   return {
     ...profile,
     taxId: null,
     phone: null,
+    ...("dismissalReason" in profile ? { dismissalReason: null } : {}),
     user: user ? { id: user.id, name: user.name } : user,
   };
 }

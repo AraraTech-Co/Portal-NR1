@@ -23,7 +23,11 @@ import {
   ORG_ROLE_LABEL,
 } from "@/lib/labels";
 import { useAuth } from "@/auth/AuthContext";
-import { canChangePersonnelRecord, useModuleAccess } from "@/lib/module-access";
+import {
+  canChangePersonnelRecord,
+  isReadOnlyPermission,
+  useModuleAccess,
+} from "@/lib/module-access";
 import "@/components/form.css";
 import "./people.css";
 
@@ -406,6 +410,11 @@ export function EmployeeFilePage() {
   const { id = "" } = useParams();
   const { user } = useAuth();
   const { canManage } = useModuleAccess("colaboradores");
+  /*
+    A consulta não recebe login, CPF, telefone nem e-mail; mostrar o rótulo
+    vazio só diz que existe um campo escondido. [CB-43]
+  */
+  const soConsulta = isReadOnlyPermission(user?.permission);
   // Desligar e mexer em CPF/matrícula são do RH, não de quem escreve. [OB-8]
   const cuidaDoQuadro = canChangePersonnelRecord(user?.permission);
   const [data, setData] = useState<EmployeeFile | null>(null);
@@ -489,26 +498,32 @@ export function EmployeeFilePage() {
         <section className="form-section">
           <h2>Cadastro</h2>
           <dl className="people-facts">
-            <div>
-              <dt>Login</dt>
-              <dd>{profile.user.login}</dd>
-            </div>
+            {!soConsulta && (
+              <div>
+                <dt>Login</dt>
+                <dd>{profile.user.login}</dd>
+              </div>
+            )}
             <div>
               <dt>Matrícula</dt>
               <dd>{profile.registration ?? "—"}</dd>
             </div>
-            <div>
-              <dt>CPF</dt>
-              <dd>{formatCpf(profile.taxId)}</dd>
-            </div>
-            <div>
-              <dt>Telefone</dt>
-              <dd>{profile.phone ?? "—"}</dd>
-            </div>
-            <div>
-              <dt>E-mail</dt>
-              <dd>{profile.user.email ?? "—"}</dd>
-            </div>
+            {!soConsulta && (
+              <>
+                <div>
+                  <dt>CPF</dt>
+                  <dd>{formatCpf(profile.taxId)}</dd>
+                </div>
+                <div>
+                  <dt>Telefone</dt>
+                  <dd>{profile.phone ?? "—"}</dd>
+                </div>
+                <div>
+                  <dt>E-mail</dt>
+                  <dd>{profile.user.email ?? "—"}</dd>
+                </div>
+              </>
+            )}
             <div>
               <dt>Admissão</dt>
               <dd>{formatDay(profile.admittedAt)}</dd>
