@@ -106,11 +106,116 @@
   font-size: 0.85rem;
 }
 
-/* A lista de ciência não vai no papel: o papel é o documento, não o controle. */
+.so-ack-right {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+
+.so-annex-id {
+  margin: 0 0 0.8rem;
+  font-size: 0.85rem;
+  color: var(--muted-foreground);
+}
+
+.so-print-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  color: var(--muted-foreground);
+}
+
+/* O comprovante de uma pessoa: existe para o papel. [B2-4-G] */
+.so-receipt {
+  display: none;
+}
+
+.so-receipt h2 {
+  margin: 0 0 0.8rem;
+  font-size: 1.05rem;
+}
+
+.so-receipt-facts {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0 0 1rem;
+}
+
+.so-receipt-facts div {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.so-receipt-facts dt {
+  min-width: 7.5rem;
+  font-weight: 600;
+}
+
+.so-receipt-facts dd {
+  margin: 0;
+}
+
+.so-receipt-state {
+  margin: 0 0 2.5rem;
+  font-size: 0.9rem;
+}
+
+.so-receipt-sign {
+  display: flex;
+  gap: 2rem;
+  margin-bottom: 1.5rem;
+}
+
+.so-receipt-sign span {
+  flex: 1;
+  border-top: 1px solid var(--foreground);
+  padding-top: 0.35rem;
+  font-size: 0.8rem;
+}
+
+.so-receipt-sign span:last-child {
+  flex: 0 0 10rem;
+}
+
+/*
+  No papel, a ciência vai junto: a lista como anexo no fim e, se pedido, um
+  comprovante por pessoa para assinar. Era escondida de propósito, e o
+  fiscal que pedia a prova em PDF ficava sem ela. [B2-4-G] [CB-46]
+*/
 @media print {
-  .so-acks,
   .so-ack-box,
-  .so-alert {
+  .so-alert,
+  .so-print-option,
+  .so-receipt-button {
     display: none !important;
+  }
+
+  .so-acks {
+    break-before: page;
+    page-break-before: always;
+    border: none;
+    padding: 0;
+    background: none;
+  }
+
+  .so-receipt {
+    display: block;
+    break-before: page;
+    page-break-before: always;
+  }
+
+  /* Comprovante de uma pessoa só: o resto não vai para a impressora. */
+  .so-print-one .doc-paper,
+  .so-print-one .so-acks,
+  .so-print-one .so-receipt {
+    display: none !important;
+  }
+
+  .so-print-one .so-receipt.is-only {
+    display: block !important;
+    break-before: auto;
+    page-break-before: auto;
   }
 }

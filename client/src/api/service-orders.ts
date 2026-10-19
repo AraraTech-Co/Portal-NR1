@@ -105,7 +105,13 @@ export async function fetchServiceOrder(id: string) {
 export async function fetchServiceOrderAcks(id: string) {
   return request<{
     service_order: { id: string; version: number };
-    people: { id: string; name: string; acknowledged_at: string | null }[];
+    people: {
+      id: string;
+      name: string;
+      /** Identifica a pessoa no comprovante impresso. [B2-4-G] */
+      registration: string | null;
+      acknowledged_at: string | null;
+    }[];
     acknowledged: number;
     pending: number;
   }>(`/api/service-orders/${encodeURIComponent(id)}/ciencias`);
