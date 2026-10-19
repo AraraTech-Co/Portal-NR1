@@ -11,6 +11,7 @@ import {
   type PayslipListItem,
 } from "@/api/payslips";
 import { useAuth } from "@/auth/AuthContext";
+import { ApiError } from "@/api/client";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
 import { EmptyState } from "@/components/EmptyState";
@@ -48,6 +49,12 @@ export function PayslipsPage() {
   const [openQs, setOpenQs] = useState<OpenPayslipQuestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /*
+    O que não conferiu, para o RH saber se o erro é do arquivo, do cadastro
+    ou do mês — em vez de só "não confere". [B2-3-B] [CB-28]
+  */
+  const [naoConferiu, setNaoConferiu] = useState<string[]>([]);
+  const [motivoForaDoPadrao, setMotivoForaDoPadrao] = useState("");
   const [questionsError, setQuestionsError] = useState<string | null>(null);
 
   const now = useMemo(() => new Date(), []);
@@ -127,16 +134,22 @@ export function PayslipsPage() {
         file_name: file.name,
         mime_type: file.type || "application/pdf",
         content_base64,
+        override_reason: motivoForaDoPadrao.trim() || undefined,
       });
       setFormOk(
         result.replaced
-          ? "Holerite substituído para esta competência."
-          : "Holerite publicado.",
+          ? "Holerite substituído. A versão anterior ficou no histórico."
+          : result.overridden_reasons.length > 0
+            ? "Holerite publicado fora do padrão, com o motivo registrado."
+            : "Holerite publicado.",
       );
       setFile(null);
+      setNaoConferiu([]);
+      setMotivoForaDoPadrao("");
       await reload();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Falha ao publicar");
+      setNaoConferiu(err instanceof ApiError ? err.reasons : []);
     } finally {
       setPublishing(false);
     }
@@ -261,9 +274,12 @@ export function PayslipsPage() {
       {isRh && (
         <section className="form-section">
           <h2>Publicar holerite</h2>
+          {/* Dizia só "o arquivo é substituído"; agora a versão de antes
+              fica guardada. [S5-F] */}
           <p className="muted">
             Após publicar, o arquivo fica acessível apenas ao colaborador. Se já
-            existir na mesma competência, o arquivo é substituído.
+            existir na mesma competência, o novo passa a valer e o anterior fica
+            no histórico do holerite.
           </p>
           <form className="form-grid" onSubmit={onPublish}>
             <div className="form-grid cols-2">
@@ -316,10 +332,42 @@ export function PayslipsPage() {
               </label>
             </div>
             {formError && <p className="form-error">{formError}</p>}
+            {/* O servidor sempre soube qual campo não bateu; a tela mostrava
+                só "não confere". [B2-3-B] */}
+            {naoConferiu.length > 0 && (
+              <div className="form-error" role="alert">
+                <strong>O que não conferiu:</strong>
+                <ul>
+                  {naoConferiu.map((r) => (
+                    <li key={r}>{r}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {/* A conferência não cai, mas um holerite correto de outra
+                contabilidade não pode travar o RH para sempre. [CB-28] */}
+            {naoConferiu.length > 0 && (
+              <label className="form-field">
+                Publicar assim mesmo — por quê?
+                <input
+                  value={motivoForaDoPadrao}
+                  onChange={(e) => setMotivoForaDoPadrao(e.target.value)}
+                  disabled={publishing}
+                  placeholder="Ex.: holerite da contabilidade nova, layout diferente"
+                />
+                <span className="form-hint">
+                  Fica registrado com o seu nome, junto do holerite.
+                </span>
+              </label>
+            )}
             {formOk && <p className="muted">{formOk}</p>}
             <div className="form-actions">
               <Button type="submit" disabled={publishing || !userId}>
-                {publishing ? "Publicando…" : "Publicar holerite"}
+                {publishing
+                  ? "Publicando…"
+                  : motivoForaDoPadrao.trim()
+                    ? "Publicar fora do padrão"
+                    : "Publicar holerite"}
               </Button>
             </div>
           </form>

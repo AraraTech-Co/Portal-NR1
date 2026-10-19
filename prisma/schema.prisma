@@ -69,6 +69,9 @@ model User {
   hrDocumentAcks    HrDocumentAck[]
   payslips          Payslip[]             @relation("PayslipOwner")
   payslipsPublished Payslip[]             @relation("PayslipPublisher")
+  payslipsOverridden Payslip[]            @relation("PayslipOverride")
+  payslipVersionsPublished PayslipVersion[] @relation("PayslipVersionPublisher")
+  payslipVersionsReplaced  PayslipVersion[] @relation("PayslipVersionReplacer")
   payslipQuestions  PayslipQuestion[]     @relation("PayslipAsker")
   payslipAnswers    PayslipQuestion[]     @relation("PayslipAnswerer")
   certificates      MedicalCertificate[]  @relation("CertificateOwner")
@@ -1584,14 +1587,47 @@ model Payslip {
   publishedById  String
   publishedAt    DateTime @default(now())
   viewedAt       DateTime?
+  /// Publicado fora do padrão de conferência, com motivo e autor. A
+  /// conferência pegou erro real e não pode cair; mas um holerite correto de
+  /// outra contabilidade não pode travar o RH para sempre. [CB-28]
+  overrideReason String?
+  overriddenById String?
 
   organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user         User              @relation("PayslipOwner", fields: [userId], references: [id], onDelete: Cascade)
   publishedBy  User              @relation("PayslipPublisher", fields: [publishedById], references: [id])
+  overriddenBy User?             @relation("PayslipOverride", fields: [overriddenById], references: [id])
   questions    PayslipQuestion[]
+  versions     PayslipVersion[]
 
   @@unique([organizationId, userId, referenceYear, referenceMonth])
   @@index([organizationId, referenceYear, referenceMonth])
+}
+
+/// A versão que o trabalhador viu antes da correção.
+///
+/// Publicar o mesmo mês de novo substituía o holerite e apagava o arquivo
+/// anterior: a versão que a pessoa abriu deixava de existir, e com ela a
+/// prova do que foi entregue. Agora cada substituição guarda a anterior,
+/// com a data em que foi vista. [S5-F]
+model PayslipVersion {
+  id            String   @id @default(uuid())
+  payslipId     String
+  storagePath   String
+  fileName      String
+  publishedById String
+  publishedAt   DateTime
+  /// Quando o trabalhador abriu esta versão; null se nunca abriu.
+  viewedAt      DateTime?
+  /// Quando esta versão deixou de ser a vigente.
+  replacedAt    DateTime @default(now())
+  replacedById  String
+
+  payslip     Payslip @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+  publishedBy User    @relation("PayslipVersionPublisher", fields: [publishedById], references: [id])
+  replacedBy  User    @relation("PayslipVersionReplacer", fields: [replacedById], references: [id])
+
+  @@index([payslipId, replacedAt])
 }
 
 model PayslipQuestion {

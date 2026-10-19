@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import {
   askPayslipQuestion,
   downloadPayslipFile,
+  downloadPayslipVersion,
   fetchPayslip,
   type PayslipDetail,
 } from "@/api/payslips";
@@ -129,6 +130,44 @@ export function PayslipDetailPage() {
           <Chip tone="warning">Não visto</Chip>
         )}
       </p>
+
+      {payslip.overrideReason && (
+        /* Publicado fora do padrão da conferência: quem titular e fiscal
+           precisam saber. [CB-28] */
+        <p className="form-hint">
+          <strong>Publicado fora do padrão de conferência</strong> por{" "}
+          {payslip.overriddenBy?.name ?? "quem publicou"}: {payslip.overrideReason}
+        </p>
+      )}
+
+      {payslip.versions.length > 0 && (
+        <section className="form-section">
+          {/* A versão de antes deixou de ser apagada: é a prova do que foi
+              entregue antes da correção. [S5-F] */}
+          <h2>Versões anteriores</h2>
+          <ul>
+            {payslip.versions.map((v) => (
+              <li key={v.id}>
+                {v.fileName} · publicada em {formatDay(v.publishedAt)} ·{" "}
+                {v.viewedAt
+                  ? `você viu em ${formatDay(v.viewedAt)}`
+                  : "você não chegou a abrir"}{" "}
+                · substituída em {formatDay(v.replacedAt)} por{" "}
+                {v.replacedBy.name}{" "}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() =>
+                    void downloadPayslipVersion(payslip.id, v.id, v.fileName)
+                  }
+                >
+                  Baixar
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="form-section">
         <h2>Dúvidas</h2>
