@@ -85,14 +85,31 @@ class AuthController {
     }
 
     const users = new User();
-    const user = await users.custom.read.byLoginIdentifier(login);
-    if (!user || !user.active) {
-      res.status(401).json({ message: "Credenciais inválidas." });
-      return;
+    /*
+      Login, e-mail, matrícula ou CPF: o portal descobre o que foi digitado.
+      Matrícula é única dentro de uma empresa, não entre empresas, então
+      pode haver mais de um candidato — quem decide é a senha. A resposta é
+      a mesma para nenhum, um ou vários candidatos. [B2-1-F]
+    */
+    const candidatos = await users.custom.read.candidatesForLogin(login);
+    let user: (typeof candidatos)[number] | null = null;
+    for (const candidato of candidatos) {
+      if (!candidato.active) continue;
+      if (await users.custom.auth.verifyPassword(candidato, password)) {
+        if (user) {
+          // Duas pessoas com a mesma matrícula e a mesma senha: não há como
+          // saber quem é, e escolher uma seria entrar na conta errada.
+          res.status(401).json({
+            message:
+              "Não foi possível identificar você por este número. Entre com o seu login ou e-mail.",
+            code: "LOGIN_AMBIGUOUS",
+          });
+          return;
+        }
+        user = candidato;
+      }
     }
-
-    const ok = await users.custom.auth.verifyPassword(user, password);
-    if (!ok) {
+    if (!user) {
       res.status(401).json({ message: "Credenciais inválidas." });
       return;
     }

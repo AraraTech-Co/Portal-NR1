@@ -70,7 +70,16 @@ export function AccountPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const [decideRoles, setDecideRoles] = useState<
-    Record<string, { org_role: string; access_until?: string }>
+    Record<
+      string,
+      {
+        org_role: string;
+        /** Definidos por quem aprova, não por quem se cadastrou. [S1-M] */
+        registration?: string;
+        is_external?: boolean;
+        access_until?: string;
+      }
+    >
   >({});
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -195,6 +204,10 @@ export function AccountPage() {
         ...(action === "approve" && roleMode === "ON_APPROVE"
           ? {
               org_role: roles?.org_role,
+              registration: roles?.is_external
+                ? undefined
+                : roles?.registration?.trim() || undefined,
+              is_external: roles?.is_external ?? false,
               ...(roles?.org_role === "FISCAL"
                 ? { access_until: roles.access_until || defaultFiscalUntil() }
                 : {}),
@@ -337,12 +350,47 @@ export function AccountPage() {
                     <tr key={r.id}>
                       <td>
                         <strong>{r.name}</strong>
-                        <div className="muted">{r.email}</div>
+                        <div className="muted">{r.email ?? "sem e-mail"}</div>
                       </td>
+                      {/* A pessoa não escolhe mais estes dois; quem aprova
+                          define. [S1-M] [S1-Q] */}
                       <td>
-                        {r.is_external
-                          ? "Externo"
-                          : (r.registration ?? "—")}
+                        <label
+                          className="form-field"
+                          style={{ flexDirection: "row", alignItems: "center", gap: "0.4rem" }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={decideRoles[r.id]?.is_external ?? false}
+                            onChange={(e) =>
+                              setDecideRoles((prev) => ({
+                                ...prev,
+                                [r.id]: {
+                                  ...prev[r.id],
+                                  org_role: prev[r.id]?.org_role ?? "COLABORADOR",
+                                  is_external: e.target.checked,
+                                },
+                              }))
+                            }
+                          />
+                          <span>Externo</span>
+                        </label>
+                        {!decideRoles[r.id]?.is_external && (
+                          <input
+                            value={decideRoles[r.id]?.registration ?? ""}
+                            placeholder="Matrícula"
+                            onChange={(e) =>
+                              setDecideRoles((prev) => ({
+                                ...prev,
+                                [r.id]: {
+                                  ...prev[r.id],
+                                  org_role: prev[r.id]?.org_role ?? "COLABORADOR",
+                                  registration: e.target.value,
+                                },
+                              }))
+                            }
+                          />
+                        )}
                       </td>
                       <td>
                         {r.account_name}

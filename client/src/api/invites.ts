@@ -20,7 +20,8 @@ export type JoinRequest = {
   account_id: string;
   account_name: string;
   name: string;
-  email: string;
+  /** Opcional desde a decisão OB-1. */
+  email: string | null;
   registration: string | null;
   is_external: boolean;
   created_at: string;
@@ -74,6 +75,9 @@ export function decideJoinRequest(
   input: {
     action: "approve" | "reject";
     org_role?: string;
+    /** Matrícula e vínculo são definidos por quem aprova. [S1-M] */
+    registration?: string;
+    is_external?: boolean;
     note?: string;
     /** Fim do acesso do fiscal (AAAA-MM-DD). Vazio → 30 dias. */
     access_until?: string;
@@ -100,16 +104,15 @@ export function acceptPublicInvite(
   token: string,
   input: {
     name: string;
-    email: string;
+    /** O portal não envia nem confirma e-mail: é opcional. [OB-1] */
+    email?: string;
     password: string;
-    registration?: string;
-    is_external?: boolean;
   },
 ) {
   return request<{
     ok: boolean;
     pending: boolean;
-    email: string;
+    email: string | null;
     account_name: string;
     request_id: string;
   }>(`/api/invites/${token}`, {

@@ -6,6 +6,7 @@ import prisma from "../model/prisma";
 import {
   allocateUniqueLogin,
   loginCandidateFromEmail,
+  loginCandidateFromName,
 } from "../helper/login-name";
 import { writeAudit } from "../helper/audit";
 import { orgRoleToAccountRole } from "../helper/auth";
@@ -221,12 +222,16 @@ class AccountInviteController {
 
   async acceptPublic(req: Request, res: Response) {
     try {
-      const { name, email, password, registration, is_external } = req.body as {
+      /*
+        Quem se cadastra informa quem é e escolhe a senha. Matrícula e
+        vínculo (externo) são da empresa: quem aprova é que define, porque
+        marcar-se externo muda o próprio vínculo e matrícula é número que o
+        RH atribui. [S1-M] [S1-Q]
+      */
+      const { name, email, password } = req.body as {
         name?: string;
         email?: string;
         password?: string;
-        registration?: string;
-        is_external?: boolean;
       };
       const link = await prisma.accountInviteLink.findUnique({
         where: { token: req.params.token },
@@ -242,92 +247,46 @@ class AccountInviteController {
       assertInviteLinkUsable(link);
 
       const cleanName = name?.trim() ?? "";
-      const cleanEmail = email?.trim().toLowerCase() ?? "";
-      if (!cleanName || !cleanEmail) {
-        throw httpError(400, "Nome e e-mail são obrigatórios.");
+      // O e-mail deixou de ser obrigatório: o portal não envia nem confirma
+      // e-mail, e a planilha já dispensava. [OB-1]
+      const cleanEmail = blank(email)?.toLowerCase() ?? null;
+      if (!cleanName) {
+        throw httpError(400, "Informe o seu nome.");
       }
       if (!password || password.length < 8) {
         throw httpError(400, "A senha deve ter pelo menos 8 caracteres.");
       }
 
-      const isExternal = is_external === true;
-      const cleanRegistration = blank(registration);
-      if (!isExternal && !cleanRegistration) {
-        throw httpError(
-          400,
-          "Informe o número de cadastro ou selecione Externo.",
-        );
-      }
-      if (isExternal && cleanRegistration) {
-        throw httpError(
-          400,
-          "Externo não deve informar número de cadastro.",
-        );
-      }
-
-      const existingMembership = await prisma.accountMembership.findFirst({
-        where: { accountId: link.accountId, user: { email: cleanEmail } },
-        select: { id: true },
-      });
-      if (existingMembership) {
-        throw httpError(409, "Essa pessoa já está nesta conta.");
-      }
-
-      const existingUser = await prisma.user.findFirst({
-        where: { email: cleanEmail },
-        select: { id: true },
-      });
-      if (existingUser) {
-        throw httpError(
-          409,
-          "Já existe uma conta com este e-mail. Entre pelo login.",
-        );
-      }
-
-      const pendingSame = await prisma.accountJoinRequest.findFirst({
-        where: {
-          accountId: link.accountId,
-          email: cleanEmail,
-          status: "PENDING",
-        },
-        select: { id: true },
-      });
-      if (pendingSame) {
-        throw httpError(409, "Já existe um pedido pendente com este e-mail.");
-      }
-
-      if (cleanRegistration) {
-        const profileTaken = await prisma.employeeProfile.findFirst({
-          where: {
-            organizationId: link.account.organizationId,
-            registration: cleanRegistration,
-          },
+      if (cleanEmail) {
+        const existingMembership = await prisma.accountMembership.findFirst({
+          where: { accountId: link.accountId, user: { email: cleanEmail } },
           select: { id: true },
         });
-        if (profileTaken) {
-          /*
-            Dizer que a matrícula existe entrega a lista de matrículas a quem
-            tiver o link. A pessoa certa resolve com o RH. [CB-17]
-          */
+        if (existingMembership) {
+          throw httpError(409, "Essa pessoa já está nesta conta.");
+        }
+
+        const existingUser = await prisma.user.findFirst({
+          where: { email: cleanEmail },
+          select: { id: true },
+        });
+        if (existingUser) {
           throw httpError(
             409,
-            "Não foi possível concluir o cadastro com estes dados. Fale com o RH da empresa.",
+            "Já existe uma conta com este e-mail. Entre pelo login.",
           );
         }
-        const pendingReg = await prisma.accountJoinRequest.findFirst({
+
+        const pendingSame = await prisma.accountJoinRequest.findFirst({
           where: {
+            accountId: link.accountId,
+            email: cleanEmail,
             status: "PENDING",
-            registration: cleanRegistration,
-            isExternal: false,
-            account: { organizationId: link.account.organizationId },
           },
           select: { id: true },
         });
-        if (pendingReg) {
-          throw httpError(
-            409,
-            "Já existe um pedido pendente com este número de cadastro.",
-          );
+        if (pendingSame) {
+          throw httpError(409, "Já existe um pedido pendente com este e-mail.");
         }
       }
 
@@ -346,8 +305,9 @@ class AccountInviteController {
             name: cleanName,
             email: cleanEmail,
             passwordHash,
-            registration: isExternal ? null : cleanRegistration,
-            isExternal,
+            // Quem aprova define os dois. [S1-M]
+            registration: null,
+            isExternal: false,
             status: "PENDING",
           },
         });
@@ -453,6 +413,10 @@ class AccountInviteController {
         role?: string;
         org_role?: string;
         note?: string;
+        /** Matrícula, definida por quem aprova. [S1-M] */
+        registration?: string;
+        /** Terceiro sem matrícula da empresa, definido por quem aprova. [S1-M] */
+        is_external?: boolean;
         /** Fim do acesso do fiscal (AAAA-MM-DD). Vazio → 30 dias. */
         access_until?: string;
       };
@@ -528,20 +492,29 @@ class AccountInviteController {
       const fiscalUntil =
         orgRole === Role.FISCAL ? resolveAccessUntil(body.access_until) : null;
 
+      /*
+        Matrícula e vínculo são decididos aqui, não por quem se cadastrou: é
+        a empresa que atribui o número e que sabe quem é de fora. [S1-M]
+      */
+      const isExternal = body.is_external === true;
+      const registration = isExternal ? null : blank(body.registration);
+
       await prisma.$transaction(async (tx) => {
-        const existingUser = await tx.user.findFirst({
-          where: { email: request.email },
-          select: { id: true },
-        });
-        if (existingUser) {
-          throw httpError(409, "Já existe um usuário com este e-mail.");
+        if (request.email) {
+          const existingUser = await tx.user.findFirst({
+            where: { email: request.email },
+            select: { id: true },
+          });
+          if (existingUser) {
+            throw httpError(409, "Já existe um usuário com este e-mail.");
+          }
         }
 
-        if (!request.isExternal && request.registration) {
+        if (registration) {
           const taken = await tx.employeeProfile.findFirst({
             where: {
               organizationId: request.account.organizationId,
-              registration: request.registration,
+              registration,
             },
             select: { id: true },
           });
@@ -557,11 +530,17 @@ class AccountInviteController {
           }
         }
 
+        /*
+          O login sai da matrícula quando há uma; senão do e-mail; senão do
+          nome, porque o e-mail deixou de ser obrigatório. Seja qual for, a
+          pessoa também entra pela matrícula e pelo CPF. [OB-1] [B2-1-F]
+        */
         const loginBase =
-          !request.isExternal && request.registration
-            ? request.registration.toLowerCase().replace(/[^a-z0-9._-]/g, "") ||
-              loginCandidateFromEmail(request.email)
-            : loginCandidateFromEmail(request.email);
+          (registration &&
+            registration.toLowerCase().replace(/[^a-z0-9._-]/g, "")) ||
+          (request.email
+            ? loginCandidateFromEmail(request.email)
+            : loginCandidateFromName(request.name));
         const login = await allocateUniqueLogin(loginBase, tx);
 
         const user = await tx.user.create({
@@ -598,7 +577,7 @@ class AccountInviteController {
             data: {
               organizationId: request.account.organizationId,
               userId: user.id,
-              registration: request.isExternal ? null : request.registration,
+              registration,
             },
           });
         }
@@ -609,6 +588,8 @@ class AccountInviteController {
             status: "APPROVED",
             decidedRole: role,
             decidedOrgRole: orgRole,
+            registration,
+            isExternal,
             decidedById: actor.userId,
             decidedAt: new Date(),
             decisionNote: blank(body.note),

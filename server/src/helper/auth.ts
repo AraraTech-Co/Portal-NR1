@@ -1,4 +1,5 @@
 import { AccountRole, Role } from "@prisma/client";
+import { isValidCpf } from "./cpf";
 
 /**
  * O papel na empresa é o único que decide o que a pessoa vê e faz.
@@ -69,10 +70,23 @@ export function isOrgMaster(orgRole: Role | null | undefined): boolean {
 
 export type LoginIdentifier =
   | { kind: "email"; value: string }
+  | { kind: "cpf"; value: string }
+  /** Login gerado (nome.sobrenome) ou matrícula da empresa. [B2-1-F] */
   | { kind: "username"; value: string };
 
+/**
+ * O que a pessoa digitou na entrada.
+ *
+ * Conviviam três padrões de login e quem entrou pela planilha precisava
+ * decorar um "nome.sobrenome" que nunca viu, em vez da matrícula que usa na
+ * fábrica. Agora o portal descobre o que foi digitado. [B2-1-F] [CB-4]
+ */
 export function classifyLoginIdentifier(raw: string): LoginIdentifier {
   const value = raw.trim().toLowerCase();
   if (value.includes("@")) return { kind: "email", value };
+  const digitos = value.replace(/\D/g, "");
+  if (digitos.length === 11 && isValidCpf(digitos)) {
+    return { kind: "cpf", value: digitos };
+  }
   return { kind: "username", value };
 }

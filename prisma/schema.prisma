@@ -312,11 +312,13 @@ model AccountJoinRequest {
   accountId      String
   inviteLinkId   String?
   name           String
-  email          String
+  /// O portal não envia nem confirma e-mail, e metade do chão de fábrica não
+  /// tem e-mail corporativo: deixou de ser obrigatório, como na planilha. [OB-1]
+  email          String?
   passwordHash   String
-  /// Matrícula / nº de cadastro. Obrigatório se isExternal = false.
+  /// Matrícula / nº de cadastro. Quem aprova define ou corrige. [S1-M]
   registration   String?
-  /// Terceiro / visitante sem matrícula da empresa.
+  /// Terceiro / visitante sem matrícula da empresa. Definido na aprovação. [S1-M]
   isExternal     Boolean           @default(false)
   status         JoinRequestStatus @default(PENDING)
   /// Papéis definidos na aprovação.

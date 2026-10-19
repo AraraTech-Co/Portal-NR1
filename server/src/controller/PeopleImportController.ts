@@ -37,7 +37,9 @@ type Entrada = {
 type Resultado = {
   line: number;
   name: string;
-  status: "created" | "skipped" | "error";
+  status: "created" | "completed" | "skipped" | "error";
+  /** O que a planilha preencheu na ficha de quem já existia. [CB-2] */
+  filled?: string[];
   /** Por que a linha não entrou, na língua de quem vai consertar a planilha. */
   message?: string;
   login?: string;
@@ -60,6 +62,82 @@ function dataDeCalendario(raw: unknown, campo: string): Date | null {
 }
 
 class PeopleImportController {
+  /**
+   * Completa a ficha de quem já está no portal com o que a planilha traz —
+   * e só o que está em branco. Nunca sobrescreve: um arquivo velho não pode
+   * desfazer uma correção feita à mão. Devolve, em português, o que mudou,
+   * para o relatório dizer exatamente o que fez. [CB-2]
+   */
+  private async completarFicha(entrada: {
+    orgId: string;
+    profileId: string;
+    atual: {
+      taxId: string | null;
+      registration: string | null;
+      jobRoleId: string | null;
+      admittedAt: Date | null;
+    };
+    daPlanilha: {
+      taxId: string | null;
+      matricula: string | null;
+      jobRoleId: string | null;
+      admittedAt: Date | null;
+    };
+    simulacao: boolean;
+  }): Promise<string[]> {
+    const { orgId, profileId, atual, daPlanilha, simulacao } = entrada;
+    const dados: Record<string, unknown> = {};
+    const mudou: string[] = [];
+
+    /*
+      CPF e matrícula são únicos dentro da empresa: se o número da planilha
+      já é de OUTRA pessoa, completar criaria duas fichas com o mesmo número.
+      Nesse caso a linha fica sem esse campo e o resto é completado.
+    */
+    if (!atual.taxId && daPlanilha.taxId) {
+      const deOutro = await prisma.employeeProfile.findFirst({
+        where: {
+          organizationId: orgId,
+          taxId: daPlanilha.taxId,
+          id: { not: profileId },
+        },
+        select: { id: true },
+      });
+      if (!deOutro) {
+        dados.taxId = daPlanilha.taxId;
+        mudou.push("CPF");
+      }
+    }
+    if (!atual.registration && daPlanilha.matricula) {
+      const deOutro = await prisma.employeeProfile.findFirst({
+        where: {
+          organizationId: orgId,
+          registration: daPlanilha.matricula,
+          id: { not: profileId },
+        },
+        select: { id: true },
+      });
+      if (!deOutro) {
+        dados.registration = daPlanilha.matricula;
+        mudou.push("matrícula");
+      }
+    }
+    if (!atual.jobRoleId && daPlanilha.jobRoleId) {
+      dados.jobRoleId = daPlanilha.jobRoleId;
+      mudou.push("função");
+    }
+    if (!atual.admittedAt && daPlanilha.admittedAt) {
+      dados.admittedAt = daPlanilha.admittedAt;
+      mudou.push("admissão");
+    }
+
+    if (mudou.length > 0 && !simulacao) {
+      await prisma.employeeProfile.update({ where: { id: profileId }, data: dados });
+    }
+    return mudou;
+  }
+
+
   /**
    * Cadastra várias pessoas de uma vez, a partir de uma planilha colada.
    *
@@ -164,41 +242,68 @@ class PeopleImportController {
           if (email && emailsDaLeva.has(email)) throw new Error("E-mail repetido na planilha.");
 
           // Já cadastrado: pular é o certo, não é erro de quem montou a planilha.
+          const campos = {
+            id: true,
+            taxId: true,
+            registration: true,
+            jobRoleId: true,
+            admittedAt: true,
+            user: { select: { name: true, login: true } },
+          } as const;
           const [porCpf, porMatricula, porEmail] = await Promise.all([
             taxId
               ? prisma.employeeProfile.findFirst({
                   where: { organizationId: orgId, taxId },
-                  select: { user: { select: { name: true, login: true } } },
+                  select: campos,
                 })
               : null,
             matricula
               ? prisma.employeeProfile.findFirst({
                   where: { organizationId: orgId, registration: matricula },
-                  select: { user: { select: { name: true, login: true } } },
+                  select: campos,
                 })
               : null,
             email
-              ? prisma.user.findFirst({ where: { email }, select: { login: true } })
+              ? prisma.employeeProfile.findFirst({
+                  where: { organizationId: orgId, user: { email } },
+                  select: campos,
+                })
               : null,
           ]);
-          if (porCpf) {
-            registro.status = "skipped";
-            registro.login = porCpf.user.login;
-            registro.message = `Já cadastrado com este CPF (${porCpf.user.name}).`;
-            resultados.push(registro);
-            continue;
-          }
-          if (porMatricula) {
-            registro.status = "skipped";
-            registro.login = porMatricula.user.login;
-            registro.message = `Já cadastrado com esta matrícula (${porMatricula.user.name}).`;
-            resultados.push(registro);
-            continue;
-          }
-          if (porEmail) {
-            registro.status = "skipped";
-            registro.login = porEmail.login;
-            registro.message = "Já existe conta com este e-mail.";
+          /*
+            Quem já existe deixa de ser pulado: a planilha completa o que
+            está em branco na ficha e nunca sobrescreve o que já foi
+            preenchido. Colar o quadro do RH não preenchia função nem CPF de
+            quem já estava no portal. [CB-2] [S1-G]
+          */
+          const jaExiste = porCpf ?? porMatricula ?? porEmail;
+          if (jaExiste) {
+            const completado = await this.completarFicha({
+              orgId,
+              profileId: jaExiste.id,
+              atual: jaExiste,
+              daPlanilha: { taxId, matricula, jobRoleId, admittedAt },
+              simulacao,
+            });
+            registro.login = jaExiste.user.login;
+            if (completado.length > 0) {
+              registro.status = "completed";
+              registro.filled = completado;
+              registro.message = `Já estava no portal; a planilha completou: ${completado.join(", ")}.`;
+            } else {
+              registro.status = "skipped";
+              registro.message = `Já cadastrado (${jaExiste.user.name}); nada a completar.`;
+            }
+            if (!simulacao && completado.length > 0) {
+              await writeAudit({
+                organizationId: orgId,
+                actorId: actor.userId,
+                action: "employee_profile.update",
+                entityType: "EmployeeProfile",
+                entityId: jaExiste.id,
+                after: { via: "import", filled: completado },
+              });
+            }
             resultados.push(registro);
             continue;
           }
@@ -293,6 +398,7 @@ class PeopleImportController {
           after: {
             rows: resultados.length,
             created: criados,
+            completed: resultados.filter((r) => r.status === "completed").length,
             skipped: resultados.filter((r) => r.status === "skipped").length,
             errors: resultados.filter((r) => r.status === "error").length,
           },
@@ -303,6 +409,7 @@ class PeopleImportController {
         dry_run: simulacao,
         rows: resultados.length,
         created: criados,
+        completed: resultados.filter((r) => r.status === "completed").length,
         skipped: resultados.filter((r) => r.status === "skipped").length,
         errors: resultados.filter((r) => r.status === "error").length,
         results: resultados,

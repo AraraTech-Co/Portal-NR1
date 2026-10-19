@@ -180,8 +180,10 @@ function parse(
   return { rows, problems };
 }
 
-function tone(status: string): "success" | "neutral" | "danger" {
+function tone(status: string): "success" | "info" | "neutral" | "danger" {
   if (status === "created") return "success";
+  /** Quem já estava no portal e teve a ficha completada. [CB-2] */
+  if (status === "completed") return "info";
   if (status === "skipped") return "neutral";
   return "danger";
 }
@@ -303,9 +305,17 @@ export function ImportPeople() {
         >
           {ocupado && !relatorio ? "Conferindo…" : "Conferir antes de cadastrar"}
         </Button>
-        {previa && previa.created > 0 && (
+        {/* Agora a planilha também completa quem já existe: o botão não pode
+            sumir quando só há fichas a completar. [CB-2] */}
+        {previa && previa.created + previa.completed > 0 && (
           <Button type="button" disabled={ocupado} onClick={() => void cadastrar()}>
-            {ocupado ? "Cadastrando…" : `Cadastrar ${previa.created} pessoa(s)`}
+            {ocupado
+              ? "Gravando…"
+              : previa.created > 0 && previa.completed > 0
+                ? `Cadastrar ${previa.created} e completar ${previa.completed}`
+                : previa.created > 0
+                  ? `Cadastrar ${previa.created} pessoa(s)`
+                  : `Completar ${previa.completed} ficha(s)`}
           </Button>
         )}
       </div>
@@ -314,8 +324,8 @@ export function ImportPeople() {
         <div className="import-report">
           <p className="muted">
             {relatorio
-              ? `${relatorio.created} cadastrada(s), ${relatorio.skipped} já existia(m), ${relatorio.errors} com erro.`
-              : `Prévia: ${previa!.created} entrariam, ${previa!.skipped} já existem, ${previa!.errors} com erro. Nada foi gravado ainda.`}
+              ? `${relatorio.created} cadastrada(s), ${relatorio.completed} ficha(s) completada(s), ${relatorio.skipped} sem nada a mudar, ${relatorio.errors} com erro.`
+              : `Prévia: ${previa!.created} entrariam, ${previa!.completed} teriam a ficha completada, ${previa!.skipped} ficariam como estão, ${previa!.errors} com erro. Nada foi gravado ainda.`}
           </p>
           {relatorio && relatorio.created > 0 && (
             <p className="import-warning">
@@ -345,9 +355,13 @@ export function ImportPeople() {
                           ? relatorio
                             ? "Cadastrada"
                             : "Entra"
-                          : r.status === "skipped"
-                            ? "Já existe"
-                            : "Erro"}
+                          : r.status === "completed"
+                            ? relatorio
+                              ? "Ficha completada"
+                              : "Completa a ficha"
+                            : r.status === "skipped"
+                              ? "Já existe"
+                              : "Erro"}
                       </Chip>
                       {r.message && <div className="muted">{r.message}</div>}
                     </td>

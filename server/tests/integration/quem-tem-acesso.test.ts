@@ -207,7 +207,13 @@ describe("quem foi desligado antes da atualização [CB-9]", () => {
 });
 
 describe("o convite não entrega a conta sem querer [B2-1-A] [CB-17]", () => {
-  it("a matrícula repetida não conta quais matrículas existem", async () => {
+  /*
+    A matrícula saiu do cadastro e passou para a aprovação [S1-M], então a
+    recusa de matrícula repetida mudou de lugar junto. Quem digita agora é de
+    dentro da empresa, mas a recusa continua existindo: duas fichas com a
+    mesma matrícula é o que não pode acontecer. [CB-17]
+  */
+  it("a matrícula repetida é recusada na aprovação", async () => {
     const link = await request(app)
       .post("/api/invite-links")
       .set(as(owner.token))
@@ -220,19 +226,28 @@ describe("o convite não entrega a conta sem querer [B2-1-A] [CB-17]", () => {
     });
     expect(existente?.registration).toBeTruthy();
 
-    const res = await request(app)
+    const pedido = await request(app)
       .post(`/api/invites/${link.body.link.token}`)
       .send({
         name: `Intruso ${SUFIXO}`,
         email: `intruso.${SUFIXO}@teste.local`,
         password: "umaSenhaQualquer1",
+      });
+    expect(pedido.status, "o cadastro em si não exige mais matrícula").toBe(201);
+
+    const decisao = await request(app)
+      .post(`/api/join-requests/${pedido.body.request_id}/decide`)
+      .set(as(owner.token))
+      .send({
+        action: "approve",
+        org_role: "COLABORADOR",
         registration: existente!.registration,
       });
-    expect(res.status).toBe(409);
-    expect(
-      res.body.message,
-      "a mensagem não confirma que a matrícula existe",
-    ).not.toMatch(/já está em uso/i);
-    expect(res.body.message).toMatch(/Fale com o RH/i);
+    expect(decisao.status).toBe(409);
+    expect(decisao.body.message).toMatch(/Fale com o RH/i);
+
+    await prisma.accountJoinRequest.deleteMany({
+      where: { id: pedido.body.request_id },
+    });
   });
 });
