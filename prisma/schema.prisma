@@ -739,6 +739,9 @@ model Action {
   status         ActionStatus     @default(OPEN)
   assigneeId     String?
   dueDate        DateTime?
+  /// Por que o prazo passou do limite do nível do risco. O prazo sugerido
+  /// virou limite: passar dele exige dizer por quê, e fica registrado. [S2-M]
+  deadlineJustification String?
   /// NR-1 1.5.5.2.2: além de cronograma, responsável e acompanhamento, o plano
   /// de ação exige AFERIÇÃO DE RESULTADOS — como a eficácia será medida.
   effectivenessCriteria String?
