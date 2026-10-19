@@ -10,6 +10,7 @@ import { useAuth } from "@/auth/AuthContext";
 import { Chip } from "@/components/Chip";
 import { ListShell } from "@/components/ListShell";
 import { TRAINING_KIND_LABEL } from "@/api/trainings";
+import { NewTrainingForm } from "./NewTrainingForm";
 import { TrainingSessions } from "./TrainingSessions";
 import { ENROLLMENT_STATUS_LABEL, formatDay } from "@/lib/labels";
 import { isReadOnlyPermission, useModuleAccess } from "@/lib/module-access";
@@ -113,6 +114,12 @@ export function TrainingsPage() {
       emptyTitle="Nenhum treinamento"
       emptyDescription="Treinamentos publicados pelo RH aparecem aqui."
     >
+      {/* Não havia tela para cadastrar treinamento: título, tipo, conteúdo,
+          prova e nota mínima só entravam pela API. [CB-30] */}
+      {canWrite && (
+        <NewTrainingForm onCreated={() => window.location.reload()} />
+      )}
+
       <div className="data-table-wrap trainings-table-wrap">
         <table className="data-table">
           <thead>

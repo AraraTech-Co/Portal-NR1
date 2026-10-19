@@ -33,6 +33,10 @@ router.post("/api/trainings/:id/complete", read, (req, res) =>
 router.get("/api/trainings/:id/turmas", read, (req, res) =>
   trainings.listSessions(req, res),
 );
+/** A lista de presença de uma turma já marcada. [CB-34] */
+router.post("/api/trainings/:id/turmas/:sessionId/presenca", writeRh, (req, res) =>
+  trainings.recordAttendance(req, res),
+);
 router.post("/api/trainings/:id/turmas", writeRh, (req, res) =>
   trainings.createSession(req, res),
 );
