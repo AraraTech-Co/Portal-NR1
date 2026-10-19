@@ -43,6 +43,9 @@ function statusTone(status: MedicalCertificateRow["status"]): "warning" | "succe
 function SendForm({ onSent }: { onSent: () => Promise<void> }) {
   const [startDate, setStartDate] = useState(todayIso());
   const [days, setDays] = useState("1");
+  /** Declaração de comparecimento: o afastamento é de horas. [S5-C] */
+  const [medida, setMedida] = useState<"dias" | "horas">("dias");
+  const [hours, setHours] = useState("2");
   const [reason, setReason] = useState("");
   const [cid, setCid] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -55,9 +58,18 @@ function SendForm({ onSent }: { onSent: () => Promise<void> }) {
     e.preventDefault();
     setError(null);
     setOk(null);
-    const n = Number(days);
+    const emHoras = medida === "horas";
+    const n = Number(emHoras ? hours : days);
     if (!Number.isInteger(n) || n < 1) {
-      setError("Informe quantos dias de afastamento (1 ou mais).");
+      setError(
+        emHoras
+          ? "Informe quantas horas (1 ou mais)."
+          : "Informe quantos dias de afastamento (1 ou mais).",
+      );
+      return;
+    }
+    if (emHoras && n > 24) {
+      setError("Mais de 24 horas não cabe num dia: informe em dias.");
       return;
     }
     if (!file) {
@@ -68,7 +80,8 @@ function SendForm({ onSent }: { onSent: () => Promise<void> }) {
     try {
       await sendMedicalCertificate({
         start_date: startDate,
-        days: n,
+        days: emHoras ? 0 : n,
+        hours: emHoras ? n : undefined,
         reason: reason.trim() || undefined,
         cid: cid.trim() || undefined,
         file_name: file.name,
@@ -79,6 +92,7 @@ function SendForm({ onSent }: { onSent: () => Promise<void> }) {
       setReason("");
       setCid("");
       setDays("1");
+      setHours("2");
       setFile(null);
       if (fileInput.current) fileInput.current.value = "";
       await onSent();
@@ -99,15 +113,37 @@ function SendForm({ onSent }: { onSent: () => Promise<void> }) {
             <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
           </label>
           <label className="form-field">
-            Quantos dias
+            {/* Só havia dias: duas horas de comparecimento viravam "1 dia"
+                de afastamento na ficha. [S5-C] */}
+            O atestado é de
+            <select
+              value={medida}
+              onChange={(e) => setMedida(e.target.value as "dias" | "horas")}
+            >
+              <option value="dias">Dias de afastamento</option>
+              <option value="horas">Horas (comparecimento)</option>
+            </select>
+          </label>
+          <label className="form-field">
+            {medida === "horas" ? "Quantas horas" : "Quantos dias"}
             <input
               type="number"
               inputMode="numeric"
               min={1}
-              value={days}
-              onChange={(e) => setDays(e.target.value)}
+              max={medida === "horas" ? 24 : undefined}
+              value={medida === "horas" ? hours : days}
+              onChange={(e) =>
+                medida === "horas"
+                  ? setHours(e.target.value)
+                  : setDays(e.target.value)
+              }
               required
             />
+            {medida === "horas" && (
+              <span className="form-hint">
+                Declaração de comparecimento não é um dia inteiro de falta.
+              </span>
+            )}
           </label>
         </div>
         <label className="form-field">
@@ -257,9 +293,19 @@ export function MedicalCertificatesPage() {
                         </td>
                       )}
                       <td>
-                        {formatDay(r.startDate)} a {lastDay(r.startDate, r.days)}
+                        {/* Atestado de horas não é um dia de falta. [S5-C] */}
+                        {r.hours
+                          ? formatDay(r.startDate)
+                          : `${formatDay(r.startDate)} a ${lastDay(r.startDate, r.days)}`}
                         <div className="muted">
-                          {r.days === 1 ? "1 dia" : `${r.days} dias`} · enviado em {formatDay(r.createdAt)}
+                          {r.hours
+                            ? r.hours === 1
+                              ? "1 hora"
+                              : `${r.hours} horas`
+                            : r.days === 1
+                              ? "1 dia"
+                              : `${r.days} dias`}{" "}
+                          · enviado em {formatDay(r.createdAt)}
                         </div>
                       </td>
                       <td>

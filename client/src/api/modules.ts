@@ -79,30 +79,6 @@ export const fetchPayslips = () =>
     }>;
   }>("/api/payslips").then((d) => d.payslips);
 
-export const fetchLeaves = () =>
-  request<{
-    leaves: Array<{
-      id: string;
-      kind: string;
-      status: string;
-      startDate: string;
-      endDate: string;
-      days: number;
-      user: { name: string };
-    }>;
-  }>("/api/leaves").then((d) => d.leaves);
-
-export const fetchTimeEntries = () =>
-  request<{
-    entries: Array<{
-      id: string;
-      day: string;
-      balanceMinutes: number;
-      note: string | null;
-      userId: string;
-    }>;
-  }>("/api/time-entries").then((d) => d.entries);
-
 export const fetchOnboardingSteps = () =>
   request<{
     steps: Array<{
@@ -167,6 +143,8 @@ export type MedicalCertificateRow = {
   status: "PENDING" | "APPROVED" | "REJECTED";
   startDate: string;
   days: number;
+  /** Preenchido quando o atestado é de horas, não de dias. [S5-C] */
+  hours: number | null;
   cid: string | null;
   reason: string | null;
   fileName: string | null;
@@ -187,6 +165,8 @@ export const fetchMedicalCertificates = () =>
 export const sendMedicalCertificate = (input: {
   start_date: string;
   days: number;
+  /** Declaração de comparecimento: o afastamento é de horas. [S5-C] */
+  hours?: number;
   reason?: string;
   cid?: string;
   file_name?: string;

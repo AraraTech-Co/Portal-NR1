@@ -1665,6 +1665,10 @@ model MedicalCertificate {
   reason         String?
   startDate      DateTime
   days           Int
+  /// Declaração de comparecimento de duas horas virava "1 dia" de
+  /// afastamento. Quando o documento fala em horas, elas entram aqui e os
+  /// dias ficam em 0. [S5-C]
+  hours          Int?
   storagePath    String?
   fileName       String?
   status         CertificateStatus @default(PENDING)

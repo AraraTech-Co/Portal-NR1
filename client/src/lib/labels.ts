@@ -185,3 +185,17 @@ export function isOverdue(
   const end = new Date(c.year, c.month, c.day, 23, 59, 59, 999);
   return end.getTime() < Date.now();
 }
+
+/** Férias e licenças apareciam em código na tela: "VACATION", "APPROVED". [S5-D] [CB-32] */
+export const LEAVE_KIND_LABEL: Record<string, string> = {
+  VACATION: "Férias",
+  LEAVE: "Licença",
+  DAY_OFF: "Folga",
+};
+
+export const LEAVE_STATUS_LABEL: Record<string, string> = {
+  REQUESTED: "Aguardando decisão",
+  APPROVED: "Aprovado",
+  REJECTED: "Recusado",
+  CANCELLED: "Cancelado",
+};
