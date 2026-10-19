@@ -114,11 +114,46 @@ export function recordTrainingSession(
     location?: string;
     duration_minutes?: number;
     notes?: string;
-    attendees: { user_id: string; present: boolean; score?: number }[];
+    /** Turma que já aconteceu: quem esteve. */
+    attendees?: { user_id: string; present: boolean; score?: number }[];
+    /** Turma marcada para o futuro: quem convocar. [CB-34] */
+    invite_user_ids?: string[];
   },
 ) {
   return request<{ session: { id: string } }>(
     `/api/trainings/${encodeURIComponent(id)}/turmas`,
     { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+/** Cadastrar treinamento pela tela, não só pela API. [CB-30] */
+export function createTraining(input: {
+  title: string;
+  kind: string;
+  summary?: string;
+  duration_minutes?: number;
+  passing_score?: number;
+  validity_months?: number;
+  questions?: Array<{
+    prompt: string;
+    options: string[];
+    correct_index: number;
+  }>;
+}) {
+  return request<{ training: { id: string; title: string } }>("/api/trainings", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+/** A lista de presença de uma turma já marcada. [CB-34] */
+export function recordSessionAttendance(
+  trainingId: string,
+  sessionId: string,
+  attendees: { user_id: string; present: boolean; score?: number }[],
+) {
+  return request<{ ok: boolean; attendees: number }>(
+    `/api/trainings/${encodeURIComponent(trainingId)}/turmas/${encodeURIComponent(sessionId)}/presenca`,
+    { method: "POST", body: JSON.stringify({ attendees }) },
   );
 }

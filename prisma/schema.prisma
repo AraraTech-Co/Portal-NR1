@@ -1489,6 +1489,8 @@ enum NotificationKind {
   ETHICS_MESSAGE
   /// Treinamento concluído, com certificado. [CB-29]
   TRAINING_COMPLETED
+  /// Convocado para uma turma de treinamento marcada. [CB-34]
+  TRAINING_SCHEDULED
 }
 
 model Notification {

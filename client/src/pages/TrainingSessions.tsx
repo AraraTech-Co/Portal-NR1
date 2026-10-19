@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   fetchTrainingSessions,
+  recordSessionAttendance,
   recordTrainingSession,
   type TrainingSession,
 } from "@/api/trainings";
@@ -23,6 +24,136 @@ function semAcento(texto: string): string {
  * Registrar a turma presencial que aconteceu: quem deu, quando, quanto tempo
  * e quem esteve. Sem isto o treinamento presencial não deixava rastro. [S4-D]
  */
+/**
+ * A lista de presença de uma turma que já foi marcada.
+ *
+ * A turma agendada existe antes da aula; depois que ela acontece, é aqui que
+ * se diz quem esteve — e é isso que gera o certificado. [CB-34]
+ */
+function AttendanceForm({
+  trainingId,
+  sessionId,
+  onSaved,
+}: {
+  trainingId: string;
+  sessionId: string;
+  onSaved: () => Promise<void>;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const [membros, setMembros] = useState<OrgMember[]>([]);
+  const [busca, setBusca] = useState("");
+  const [presentes, setPresentes] = useState<Set<string>>(new Set());
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!aberto) return;
+    fetchOrgMembers()
+      .then(setMembros)
+      .catch(() => setMembros([]));
+  }, [aberto]);
+
+  const filtrados = useMemo(() => {
+    const termo = semAcento(busca.trim());
+    if (!termo) return membros;
+    return membros.filter((m) =>
+      [m.name, m.registration ?? "", m.jobRoleName ?? ""].some((c) =>
+        semAcento(c).includes(termo),
+      ),
+    );
+  }, [membros, busca]);
+
+  async function salvar(e: FormEvent) {
+    e.preventDefault();
+    setErro(null);
+    if (presentes.size === 0) {
+      setErro("Marque quem esteve na turma.");
+      return;
+    }
+    setSalvando(true);
+    try {
+      await recordSessionAttendance(
+        trainingId,
+        sessionId,
+        [...presentes].map((id) => ({ user_id: id, present: true })),
+      );
+      setAberto(false);
+      setPresentes(new Set());
+      await onSaved();
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : "Falha ao registrar");
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  if (!aberto) {
+    return (
+      <div className="form-actions">
+        <Button type="button" variant="secondary" onClick={() => setAberto(true)}>
+          Lançar a presença
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <form className="form-grid tr-session-form" onSubmit={salvar}>
+      <fieldset className="tr-attendance">
+        <legend>
+          Quem esteve{" "}
+          <span className="muted">
+            {presentes.size === 0
+              ? "ninguém marcado"
+              : presentes.size === 1
+                ? "1 pessoa"
+                : `${presentes.size} pessoas`}
+          </span>
+        </legend>
+        <input
+          className="tr-attendance-search"
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          placeholder="Buscar por nome, matrícula ou função"
+        />
+        <div className="tr-attendance-list">
+          {filtrados.map((m) => (
+            <label key={m.id} className="tr-attendance-item">
+              <input
+                type="checkbox"
+                checked={presentes.has(m.id)}
+                onChange={() => {
+                  const proximo = new Set(presentes);
+                  if (proximo.has(m.id)) proximo.delete(m.id);
+                  else proximo.add(m.id);
+                  setPresentes(proximo);
+                }}
+              />
+              <span>
+                {m.name}
+                {m.jobRoleName && <span className="muted"> · {m.jobRoleName}</span>}
+              </span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      {erro && (
+        <p className="form-error" role="alert">
+          {erro}
+        </p>
+      )}
+      <div className="form-actions">
+        <Button type="submit" disabled={salvando}>
+          {salvando ? "Lançando…" : "Lançar a presença"}
+        </Button>
+        <Button type="button" variant="ghost" onClick={() => setAberto(false)}>
+          Cancelar
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 function RecordForm({
   trainingId,
   defaultMinutes,
@@ -33,6 +164,11 @@ function RecordForm({
   onSaved: () => Promise<void>;
 }) {
   const [aberto, setAberto] = useState(false);
+  /*
+    A turma só podia ser registrada depois de acontecer: não havia como
+    marcar a aula nem chamar ninguém antes. [CB-34]
+  */
+  const [modo, setModo] = useState<"registrar" | "agendar">("registrar");
   const [data, setData] = useState(hojeIso());
   const [instrutor, setInstrutor] = useState("");
   const [registro, setRegistro] = useState("");
@@ -69,11 +205,17 @@ function RecordForm({
     setPresentes(proximo);
   }
 
+  const agendando = modo === "agendar";
+
   async function salvar(e: FormEvent) {
     e.preventDefault();
     setErro(null);
-    if (presentes.size === 0) {
+    if (!agendando && presentes.size === 0) {
       setErro("Marque quem esteve na turma.");
+      return;
+    }
+    if (agendando && data <= hojeIso()) {
+      setErro("Para agendar, escolha uma data no futuro.");
       return;
     }
     setSalvando(true);
@@ -85,7 +227,14 @@ function RecordForm({
         location: local.trim() || undefined,
         duration_minutes: Number(minutos) || defaultMinutes,
         notes: observacao.trim() || undefined,
-        attendees: [...presentes].map((id) => ({ user_id: id, present: true })),
+        ...(agendando
+          ? { invite_user_ids: [...presentes] }
+          : {
+              attendees: [...presentes].map((id) => ({
+                user_id: id,
+                present: true,
+              })),
+            }),
       });
       setAberto(false);
       setInstrutor("");
@@ -104,8 +253,28 @@ function RecordForm({
   if (!aberto) {
     return (
       <div className="form-actions">
-        <Button type="button" variant="secondary" onClick={() => setAberto(true)}>
-          Registrar turma presencial
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => {
+            setModo("registrar");
+            setData(hojeIso());
+            setAberto(true);
+          }}
+        >
+          Registrar turma que já aconteceu
+        </Button>
+        {/* Marcar a aula antes, e chamar quem precisa ir. [CB-34] */}
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => {
+            setModo("agendar");
+            setData("");
+            setAberto(true);
+          }}
+        >
+          Marcar turma e convocar
         </Button>
       </div>
     );
@@ -119,10 +288,16 @@ function RecordForm({
           <input
             type="date"
             value={data}
-            max={hojeIso()}
+            max={agendando ? undefined : hojeIso()}
+            min={agendando ? hojeIso() : undefined}
             onChange={(e) => setData(e.target.value)}
             required
           />
+          <span className="form-hint">
+            {agendando
+              ? "A lista de presença entra depois da aula."
+              : "Só data que já passou: a presença é do que aconteceu."}
+          </span>
         </label>
         <label className="form-field">
           Carga horária (minutos)
@@ -158,7 +333,7 @@ function RecordForm({
 
       <fieldset className="tr-attendance">
         <legend>
-          Quem esteve{" "}
+          {agendando ? "Quem convocar" : "Quem esteve"}{" "}
           <span className="muted">
             {presentes.size === 0
               ? "ninguém marcado"
@@ -212,7 +387,13 @@ function RecordForm({
       )}
       <div className="form-actions">
         <Button type="submit" disabled={salvando}>
-          {salvando ? "Registrando…" : "Registrar a turma"}
+          {salvando
+            ? agendando
+              ? "Marcando…"
+              : "Registrando…"
+            : agendando
+              ? "Marcar e convocar"
+              : "Registrar a turma"}
         </Button>
         <Button type="button" variant="ghost" onClick={() => setAberto(false)}>
           Cancelar
@@ -274,12 +455,22 @@ export function TrainingSessions({
         <ul className="tr-session-list">
           {sessions.map((s) => (
             <li key={s.id}>
+              {/* Turma marcada e turma dada não são a mesma coisa: sem
+                  lista de presença, ela ainda vai acontecer. [CB-34] */}
               <div className="tr-session-head">
                 <strong>{formatDay(s.held_at)}</strong>
-                <Chip tone="success">
-                  {s.present === 1 ? "1 presente" : `${s.present} presentes`}
-                </Chip>
-                {s.absent > 0 && <Chip tone="warning">{s.absent} ausente(s)</Chip>}
+                {s.present + s.absent === 0 ? (
+                  <Chip tone="info">Marcada</Chip>
+                ) : (
+                  <>
+                    <Chip tone="success">
+                      {s.present === 1 ? "1 presente" : `${s.present} presentes`}
+                    </Chip>
+                    {s.absent > 0 && (
+                      <Chip tone="warning">{s.absent} ausente(s)</Chip>
+                    )}
+                  </>
+                )}
               </div>
               <div className="muted">
                 {s.instructor_name}
@@ -294,7 +485,24 @@ export function TrainingSessions({
                   .join(", ")}
               </div>
               {s.notes && <div className="tr-session-notes">{s.notes}</div>}
-              <div className="muted">Registrada por {s.recorded_by.name}</div>
+              <div className="muted">
+                {s.present + s.absent === 0 ? "Marcada" : "Registrada"} por{" "}
+                {s.recorded_by.name}
+              </div>
+              {/* A aula já passou e ninguém lançou a presença: é aqui que o
+                  certificado nasce. [CB-34] */}
+              {canRecord &&
+                s.present + s.absent === 0 &&
+                s.held_at.slice(0, 10) <= hojeIso() && (
+                  <AttendanceForm
+                    trainingId={trainingId}
+                    sessionId={s.id}
+                    onSaved={async () => {
+                      await load();
+                      onRecorded?.();
+                    }}
+                  />
+                )}
             </li>
           ))}
         </ul>

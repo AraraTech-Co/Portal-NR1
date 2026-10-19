@@ -4,7 +4,8 @@ import prisma from "../model/prisma";
 import { Training } from "../model/schema/Training/Training";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
-import { notify } from "../helper/notify";
+import { notify, notifyMany } from "../helper/notify";
+import { formatCalendarDay } from "../helper/calendar-day";
 import { canManageModule, canSeeAllInModule } from "../helper/module-access";
 import { NotificationKind, TrainingKind } from "@prisma/client";
 import { ENROLLMENT_STATUSES } from "../constants";
@@ -625,6 +626,147 @@ class TrainingController {
    * e quem esteve. Quem esteve e passou sai com certificado — é o mesmo
    * comprovante do curso online, para a ficha e para a fiscalização. [S4-D]
    */
+  /**
+   * A lista de presença de uma turma que já foi marcada.
+   *
+   * A turma agendada existe antes da aula, sem presença; depois que ela
+   * acontece, é aqui que se diz quem esteve — e é isso que gera o
+   * certificado. [CB-34]
+   */
+  async recordAttendance(req: Request, res: Response) {
+    try {
+      const auth = req as AuthRequest;
+      const orgId = actorOrgId(auth);
+      const userId = actorUserId(auth);
+      if (!isRh(auth)) {
+        res.status(403).json({ message: "Sem permissão para registrar presença." });
+        return;
+      }
+
+      const session = await prisma.trainingSession.findFirst({
+        where: {
+          id: req.params.sessionId,
+          organizationId: orgId,
+          trainingId: req.params.id,
+        },
+        include: {
+          training: {
+            select: { id: true, passingScore: true, validityMonths: true },
+          },
+          attendances: { select: { userId: true } },
+        },
+      });
+      if (!session) {
+        res.status(404).json({ message: "Turma não encontrada." });
+        return;
+      }
+      if (session.attendances.length > 0) {
+        res.status(409).json({
+          message: "Esta turma já tem lista de presença.",
+          code: "ATTENDANCE_ALREADY_RECORDED",
+        });
+        return;
+      }
+      if (session.heldAt.getTime() > Date.now()) {
+        res.status(409).json({
+          message: "A turma ainda não aconteceu — registre a presença depois da aula.",
+          code: "SESSION_NOT_HELD_YET",
+        });
+        return;
+      }
+
+      const body = req.body as {
+        attendees?: Array<{ user_id?: string; present?: boolean; score?: number }>;
+      };
+      const lista = Array.isArray(body.attendees) ? body.attendees : [];
+      const ids = [
+        ...new Set(lista.map((a) => String(a.user_id ?? "")).filter(Boolean)),
+      ];
+      if (ids.length === 0) {
+        res.status(400).json({ message: "Informe quem esteve na turma." });
+        return;
+      }
+      const membros = await prisma.membership.findMany({
+        where: {
+          organizationId: orgId,
+          userId: { in: ids },
+          suspendedAt: null,
+          user: { active: true },
+        },
+        select: { userId: true },
+      });
+      const membroValido = new Set(membros.map((m) => m.userId));
+      if (ids.some((id) => !membroValido.has(id))) {
+        res.status(400).json({ message: "Há pessoas na lista que não são da empresa." });
+        return;
+      }
+
+      await prisma.$transaction(async (tx) => {
+        for (const entrada of lista) {
+          const alvo = String(entrada.user_id ?? "");
+          if (!alvo || !membroValido.has(alvo)) continue;
+          const presente = entrada.present !== false;
+          const nota =
+            typeof entrada.score === "number" && Number.isFinite(entrada.score)
+              ? Math.max(0, Math.min(100, Math.round(entrada.score)))
+              : null;
+
+          await tx.trainingAttendance.upsert({
+            where: { sessionId_userId: { sessionId: session.id, userId: alvo } },
+            create: { sessionId: session.id, userId: alvo, present: presente, score: nota },
+            update: { present: presente, score: nota },
+          });
+          if (!presente) continue;
+
+          const passou = nota === null || nota >= session.training.passingScore;
+          await tx.trainingEnrollment.upsert({
+            where: {
+              trainingId_userId: { trainingId: session.training.id, userId: alvo },
+            },
+            create: {
+              trainingId: session.training.id,
+              userId: alvo,
+              status: passou
+                ? ENROLLMENT_STATUSES.COMPLETED
+                : ENROLLMENT_STATUSES.FAILED,
+              startedAt: session.heldAt,
+              completedAt: passou ? session.heldAt : null,
+              score: nota,
+              certificateCode: passou
+                ? `TR-${randomBytes(4).toString("hex").toUpperCase()}`
+                : null,
+              expiresAt: passou ? expiryFrom(session.training.validityMonths) : null,
+            },
+            update: {
+              status: passou
+                ? ENROLLMENT_STATUSES.COMPLETED
+                : ENROLLMENT_STATUSES.FAILED,
+              startedAt: session.heldAt,
+              completedAt: passou ? session.heldAt : null,
+              score: nota,
+              ...(passou
+                ? { expiresAt: expiryFrom(session.training.validityMonths) }
+                : { certificateCode: null, expiresAt: null }),
+            },
+          });
+        }
+      });
+
+      await writeAudit({
+        organizationId: orgId,
+        actorId: userId,
+        action: "training_session.attendance",
+        entityType: "TrainingSession",
+        entityId: session.id,
+        after: { attendees: ids.length },
+      });
+
+      res.json({ ok: true, attendees: ids.length });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
   async createSession(req: Request, res: Response) {
     try {
       const auth = req as AuthRequest;
@@ -637,7 +779,14 @@ class TrainingController {
 
       const training = await prisma.training.findFirst({
         where: { id: req.params.id, organizationId: orgId, archivedAt: null },
-        select: { id: true, kind: true, durationMinutes: true, passingScore: true, validityMonths: true },
+        select: {
+          id: true,
+          title: true,
+          kind: true,
+          durationMinutes: true,
+          passingScore: true,
+          validityMonths: true,
+        },
       });
       if (!training) {
         res.status(404).json({ message: "Treinamento não encontrado." });
@@ -658,8 +807,11 @@ class TrainingController {
         duration_minutes?: number;
         notes?: string;
         attendees?: Array<{ user_id?: string; present?: boolean; score?: number }>;
+        /** Quem convocar para a turma agendada. [CB-34] */
+        invite_user_ids?: string[];
       };
 
+      const tituloDoTreinamento = training.title;
       const instrutor = blank(body.instructor_name);
       if (!instrutor) {
         res.status(400).json({ message: "Informe quem deu o treinamento." });
@@ -674,12 +826,12 @@ class TrainingController {
         res.status(400).json({ message: "Data da turma inválida." });
         return;
       }
-      if (heldAt.getTime() > Date.now()) {
-        res.status(400).json({
-          message: "A turma ainda não aconteceu — registre a presença depois da aula.",
-        });
-        return;
-      }
+      /*
+        A turma só podia ser registrada depois de acontecer: não havia como
+        agendar nem convocar ninguém antes. Agora data no futuro é
+        agendamento — sem lista de presença, que entra depois da aula. [CB-34]
+      */
+      const agendada = heldAt.getTime() > Date.now();
       const duracao = body.duration_minutes ?? training.durationMinutes;
       if (!Number.isInteger(duracao) || duracao <= 0) {
         res.status(400).json({ message: "Informe a carga horária em minutos." });
@@ -688,16 +840,42 @@ class TrainingController {
 
       const lista = Array.isArray(body.attendees) ? body.attendees : [];
       const ids = [...new Set(lista.map((a) => String(a.user_id ?? "")).filter(Boolean))];
-      if (ids.length === 0) {
+      if (!agendada && ids.length === 0) {
         res.status(400).json({ message: "Informe quem esteve na turma." });
         return;
       }
+      if (agendada && ids.length > 0) {
+        res.status(400).json({
+          message:
+            "A turma ainda não aconteceu: a lista de presença entra depois da aula.",
+          code: "SESSION_NOT_HELD_YET",
+        });
+        return;
+      }
+
+      /*
+        Convocar antes: quem for chamado recebe o aviso e fica registrado na
+        convocação, que é a tela que a empresa já usa para isso. [CB-34]
+      */
+      const convocados = [
+        ...new Set(
+          (Array.isArray(body.invite_user_ids) ? body.invite_user_ids : [])
+            .map((x) => String(x ?? ""))
+            .filter(Boolean),
+        ),
+      ];
+      const todos = [...new Set([...ids, ...convocados])];
       const membros = await prisma.membership.findMany({
-        where: { organizationId: orgId, userId: { in: ids }, user: { active: true } },
+        where: {
+          organizationId: orgId,
+          userId: { in: todos },
+          suspendedAt: null,
+          user: { active: true },
+        },
         select: { userId: true },
       });
       const membroValido = new Set(membros.map((m) => m.userId));
-      const forasteiros = ids.filter((id) => !membroValido.has(id));
+      const forasteiros = todos.filter((id) => !membroValido.has(id));
       if (forasteiros.length > 0) {
         res.status(400).json({
           message: "Há pessoas na lista que não são da empresa.",
@@ -769,8 +947,48 @@ class TrainingController {
           });
         }
 
+        /*
+          Convocação: quem foi chamado fica registrado e recebe o aviso.
+          Reusa a Convocações, que é a tela que a empresa já usa. [CB-34]
+        */
+        if (convocados.length > 0) {
+          const convocacao = await tx.summon.create({
+            data: {
+              organizationId: orgId,
+              title: `Treinamento: ${tituloDoTreinamento}`,
+              description: blank(body.notes),
+              scheduledFor: heldAt,
+              location: blank(body.location),
+              createdById: userId,
+            },
+          });
+          for (const alvo of convocados) {
+            if (!membroValido.has(alvo)) continue;
+            await tx.summonAttendance.create({
+              data: { summonId: convocacao.id, userId: alvo },
+            });
+          }
+        }
+
         return criada;
       });
+
+      if (convocados.length > 0) {
+        await notifyMany(
+          convocados.filter((id) => membroValido.has(id)),
+          {
+            organizationId: orgId,
+            kind: NotificationKind.TRAINING_SCHEDULED,
+            title: `Treinamento: ${tituloDoTreinamento}`,
+            body: `Turma marcada para ${formatCalendarDay(heldAt)}${
+              blank(body.location) ? ` em ${blank(body.location)}` : ""
+            }.`,
+            link: "/convocacoes",
+            entityType: "TrainingSession",
+            entityId: session.id,
+          },
+        );
+      }
 
       await writeAudit({
         organizationId: orgId,
