@@ -66,3 +66,18 @@ export function canChangePersonnelRecord(
     permission === "user" ? "colaborador" : (permission ?? ""),
   );
 }
+
+/**
+ * Encerrar a análise da ocorrência — espelho do servidor
+ * (`OCCURRENCE_ANALYSIS_ROLES`). Quem está no fato relata; quem responde
+ * tecnicamente analisa e encerra. [S3-E]
+ */
+const OCCURRENCE_ANALYSIS_ROLES: readonly string[] = ["master", "owner", "sst"];
+
+export function canCloseOccurrenceAnalysis(
+  permission: string | undefined,
+): boolean {
+  return OCCURRENCE_ANALYSIS_ROLES.includes(
+    permission === "user" ? "colaborador" : (permission ?? ""),
+  );
+}

@@ -32,6 +32,8 @@ export type Activity = {
   name: string;
   description: string | null;
   job_role_ids: string[];
+  /** Quantas pessoas estão nas funções desta atividade. [CB-22] */
+  people_count: number;
 };
 
 export async function fetchEstablishments() {

@@ -1,5 +1,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { useAuth } from "@/auth/AuthContext";
+import { canCloseOccurrenceAnalysis } from "@/lib/module-access";
 import {
   analyzeOccurrence,
   fetchOccurrence,
@@ -22,6 +24,8 @@ import { LoadingState } from "@/components/LoadingState";
 
 export function OccurrenceDetailPage() {
   const { id } = useParams();
+  const { user } = useAuth();
+  const podeAnalisar = canCloseOccurrenceAnalysis(user?.permission);
   const [row, setRow] = useState<OccurrenceDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -167,6 +171,13 @@ export function OccurrenceDetailPage() {
               </p>
             )}
           </>
+        ) : !podeAnalisar ? (
+          /* Quem viu relata; quem responde tecnicamente analisa e encerra.
+             O formulário não aparece para quem não pode encerrar. [S3-E] */
+          <p className="muted">
+            Análise pendente. Quem responde tecnicamente pelo SST é quem
+            analisa e encerra esta ocorrência.
+          </p>
         ) : (
           <form className="form-grid" onSubmit={onAnalyze}>
             <p className="muted" style={{ margin: 0 }}>

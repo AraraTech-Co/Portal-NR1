@@ -210,7 +210,32 @@ class DocumentController {
       const orgId = actorOrgId(req as AuthRequest);
       const establishmentId = req.query.establishment_id as string | undefined;
       const snapshot = await buildInventorySnapshot(orgId, establishmentId);
-      res.json({ inventory: snapshot });
+
+      /*
+        Avaliar e reavaliar só se fazia pela tela de registro, perigo a
+        perigo; a tabela do Inventário, que é onde o SST de fato olha os
+        riscos, só tinha "Histórico". O id da atividade sai daqui para a
+        tela levar a pessoa direto ao lugar certo.
+
+        Vai só na projeção, nunca no documento emitido: o que é assinado e
+        arquivado continua tendo fatos legíveis, não identificadores de
+        banco. [CB-22]
+      */
+      const ids = await prisma.hazard.findMany({
+        where: { id: { in: snapshot.items.map((i) => i.hazard_id) } },
+        select: { id: true, activityId: true },
+      });
+      const porPerigo = new Map(ids.map((h) => [h.id, h.activityId]));
+
+      res.json({
+        inventory: {
+          ...snapshot,
+          items: snapshot.items.map((i) => ({
+            ...i,
+            activity_id: porPerigo.get(i.hazard_id) ?? null,
+          })),
+        },
+      });
     } catch (err) {
       fail(res, err);
     }

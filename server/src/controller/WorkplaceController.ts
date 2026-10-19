@@ -400,6 +400,42 @@ class WorkplaceController {
   async archiveJobRole(req: Request, res: Response) {
     try {
       const orgId = actorOrgId(req as AuthRequest);
+      /*
+        Arquivar a função não conferia nada: dava para arquivar uma função
+        ainda ligada a atividade ativa — a atividade continuava na lista, sem
+        função — e para arquivar a função de quem trabalha nela, deixando a
+        ficha sem o que define os perigos e a ordem de serviço. [S2-G] [B2-1-H]
+      */
+      const [atividades, pessoas] = await Promise.all([
+        prisma.activityJobRole.count({
+          where: {
+            jobRoleId: req.params.id,
+            activity: { organizationId: orgId, archivedAt: null },
+          },
+        }),
+        prisma.employeeProfile.count({
+          where: {
+            organizationId: orgId,
+            jobRoleId: req.params.id,
+            dismissedAt: null,
+          },
+        }),
+      ]);
+      if (atividades > 0) {
+        res.status(409).json({
+          message: `Esta função ainda está em ${atividades} atividade(s) ativa(s). Desligue a função das atividades antes.`,
+          code: "JOB_ROLE_IN_USE",
+        });
+        return;
+      }
+      if (pessoas > 0) {
+        res.status(409).json({
+          message: `${pessoas} pessoa(s) estão nesta função. Mude a função delas antes de arquivar.`,
+          code: "JOB_ROLE_HAS_PEOPLE",
+        });
+        return;
+      }
+
       const row = await new JobRole().update.one(
         { id: req.params.id, organizationId: orgId, archivedAt: null },
         { archivedAt: new Date() },
@@ -432,11 +468,50 @@ class WorkplaceController {
         },
         orderBy: { createdAt: "asc" },
       });
+      /*
+        Quantas pessoas estão nas funções desta atividade. O número de
+        expostos era digitado, e o portal já sabia a resposta: pedir à mão é
+        pedir número errado. A tela sugere isto e deixa corrigir, porque pode
+        haver exposto de outra área. [CB-22]
+      */
+      const funcoesPorAtividade = new Map<string, string[]>();
+      for (const a of rows) {
+        funcoesPorAtividade.set(
+          a.id,
+          a.jobRoles.map((j) => j.jobRoleId),
+        );
+      }
+      const todasFuncoes = [
+        ...new Set([...funcoesPorAtividade.values()].flat()),
+      ];
+      const porFuncao = new Map<string, number>();
+      if (todasFuncoes.length > 0) {
+        const contagens = await prisma.employeeProfile.groupBy({
+          by: ["jobRoleId"],
+          where: {
+            organizationId: orgId,
+            jobRoleId: { in: todasFuncoes },
+            dismissedAt: null,
+          },
+          _count: { _all: true },
+        });
+        for (const c of contagens) {
+          if (c.jobRoleId) porFuncao.set(c.jobRoleId, c._count._all);
+        }
+      }
+
       res.json({
-        activities: rows.map((a) => ({
-          ...a,
-          job_role_ids: a.jobRoles.map((j) => j.jobRoleId),
-        })),
+        activities: rows.map((a) => {
+          const ids = funcoesPorAtividade.get(a.id) ?? [];
+          return {
+            ...a,
+            job_role_ids: ids,
+            people_count: ids.reduce(
+              (total, id) => total + (porFuncao.get(id) ?? 0),
+              0,
+            ),
+          };
+        }),
       });
     } catch (err) {
       fail(res, err);
