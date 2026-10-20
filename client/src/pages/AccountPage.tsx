@@ -66,6 +66,8 @@ export function AccountPage() {
   const [label, setLabel] = useState("");
   const [maxUses, setMaxUses] = useState("");
   const [roleMode, setRoleMode] = useState<"ON_APPROVE" | "FIXED">("ON_APPROVE");
+  /** Último dia em que o link funciona. [S1-L] */
+  const [expiresAt, setExpiresAt] = useState("");
   const [fixedOrgRole, setFixedOrgRole] = useState("COLABORADOR");
   const [creating, setCreating] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -165,6 +167,7 @@ export function AccountPage() {
       const created = await createInviteLink({
         label: label.trim() || undefined,
         max_uses: maxUses ? Number(maxUses) : null,
+        expires_at: expiresAt || null,
         role_mode: roleMode,
         org_role: roleMode === "FIXED" ? fixedOrgRole : undefined,
       });
@@ -193,17 +196,13 @@ export function AccountPage() {
     }
   }
 
-  async function onDecide(
-    id: string,
-    action: "approve" | "reject",
-    roleMode: JoinRequest["role_mode"],
-  ) {
+  async function onDecide(id: string, action: "approve" | "reject") {
     setBusyId(id);
     try {
       const roles = decideRoles[id];
       await decideJoinRequest(id, {
         action,
-        ...(action === "approve" && roleMode === "ON_APPROVE"
+        ...(action === "approve"
           ? {
               org_role: roles?.org_role,
               registration: roles?.is_external
@@ -409,14 +408,22 @@ export function AccountPage() {
                         ) : null}
                       </td>
                       <td>
-                        {r.role_mode === "FIXED" ? (
-                          <span className="muted">
-                            {ORG_ROLE_LABEL[r.suggested_org_role ?? ""] ??
-                              r.suggested_org_role}
-                          </span>
-                        ) : (
-                          /* Um seletor só: o papel na empresa. [OB-3] [S1-C] */
+                        {
+                          /*
+                            O papel fixo no link vira sugestão: quem aprova
+                            pode revê-lo. Antes, o pedido chegava com o papel
+                            travado — e o que o link disse valia mesmo que a
+                            pessoa fosse outra coisa. [S1-P]
+                          */
                           <div className="form-grid">
+                            {r.role_mode === "FIXED" && (
+                              <span className="form-hint">
+                                O link sugeria{" "}
+                                {ORG_ROLE_LABEL[r.suggested_org_role ?? ""] ??
+                                  r.suggested_org_role}
+                                .
+                              </span>
+                            )}
                             <select
                               value={decideRoles[r.id]?.org_role ?? "COLABORADOR"}
                               onChange={(e) =>
@@ -456,7 +463,7 @@ export function AccountPage() {
                               </label>
                             )}
                           </div>
-                        )}
+                        }
                       </td>
                       <td className="muted">{formatDay(r.created_at)}</td>
                       <td>
@@ -464,7 +471,7 @@ export function AccountPage() {
                           <Button
                             type="button"
                             disabled={busyId === r.id}
-                            onClick={() => onDecide(r.id, "approve", r.role_mode)}
+                            onClick={() => onDecide(r.id, "approve")}
                           >
                             Aceitar
                           </Button>
@@ -472,7 +479,7 @@ export function AccountPage() {
                             type="button"
                             variant="secondary"
                             disabled={busyId === r.id}
-                            onClick={() => onDecide(r.id, "reject", r.role_mode)}
+                            onClick={() => onDecide(r.id, "reject")}
                           >
                             Recusar
                           </Button>
@@ -501,9 +508,14 @@ export function AccountPage() {
                 <input
                   value={label}
                   onChange={(e) => setLabel(e.target.value)}
-                  placeholder="Ex.: Terceiros loja"
+                  placeholder="Ex.: turma da manutenção"
                   disabled={creating}
                 />
+                {/* "Rótulo" e "usos máximos" não se explicavam. [S1-L] */}
+                <span className="form-hint">
+                  Um nome só para você reconhecer o link nesta lista. Quem
+                  recebe o link não vê.
+                </span>
               </label>
               <label className="form-field">
                 Usos máximos (opcional)
@@ -514,8 +526,30 @@ export function AccountPage() {
                   onChange={(e) => setMaxUses(e.target.value)}
                   disabled={creating}
                 />
+                <span className="form-hint">
+                  Quantas pessoas podem se cadastrar por este link. Em branco,
+                  quantas vierem.
+                </span>
               </label>
             </div>
+            <label className="form-field">
+              Vale até (opcional)
+              <input
+                type="date"
+                min={todayIso()}
+                value={expiresAt}
+                onChange={(e) => setExpiresAt(e.target.value)}
+                disabled={creating}
+              />
+              {/*
+                O portal já recusava link vencido; só não havia como informar
+                a validade. [S1-L]
+              */}
+              <span className="form-hint">
+                Depois desse dia o link para de funcionar. Em branco, vale até
+                alguém desativar.
+              </span>
+            </label>
             <label className="form-field">
               Papéis
               <select
@@ -567,9 +601,11 @@ export function AccountPage() {
                 <thead>
                   <tr>
                     <th>Link</th>
-                    <th>Modo</th>
+                    <th>Papel</th>
                     <th>Usos</th>
-                    <th>Status</th>
+                    {/* Quem entrou por cada link, e até quando ele vale. [S5-I] */}
+                    <th>Quem usou</th>
+                    <th>Situação</th>
                     <th></th>
                   </tr>
                 </thead>
@@ -591,15 +627,36 @@ export function AccountPage() {
                         {link.used_count}
                         {link.max_uses != null ? ` / ${link.max_uses}` : ""}
                       </td>
+                      <td className="muted">
+                        {link.used_by.length === 0 ? (
+                          "ninguém ainda"
+                        ) : (
+                          <ul style={{ margin: 0, paddingLeft: "1rem" }}>
+                            {link.used_by.map((u, i) => (
+                              <li key={`${link.id}-${i}`}>
+                                {u.name}
+                                {u.status === "PENDING" && " (esperando aprovação)"}
+                                {u.status === "REJECTED" && " (recusado)"}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </td>
                       <td>
-                        {!link.active ? (
+                        {/* A situação vem do servidor: era calculada em dois lugares. */}
+                        {link.situation === "off" ? (
                           <Chip>Desligado</Chip>
-                        ) : link.max_uses != null && link.used_count >= link.max_uses ? (
+                        ) : link.situation === "exhausted" ? (
                           <Chip tone="neutral">Esgotado</Chip>
-                        ) : link.expires_at && new Date(link.expires_at) < new Date() ? (
+                        ) : link.situation === "expired" ? (
                           <Chip tone="neutral">Vencido</Chip>
                         ) : (
                           <Chip tone="success">Ativo</Chip>
+                        )}
+                        {link.expires_at && (
+                          <div className="muted" style={{ fontSize: "0.78rem" }}>
+                            vale até {formatDay(link.expires_at)}
+                          </div>
                         )}
                         {copiedId === link.id ? (
                           <span className="muted"> · Copiado</span>

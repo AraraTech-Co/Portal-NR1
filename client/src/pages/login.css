@@ -337,3 +337,19 @@
   font-size: 0.9rem;
   color: var(--muted-foreground);
 }
+
+/* Ajuda e caixa de "mostrar a senha" no convite. [S1-N] */
+.login-hint {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--muted-foreground);
+}
+
+.login-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--muted-foreground);
+}

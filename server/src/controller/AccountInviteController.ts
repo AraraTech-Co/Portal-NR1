@@ -33,19 +33,66 @@ function httpError(status: number, message: string): Error {
   return Object.assign(new Error(message), { status });
 }
 
-function serializeLink(link: {
-  id: string;
-  token: string;
-  label: string | null;
-  roleMode: InviteRoleMode;
-  role: AccountRole;
-  orgRole: Role;
+/**
+ * Em que pé está o link, de verdade.
+ *
+ * Todos nasciam "Ativo" e continuavam "Ativo" depois de esgotados ou
+ * vencidos: a lista não dizia qual ainda servia. [S1-N] [S5-I] [CB-13]
+ */
+/** Até 1º de janeiro de 2100 — serve para dizer "sem validade". */
+const SEM_VALIDADE = null;
+
+/**
+ * Validade do link a partir do que veio do formulário (`AAAA-MM-DD`).
+ *
+ * Vazio: sem validade, como era antes. Data que já passou é recusada — um
+ * link que nasce vencido só confunde quem recebe. [S1-L]
+ */
+function resolveInviteExpiry(raw: unknown): Date | null {
+  if (raw === undefined || raw === null || raw === "") return SEM_VALIDADE;
+  const value = String(raw).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw httpError(400, "Validade do link inválida. Use AAAA-MM-DD.");
+  }
+  const fim = new Date(`${value}T23:59:59.999-03:00`);
+  if (Number.isNaN(fim.getTime())) {
+    throw httpError(400, "Validade do link inválida. Use AAAA-MM-DD.");
+  }
+  if (fim.getTime() <= Date.now()) {
+    throw httpError(400, "A validade do link não pode ser uma data que já passou.");
+  }
+  return fim;
+}
+
+function situacaoDoLink(link: {
   active: boolean;
   expiresAt: Date | null;
   maxUses: number | null;
   usedCount: number;
-  createdAt: Date;
-}) {
+}): "active" | "off" | "expired" | "exhausted" {
+  if (!link.active) return "off";
+  if (link.expiresAt && link.expiresAt.getTime() <= Date.now()) return "expired";
+  if (link.maxUses !== null && link.usedCount >= link.maxUses) return "exhausted";
+  return "active";
+}
+
+function serializeLink(
+  link: {
+    id: string;
+    token: string;
+    label: string | null;
+    roleMode: InviteRoleMode;
+    role: AccountRole;
+    orgRole: Role;
+    active: boolean;
+    expiresAt: Date | null;
+    maxUses: number | null;
+    usedCount: number;
+    createdAt: Date;
+  },
+  /** Quem entrou (ou pediu para entrar) por este link. [S5-I] */
+  usadoPor: { name: string; status: string; at: Date }[] = [],
+) {
   return {
     id: link.id,
     token: link.token,
@@ -55,9 +102,11 @@ function serializeLink(link: {
     role: link.role,
     org_role: link.orgRole,
     active: link.active,
+    situation: situacaoDoLink(link),
     expires_at: link.expiresAt,
     max_uses: link.maxUses,
     used_count: link.usedCount,
+    used_by: usadoPor.map((u) => ({ name: u.name, status: u.status, at: u.at })),
     created_at: link.createdAt,
   };
 }
@@ -73,8 +122,31 @@ class AccountInviteController {
         where: { accountId: actor.accountId },
         orderBy: [{ active: "desc" }, { createdAt: "desc" }],
       });
+      /*
+        A lista parecia uma lista de pessoas e não dizia quem tinha usado
+        cada link. Quem usou vem dos pedidos de entrada feitos por ele.
+        [S5-I]
+      */
+      const pedidos = await prisma.accountJoinRequest.findMany({
+        where: { inviteLinkId: { in: links.map((l) => l.id) } },
+        orderBy: { createdAt: "asc" },
+        select: {
+          inviteLinkId: true,
+          name: true,
+          status: true,
+          createdAt: true,
+        },
+      });
+      const porLink = new Map<string, { name: string; status: string; at: Date }[]>();
+      for (const p of pedidos) {
+        if (!p.inviteLinkId) continue;
+        porLink.set(p.inviteLinkId, [
+          ...(porLink.get(p.inviteLinkId) ?? []),
+          { name: p.name, status: p.status, at: p.createdAt },
+        ]);
+      }
       res.json({
-        links: links.map(serializeLink),
+        links: links.map((l) => serializeLink(l, porLink.get(l.id) ?? [])),
         assignable: { org_roles: assignableOrgRoles(actor) },
       });
     } catch (err) {
@@ -95,6 +167,8 @@ class AccountInviteController {
         role_mode?: string;
         role?: string;
         org_role?: string;
+        /** Último dia em que o link funciona (AAAA-MM-DD). [S1-L] [S5-I] */
+        expires_at?: string | null;
       };
 
       const roleMode =
@@ -125,6 +199,12 @@ class AccountInviteController {
           ? Math.floor(body.max_uses)
           : null;
 
+      /*
+        O portal já recusava link vencido, mas nem a tela nem a criação
+        deixavam informar a validade: todo link nascia para sempre. [S1-L]
+      */
+      const expiresAt = resolveInviteExpiry(body.expires_at);
+
       const token = randomBytes(24).toString("base64url");
       const link = await prisma.accountInviteLink.create({
         data: {
@@ -135,6 +215,7 @@ class AccountInviteController {
           orgRole,
           label: blank(body.label),
           maxUses,
+          expiresAt,
           createdById: actor.userId,
         },
       });
@@ -151,6 +232,7 @@ class AccountInviteController {
           roleMode: link.roleMode,
           role: link.role,
           orgRole: link.orgRole,
+          expiresAt: link.expiresAt,
         },
       });
 
@@ -475,17 +557,22 @@ class AccountInviteController {
         o Roberto entrava "Admin" na conta e "Técnico SST" na empresa, e o
         primeiro vencia sem ninguém ver. [OB-3] [S1-C]
       */
-      let orgRole: Role;
-      if (inviteLink?.roleMode === InviteRoleMode.FIXED) {
-        orgRole = inviteLink.orgRole;
-      } else {
-        orgRole =
-          body.org_role && Object.values(Role).includes(body.org_role as Role)
-            ? (body.org_role as Role)
-            : Role.COLABORADOR;
-        if (!canAssignOrgRole(actor, orgRole)) {
-          throw httpError(403, "Você só pode conceder papéis abaixo do seu.");
-        }
+      /*
+        O papel fixo no link é sugestão, não sentença: quem aprova pode
+        revê-lo. Antes, link com papel fixo chegava à aprovação sem permitir
+        mudança — e o que o link disse valia mesmo que a pessoa fosse outra
+        coisa. [S1-P]
+      */
+      const papelSugerido =
+        inviteLink?.roleMode === InviteRoleMode.FIXED
+          ? inviteLink.orgRole
+          : Role.COLABORADOR;
+      let orgRole: Role =
+        body.org_role && Object.values(Role).includes(body.org_role as Role)
+          ? (body.org_role as Role)
+          : papelSugerido;
+      if (!canAssignOrgRole(actor, orgRole)) {
+        throw httpError(403, "Você só pode conceder papéis abaixo do seu.");
       }
       const role: AccountRole = orgRoleToAccountRole(orgRole);
 
