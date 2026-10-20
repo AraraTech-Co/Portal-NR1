@@ -1,4 +1,5 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   createInviteLink,
   deactivateInviteLink,
@@ -259,6 +260,13 @@ export function AccountPage() {
                 <tr>
                   <th>Organização</th>
                   <td>{user.organization.name}</td>
+                </tr>
+                <tr>
+                  <th>Senha</th>
+                  <td>
+                    {/* Trocar a própria senha, sem depender de ninguém. [B2-1-G] */}
+                    <Link to="/trocar-senha">Trocar minha senha</Link>
+                  </td>
                 </tr>
                 <tr>
                   <th>Conta ativa</th>

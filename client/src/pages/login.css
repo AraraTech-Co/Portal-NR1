@@ -329,3 +329,11 @@
     border-right: none;
   }
 }
+
+/* Voltar sem trocar: quem entrou aqui por vontade própria pode desistir. [B2-1-G] */
+.login-back {
+  display: inline-block;
+  margin-top: 0.4rem;
+  font-size: 0.9rem;
+  color: var(--muted-foreground);
+}

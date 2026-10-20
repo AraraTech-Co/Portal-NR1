@@ -1,5 +1,5 @@
 import { FormEvent, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { changePassword } from "@/api/auth";
 import { useAuth } from "@/auth/AuthContext";
 import { Button } from "@/components/Button";
@@ -12,9 +12,15 @@ export function ChangePasswordPage() {
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [pronto, setPronto] = useState(false);
 
+  /*
+    A tela só abria para quem era obrigado a trocar; quem errou a senha na
+    troca, ou desconfia que ela vazou, dependia de alguém redefinir por
+    Pessoas e acessos. [B2-1-G]
+  */
   if (!user) return <Navigate to="/login" replace />;
-  if (!user.must_change_password) return <Navigate to="/" replace />;
+  const obrigado = user.must_change_password;
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -27,6 +33,7 @@ export function ChangePasswordPage() {
     try {
       const data = await changePassword(currentPassword, newPassword);
       setUser(data.user);
+      if (!obrigado) setPronto(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao trocar senha");
     } finally {
@@ -40,9 +47,15 @@ export function ChangePasswordPage() {
         <p className="login-eyebrow label-cond">Segurança</p>
         <h1 className="login-brand">Trocar senha</h1>
         <p className="login-lead muted">
-          Sua senha é provisória. Defina uma nova senha para continuar no
-          portal.
+          {obrigado
+            ? "Sua senha é provisória. Defina uma nova senha para continuar no portal."
+            : "Defina uma nova senha. A atual é pedida para confirmar que é você."}
         </p>
+        {pronto && (
+          <p className="login-lead" role="status">
+            Senha trocada. <Link to="/">Voltar ao início</Link>
+          </p>
+        )}
         <form className="login-form" onSubmit={onSubmit}>
           <label className="login-field">
             Senha atual
@@ -79,11 +92,17 @@ export function ChangePasswordPage() {
           </label>
           {error && <p className="login-error">{error}</p>}
           <Button type="submit" disabled={saving}>
-            {saving ? "Salvando…" : "Salvar e continuar"}
+            {saving ? "Salvando…" : obrigado ? "Salvar e continuar" : "Trocar a senha"}
           </Button>
-          <Button type="button" variant="ghost" onClick={() => logout()}>
-            Sair
-          </Button>
+          {obrigado ? (
+            <Button type="button" variant="ghost" onClick={() => logout()}>
+              Sair
+            </Button>
+          ) : (
+            <Link to="/" className="login-back">
+              Voltar sem trocar
+            </Link>
+          )}
         </form>
       </div>
       <div className="login-aside" aria-hidden>

@@ -50,3 +50,81 @@
   user-select: all;
   white-space: nowrap;
 }
+
+/*
+  A ficha de primeiro acesso: existe para o papel. Copiar senha por senha
+  para entregar a 30 pessoas era o gargalo de um cadastro que leva um
+  minuto. [B2-1-E]
+*/
+.import-slips {
+  display: none;
+}
+
+.import-slip h2 {
+  margin: 0 0 0.6rem;
+  font-size: 1rem;
+}
+
+.import-slip dl {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0 0 0.8rem;
+}
+
+.import-slip dl div {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.import-slip dt {
+  min-width: 9rem;
+  font-weight: 600;
+}
+
+.import-slip dd {
+  margin: 0;
+}
+
+.import-slip code {
+  font-size: 1.05rem;
+  letter-spacing: 0.06em;
+}
+
+.import-slip p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted-foreground);
+  max-width: 60ch;
+}
+
+/*
+  Só as fichas vão ao papel, e só quando se pede: a marca fica no body para
+  esta regra não valer em nenhuma outra tela que imprime. [B2-1-E]
+*/
+@media print {
+  body.imprimindo-fichas > * {
+    visibility: hidden;
+  }
+
+  body.imprimindo-fichas .import-slips,
+  body.imprimindo-fichas .import-slips * {
+    visibility: visible;
+  }
+
+  body.imprimindo-fichas .import-slips {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+  }
+
+  .import-slip {
+    border: 1px dashed #999;
+    border-radius: 6px;
+    padding: 1rem 1.2rem;
+    margin-bottom: 0.8rem;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}
