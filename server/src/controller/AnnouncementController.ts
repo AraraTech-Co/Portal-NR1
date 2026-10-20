@@ -36,16 +36,21 @@ class AnnouncementController {
         Quem cuida do mural vê tudo; os demais veem o que é para a sua
         unidade e o que é para a empresa toda. [CB-33]
       */
-      const recorte = await announcementVisibility(
-        orgId,
-        userId,
-        Boolean(auth.actor && canManageModule(auth.actor.permission, "mural")),
+      const podeGerir = Boolean(
+        auth.actor && canManageModule(auth.actor.permission, "mural"),
       );
+      const recorte = await announcementVisibility(orgId, userId, podeGerir);
 
       const rows = await prisma.announcement.findMany({
         where: {
           organizationId: orgId,
           ...recorte,
+          /*
+            Aviso retirado sai do mural de quem o recebeu; para quem cuida do
+            mural ele continua à vista, marcado, porque o registro é prova de
+            comunicação. [S3-I]
+          */
+          ...(podeGerir ? {} : { withdrawnAt: null }),
           ...(kind && isAnnouncementKind(kind) ? { kind } : {}),
           ...(includeExpired
             ? {}
@@ -58,6 +63,8 @@ class AnnouncementController {
         orderBy: { createdAt: "desc" },
         include: {
           publishedBy: { select: { id: true, name: true } },
+          editedBy: { select: { id: true, name: true } },
+          withdrawnBy: { select: { id: true, name: true } },
           reads: {
             where: { userId },
             select: { readAt: true },
@@ -190,15 +197,34 @@ class AnnouncementController {
       const orgId = actorOrgId(auth);
       const userId = actorUserId(auth);
       // O mesmo recorte da lista: abrir pelo link não contorna a unidade. [CB-33]
-      const recorte = await announcementVisibility(
-        orgId,
-        userId,
-        Boolean(auth.actor && canManageModule(auth.actor.permission, "mural")),
+      const podeGerir = Boolean(
+        auth.actor && canManageModule(auth.actor.permission, "mural"),
       );
+      const recorte = await announcementVisibility(orgId, userId, podeGerir);
       const announcement = await prisma.announcement.findFirst({
-        where: { id: req.params.id, organizationId: orgId, ...recorte },
+        where: {
+          id: req.params.id,
+          organizationId: orgId,
+          ...recorte,
+          // Abrir pelo link não traz de volta o aviso retirado. [S3-I]
+          ...(podeGerir ? {} : { withdrawnAt: null }),
+        },
         include: {
           publishedBy: { select: { id: true, name: true } },
+          editedBy: { select: { id: true, name: true } },
+          withdrawnBy: { select: { id: true, name: true } },
+          /** O texto de antes de cada correção, do mais novo ao mais velho. */
+          revisions: {
+            orderBy: { replacedAt: "desc" },
+            select: {
+              id: true,
+              title: true,
+              body: true,
+              happensAt: true,
+              replacedAt: true,
+              replacedBy: { select: { id: true, name: true } },
+            },
+          },
           reads: {
             where: { userId },
             select: { readAt: true },
@@ -329,6 +355,187 @@ class AnnouncementController {
         /** Quantas pessoas receberam, para a tela dizer na hora. [CB-33] */
         notified: publico.filter((id) => id !== userId).length,
       });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
+  /**
+   * Corrigir o texto de um aviso publicado.
+   *
+   * O aviso saía na hora e não tinha conserto: um erro de digitação ficava
+   * para sempre. Corrigir mexe em prova de comunicação de risco, então o
+   * texto anterior fica guardado, a troca fica assinada e o mural passa a
+   * dizer que houve correção. O público não muda: trocar quem recebeu
+   * mudaria a quem a empresa comunicou. [S3-I]
+   */
+  async update(req: Request, res: Response) {
+    try {
+      const auth = req as AuthRequest;
+      const orgId = actorOrgId(auth);
+      const userId = actorUserId(auth);
+      const { title, body, happens_at, establishment_ids } = req.body as {
+        title?: string;
+        body?: string;
+        happens_at?: string | null;
+        establishment_ids?: string[];
+      };
+
+      if (establishment_ids !== undefined) {
+        res.status(400).json({
+          message:
+            "As unidades de um aviso publicado não mudam. Retire este aviso e publique outro.",
+          code: "AUDIENCE_IS_FIXED",
+        });
+        return;
+      }
+      if (title !== undefined && !title.trim()) {
+        res.status(400).json({ message: "O título não pode ficar vazio." });
+        return;
+      }
+      if (body !== undefined && !body.trim()) {
+        res.status(400).json({ message: "O conteúdo não pode ficar vazio." });
+        return;
+      }
+      if (title === undefined && body === undefined && happens_at === undefined) {
+        res.status(400).json({ message: "Nada para corrigir." });
+        return;
+      }
+
+      const atual = await prisma.announcement.findFirst({
+        where: { id: req.params.id, organizationId: orgId },
+        select: {
+          id: true,
+          title: true,
+          body: true,
+          happensAt: true,
+          withdrawnAt: true,
+        },
+      });
+      if (!atual) {
+        res.status(404).json({ message: "Aviso não encontrado." });
+        return;
+      }
+      if (atual.withdrawnAt) {
+        res.status(409).json({
+          message: "Este aviso foi retirado do mural e não se corrige mais.",
+          code: "ALREADY_WITHDRAWN",
+        });
+        return;
+      }
+
+      const announcement = await prisma.$transaction(async (tx) => {
+        await tx.announcementRevision.create({
+          data: {
+            announcementId: atual.id,
+            title: atual.title,
+            body: atual.body,
+            happensAt: atual.happensAt,
+            replacedById: userId,
+          },
+        });
+        return tx.announcement.update({
+          where: { id: atual.id },
+          data: {
+            ...(title !== undefined ? { title: title.trim() } : {}),
+            ...(body !== undefined ? { body: body.trim() } : {}),
+            ...(happens_at !== undefined
+              ? { happensAt: happens_at ? new Date(happens_at) : null }
+              : {}),
+            editedAt: new Date(),
+            editedById: userId,
+          },
+        });
+      });
+
+      await writeAudit({
+        organizationId: orgId,
+        actorId: userId,
+        action: "announcement.edit",
+        entityType: "Announcement",
+        entityId: announcement.id,
+        before: { title: atual.title, body: atual.body, happensAt: atual.happensAt },
+        after: {
+          title: announcement.title,
+          body: announcement.body,
+          happensAt: announcement.happensAt,
+        },
+      });
+
+      res.json({ announcement });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
+  /**
+   * Retirar o aviso do mural. O registro fica, com o motivo e quem retirou:
+   * apagar a comunicação é pior que o erro que levou a retirá-la. [S3-I]
+   */
+  async withdraw(req: Request, res: Response) {
+    try {
+      const auth = req as AuthRequest;
+      const orgId = actorOrgId(auth);
+      const userId = actorUserId(auth);
+      const motivo = (req.body as { reason?: string }).reason;
+      if (!motivo?.trim()) {
+        res.status(400).json({
+          message: "Diga por que o aviso está sendo retirado.",
+        });
+        return;
+      }
+
+      const atual = await prisma.announcement.findFirst({
+        where: { id: req.params.id, organizationId: orgId },
+        select: { id: true, title: true, withdrawnAt: true },
+      });
+      if (!atual) {
+        res.status(404).json({ message: "Aviso não encontrado." });
+        return;
+      }
+      if (atual.withdrawnAt) {
+        res.status(409).json({
+          message: "Este aviso já foi retirado do mural.",
+          code: "ALREADY_WITHDRAWN",
+        });
+        return;
+      }
+
+      const announcement = await prisma.$transaction(async (tx) => {
+        const row = await tx.announcement.update({
+          where: { id: atual.id },
+          data: {
+            withdrawnAt: new Date(),
+            withdrawnById: userId,
+            withdrawalReason: motivo.trim(),
+          },
+        });
+        /*
+          O sino deixa de apontar para um aviso que saiu do mural: quem
+          clicasse no aviso não encontraria nada. Mesmo motivo de deixar de
+          avisar sobre módulo fechado. [S3-I]
+        */
+        await tx.notification.updateMany({
+          where: {
+            entityType: "Announcement",
+            entityId: row.id,
+            readAt: null,
+          },
+          data: { readAt: new Date() },
+        });
+        return row;
+      });
+
+      await writeAudit({
+        organizationId: orgId,
+        actorId: userId,
+        action: "announcement.withdraw",
+        entityType: "Announcement",
+        entityId: announcement.id,
+        after: { reason: announcement.withdrawalReason },
+      });
+
+      res.json({ announcement });
     } catch (err) {
       fail(res, err);
     }

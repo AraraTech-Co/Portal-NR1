@@ -77,10 +77,12 @@ export function EmergenciesPage() {
     ]);
     setProcedures(proc.procedures);
     setEstablishments(est.establishments);
-    if (!establishmentId && est.establishments[0]) {
-      setEstablishmentId(est.establishments[0].id);
-    }
-  }, [establishmentId]);
+    /*
+      O estabelecimento vinha escolhido como o primeiro da lista: quem
+      cadastrava para outra unidade e não reparava gravava o procedimento na
+      unidade errada. Agora quem cadastra escolhe. [CB-18]
+    */
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -107,8 +109,12 @@ export function EmergenciesPage() {
 
   async function onCreate(e: FormEvent) {
     e.preventDefault();
-    if (!establishmentId || scenario.trim().length < 2) {
-      setFormError("Informe estabelecimento e cenário.");
+    if (!establishmentId) {
+      setFormError("Escolha a unidade a que este procedimento se aplica.");
+      return;
+    }
+    if (scenario.trim().length < 2) {
+      setFormError("Informe o cenário.");
       return;
     }
     if (responsibleIds.length === 0 && !responsiblesExtra.trim()) {
@@ -219,6 +225,9 @@ export function EmergenciesPage() {
                 disabled={saving}
                 required
               >
+                {/* Sem escolha feita por ninguém: o procedimento é de uma
+                    unidade só, e errar a unidade é errar o documento. [CB-18] */}
+                <option value="">Escolha a unidade…</option>
                 {establishments.map((e) => (
                   <option key={e.id} value={e.id}>
                     {e.name}
