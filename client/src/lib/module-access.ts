@@ -104,3 +104,16 @@ export function canCloseOccurrenceAnalysis(
     permission === "user" ? "colaborador" : (permission ?? ""),
   );
 }
+
+/**
+ * Validar a ação — espelho do servidor (`ACTION_VALIDATION_ROLES`). A tela
+ * mostrava "Aprovar" e "Recusar evidência" a qualquer um com escrita no
+ * plano, e um supervisor validava a ação de outro supervisor. [OB-6]
+ */
+const ACTION_VALIDATION_ROLES: readonly string[] = ["master", "owner", "sst"];
+
+export function canValidateAction(permission: string | undefined): boolean {
+  return ACTION_VALIDATION_ROLES.includes(
+    permission === "user" ? "colaborador" : (permission ?? ""),
+  );
+}

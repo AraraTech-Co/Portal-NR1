@@ -11,7 +11,7 @@ import { notify } from "../helper/notify";
 import { Action } from "../model/schema/Action/Action";
 import { Evidence } from "../model/schema/Evidence/Evidence";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
-import { canWriteModule } from "../helper/module-access";
+import { canValidateAction, canWriteModule } from "../helper/module-access";
 import {
   assertSize,
   buildEvidenceStoragePath,
@@ -291,6 +291,21 @@ class ActionEvidenceController {
 
       if (decision !== "approve" && decision !== "reject") {
         res.status(400).json({ message: "Informe decision: approve | reject." });
+        return;
+      }
+
+      /*
+        Validava qualquer um com escrita no plano que não fosse o executor —
+        supervisor validava a ação de outro supervisor. Quem afere a eficácia
+        é quem responde tecnicamente. [OB-6]
+      */
+      const papel = (req as AuthRequest).actor?.permission ?? "";
+      if (!canValidateAction(papel)) {
+        res.status(403).json({
+          message:
+            "Validar a ação é do técnico de SST, do dono da conta ou do master da empresa.",
+          code: "NOT_A_VALIDATOR",
+        });
         return;
       }
 

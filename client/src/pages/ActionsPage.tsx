@@ -14,7 +14,7 @@ import {
 } from "@/lib/labels";
 import "@/components/data-table.css";
 import { LoadingState } from "@/components/LoadingState";
-import { useModuleAccess } from "@/lib/module-access";
+import { canValidateAction } from "@/lib/module-access";
 import { ActionEvidencePanel } from "./ActionEvidencePanel";
 import "./actions.css";
 
@@ -67,7 +67,12 @@ export function ActionsPage() {
   const [establishmentId, setEstablishmentId] = useState("");
   const [establishments, setEstablishments] = useState<Establishment[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
-  const { canWrite: canReview } = useModuleAccess("acoes");
+  /*
+    A tela convidava a validar quem o servidor agora recusa: validar é de
+    quem responde tecnicamente, não de qualquer um com escrita no plano.
+    [OB-6]
+  */
+  const canReview = canValidateAction(user?.permission);
 
   useEffect(() => {
     fetchEstablishments()

@@ -95,6 +95,20 @@ export function canCloseOccurrenceAnalysis(roleKey: string): boolean {
 }
 
 /**
+ * Validar a ação — aprovar a evidência e dar a medida por eficaz.
+ *
+ * Validava qualquer pessoa com escrita no Plano de ação que não fosse o
+ * executor, e com isso um supervisor validava a ação de outro supervisor.
+ * Quem afere se a medida funcionou é quem responde tecnicamente pelo GRO, a
+ * mesma separação da análise da ocorrência. [OB-6]
+ */
+const ACTION_VALIDATION_ROLES: readonly string[] = ["master", "owner", "sst"];
+
+export function canValidateAction(roleKey: string): boolean {
+  return ACTION_VALIDATION_ROLES.includes(normalizeRoleKey(roleKey));
+}
+
+/**
  * Papéis só de consulta: leem, nunca gravam — nem o próprio registro. O
  * bloqueio de gravação fica no `authenticate`, para valer em toda rota. [S7-A]
  */
