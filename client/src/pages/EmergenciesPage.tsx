@@ -15,6 +15,7 @@ import { LoadingState } from "@/components/LoadingState";
 import { PageHeader } from "@/components/PageHeader";
 import { PeoplePicker } from "@/components/PeoplePicker";
 import { formatDay } from "@/lib/labels";
+import { useModuleAccess } from "@/lib/module-access";
 import "@/components/data-table.css";
 import "@/components/form.css";
 import type { OrgMember } from "@/api/org-members";
@@ -47,6 +48,8 @@ export function EmergenciesPage() {
   const [establishments, setEstablishments] = useState<Establishment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** Quem só consulta não cadastra procedimento nem simulado. [B2-4-F] */
+  const { canWrite } = useModuleAccess("emergencias");
   const [showForm, setShowForm] = useState(false);
 
   const [establishmentId, setEstablishmentId] = useState("");
@@ -175,13 +178,15 @@ export function EmergenciesPage() {
         title="Emergências"
         description="O que fazer quando algo dá errado: quem socorre, com o que, e como todo mundo sai do local. Cada plano precisa ser treinado periodicamente."
         actions={
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => setShowForm((v) => !v)}
-          >
-            {showForm ? "Fechar formulário" : "Novo procedimento"}
-          </Button>
+          canWrite ? (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setShowForm((v) => !v)}
+            >
+              {showForm ? "Fechar formulário" : "Novo procedimento"}
+            </Button>
+          ) : undefined
         }
       />
 
@@ -198,7 +203,7 @@ export function EmergenciesPage() {
         </p>
       )}
 
-      {showForm && (
+      {canWrite && showForm && (
         <section className="form-section">
           <h2>Novo procedimento de emergência</h2>
           <p className="muted">
@@ -334,15 +339,17 @@ export function EmergenciesPage() {
                       </Chip>
                     </td>
                     <td>
-                      <button
-                        type="button"
-                        className="filter-toggle"
-                        onClick={() =>
-                          setDrillFor((cur) => (cur === p.id ? null : p.id))
-                        }
-                      >
-                        Registrar simulado
-                      </button>
+                      {canWrite && (
+                        <button
+                          type="button"
+                          className="filter-toggle"
+                          onClick={() =>
+                            setDrillFor((cur) => (cur === p.id ? null : p.id))
+                          }
+                        >
+                          Registrar simulado
+                        </button>
+                      )}
                     </td>
                   </tr>
                 );
@@ -352,7 +359,7 @@ export function EmergenciesPage() {
         </div>
       )}
 
-      {drillFor && (
+      {canWrite && drillFor && (
         <section className="form-section" style={{ marginTop: "1rem" }}>
           <h2>Registrar exercício simulado</h2>
           <p className="muted">

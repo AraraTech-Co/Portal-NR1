@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
 import { PageHeader } from "@/components/PageHeader";
 import { PeoplePicker } from "@/components/PeoplePicker";
+import { useModuleAccess } from "@/lib/module-access";
 import "@/components/data-table.css";
 import "@/components/form.css";
 const DEFAULT_STATEMENT =
@@ -26,6 +27,8 @@ function formatDateTime(value: string): string {
 }
 
 export function DocumentsPage() {
+  /** Quem só consulta não vê o formulário de emissão. [B2-4-F] */
+  const { canWrite } = useModuleAccess("documentos_pgr");
   const [documents, setDocuments] = useState<PgrDocument[]>([]);
   const [requiredTypes, setRequiredTypes] = useState<string[]>([]);
   const [establishments, setEstablishments] = useState<Establishment[]>([]);
@@ -198,6 +201,12 @@ export function DocumentsPage() {
         </div>
       </section>
 
+      {/*
+        Quem só consulta via o formulário de emissão e, ao tentar, recebia
+        "Você não tem permissão para este módulo". A tela não convida ao que
+        o servidor recusa. [B2-4-F]
+      */}
+      {canWrite && (
       <section className="form-section">
         <h2>Emitir nova versão</h2>
         <p className="muted">
@@ -306,6 +315,7 @@ export function DocumentsPage() {
           </div>
         </form>
       </section>
+      )}
 
       {loading && <LoadingState label="Carregando documentos…" />}
       {!loading && error && (
@@ -317,7 +327,11 @@ export function DocumentsPage() {
       {!loading && !error && documents.length === 0 && (
         <EmptyState
           title="Nenhuma emissão ainda"
-          description="Use o formulário acima para gerar a primeira versão assinada."
+          description={
+            canWrite
+              ? "Use o formulário acima para gerar a primeira versão assinada."
+              : "Quando a empresa emitir o inventário, o plano de ação ou os critérios do GRO, eles aparecem aqui."
+          }
         />
       )}
 

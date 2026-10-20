@@ -10,8 +10,9 @@ import { join } from "node:path";
  * é escrita à mão; esta conferência existe para ela não ficar para trás
  * quando um fato novo passa a ser gravado. [B2-1-C] [B2-4-E]
  *
- * Limite conhecido: só enxerga a ação escrita como literal em
- * `action: "..."`. Ação montada em variável passa despercebida.
+ * Limite conhecido: só enxerga texto entre aspas logo depois de `action:`.
+ * Pega o literal e o ternário (`action: x ? "a" : "b"`); ação montada em
+ * variável passa despercebida.
  */
 const RAIZ = join(__dirname, "..", "..", "src");
 const MAPA = join(
@@ -37,8 +38,10 @@ function acoesGravadas(): string[] {
   const achadas = new Set<string>();
   for (const arquivo of arquivos(RAIZ)) {
     const texto = readFileSync(arquivo, "utf8");
-    for (const m of texto.matchAll(/action:\s*"([A-Za-z_.]+)"/g)) {
-      achadas.add(m[1]!);
+    for (const m of texto.matchAll(/action:\s*([^,\n]+)/g)) {
+      for (const lit of m[1]!.matchAll(/"([A-Za-z_.]+)"/g)) {
+        achadas.add(lit[1]!);
+      }
     }
   }
   return [...achadas].sort();
@@ -67,6 +70,8 @@ describe("rótulo para todo fato da trilha [B2-1-C]", () => {
     expect(gravadas.length).toBeGreaterThan(30);
     expect(gravadas).toContain("pgr_document.issue");
     expect(gravadas).toContain("service_order.issue");
+    // Escrita como ternário: era o ponto cego da varredura anterior.
+    expect(gravadas).toContain("fiscal.access_ended");
   });
 
   it("a lista de rótulos é lida de verdade", () => {
