@@ -280,6 +280,40 @@ export function InventoryPage() {
           </table>
         </div>
       )}
+
+      {!loading && !error && rows.length > 0 && (
+        /*
+          O fiscal olha nível e situação antes do detalhe, e nenhum dos dois
+          se explicava: "Controles ok" ao lado de um risco Substancial parecia
+          contradição. São duas coisas diferentes — o tamanho do risco e o
+          andamento das medidas. [S7-C] [S2-H] [B2-1-K]
+        */
+        <section className="inventory-legend">
+          <h2>Como ler esta tabela</h2>
+          <p>
+            <strong>Nível</strong> é o tamanho do risco na última avaliação
+            validada, da matriz da empresa: {Object.values(LEVEL_LABEL).join(" · ")}.
+            Quanto mais alto, mais cedo a medida precisa sair do papel.
+          </p>
+          <p>
+            <strong>Status</strong> fala das medidas de prevenção, não do
+            nível. <em>Sem controle</em>: nenhuma medida registrada.{" "}
+            <em>Em andamento</em>: há medida planejada, ainda não implantada.{" "}
+            <em>Controles ok</em>: todas as medidas registradas estão
+            implantadas. <em>Reavaliar</em>: algo mudou (ocorrência, nova
+            medida, prazo de revisão) e a avaliação precisa ser refeita.
+          </p>
+          <p>
+            Por isso um risco <em>Substancial</em> pode aparecer como{" "}
+            <em>Controles ok</em>: o risco continua grande, e o que está em dia
+            é o cumprimento das medidas escolhidas para ele.
+          </p>
+          <p>
+            <strong>Sem avaliação</strong> no lugar do nível quer dizer que o
+            perigo foi registrado e ainda ninguém avaliou o risco.
+          </p>
+        </section>
+      )}
     </div>
   );
 }

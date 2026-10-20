@@ -141,12 +141,14 @@ class InspectionController {
         exigencias,
       ] = await Promise.all([
         prisma.organization.findFirst({ where: { id: orgId } }),
+        /*
+          A lista vinha filtrada pela unidade escolhida e ficava com uma só;
+          a tela esconde o seletor quando há menos de duas, então escolher
+          uma unidade fazia o seletor sumir e só voltava recarregando a
+          página. A lista é sempre inteira; o recorte é feito abaixo. [B2-1-B]
+        */
         prisma.establishment.findMany({
-          where: {
-            organizationId: orgId,
-            archivedAt: null,
-            ...(establishmentId ? { id: establishmentId } : {}),
-          },
+          where: { organizationId: orgId, archivedAt: null },
           orderBy: { name: "asc" },
           select: { id: true, name: true, address: true, taxId: true },
         }),
@@ -336,6 +338,14 @@ class InspectionController {
         res.status(404).json({ message: "Organização não encontrada." });
         return;
       }
+
+      /*
+        As unidades do recorte: a lista inteira alimenta o seletor da tela, e
+        esta alimenta as verificações. [B2-1-B]
+      */
+      const noEscopo = establishmentId
+        ? establishments.filter((e) => e.id === establishmentId)
+        : establishments;
 
       const checks: Check[] = [];
 
@@ -584,7 +594,7 @@ class InspectionController {
           "aep",
           "Avaliação ergonômica preliminar",
           "NR-17 17.3.1: obrigatória para todas as situações de trabalho, inclusive quem é dispensado de PGR.",
-          establishments.map((e) => {
+          noEscopo.map((e) => {
             const a = aepPorEst.get(e.id);
             return {
               ok: Boolean(a),
@@ -611,7 +621,7 @@ class InspectionController {
           "emergencia",
           "Preparação para emergências",
           "NR-1 1.5.6.2: primeiros socorros, abandono do local e responsáveis; 1.5.6.3: exercício simulado.",
-          establishments.map((e) => {
+          noEscopo.map((e) => {
             const planos = emergPorEst.get(e.id) ?? [];
             const comSimulado = planos.find((p) => p.drills[0]);
             const problemas = [

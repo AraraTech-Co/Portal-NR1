@@ -180,3 +180,31 @@
 .inventory-add:hover {
   background: color-mix(in oklch, var(--primary) 88%, black);
 }
+
+/*
+  O fiscal olha nível e situação antes do detalhe, e nenhum dos dois se
+  explicava na tela. [S7-C]
+*/
+.inventory-legend {
+  margin-top: 1.25rem;
+  padding: 1rem 1.2rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  max-width: 80ch;
+}
+
+.inventory-legend h2 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+}
+
+.inventory-legend p {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+  color: var(--muted-foreground);
+}
+
+.inventory-legend p:last-child {
+  margin-bottom: 0;
+}

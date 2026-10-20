@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { useResourceList } from "@/hooks/useResourceList";
-import { createAep, fetchAeps } from "@/api/modules";
+import { concludeAep, createAep, fetchAeps } from "@/api/modules";
 import { fetchEstablishments, type Establishment } from "@/api/operation";
+import { Button } from "@/components/Button";
+import { Dialog } from "@/components/Dialog";
 import { NewRecordSection } from "@/components/NewRecordSection";
 import { useModuleAccess } from "@/lib/module-access";
 import { ListShell } from "@/components/ListShell";
@@ -20,6 +22,16 @@ export function AepPage() {
   const [anonimato, setAnonimato] = useState("");
   const [ouvidos, setOuvidos] = useState("");
   const [unidades, setUnidades] = useState<Establishment[]>([]);
+  /*
+    O painel pede avaliação CONCLUÍDA, e concluir não tinha tela: dava para
+    abrir e nunca fechar. [B2-4-C]
+  */
+  const [concluindo, setConcluindo] = useState<string | null>(null);
+  const [constatacoes, setConstatacoes] = useState("");
+  const [precisaAet, setPrecisaAet] = useState(false);
+  const [porQueAet, setPorQueAet] = useState("");
+  const [fechando, setFechando] = useState(false);
+  const [erroAoFechar, setErroAoFechar] = useState<string | null>(null);
 
   useEffect(() => {
     if (!canManage) return;
@@ -143,6 +155,7 @@ export function AepPage() {
                 <th>Data</th>
                 <th>Perigos</th>
                 <th>Responsável</th>
+                <th aria-label="Concluir" />
             </tr>
           </thead>
           <tbody>
@@ -159,11 +172,106 @@ export function AepPage() {
                   <td>{formatDay(r.conductedAt)}</td>
                   <td>{r._count.hazards}</td>
                   <td>{r.conductedBy.name}</td>
+                  <td>
+                    {canManage && r.status !== "CONCLUDED" && (
+                      <Button
+                        type="button"
+                        size="compact"
+                        variant="secondary"
+                        onClick={() => {
+                          setConcluindo(r.id);
+                          setConstatacoes("");
+                          setPrecisaAet(false);
+                          setPorQueAet("");
+                          setErroAoFechar(null);
+                        }}
+                      >
+                        Concluir
+                      </Button>
+                    )}
+                  </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {/* Concluir a avaliação: é a concluída que o painel procura. [B2-4-C] */}
+      {concluindo && (
+        <Dialog
+          title="Concluir a avaliação ergonômica"
+          description="Depois de concluída, a avaliação não volta a rascunho: uma mudança pede avaliação nova."
+          onClose={() => setConcluindo(null)}
+        >
+          <form
+            className="form-grid"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              setFechando(true);
+              setErroAoFechar(null);
+              try {
+                await concludeAep(concluindo, {
+                  findings: constatacoes.trim() || undefined,
+                  needs_aet: precisaAet,
+                  aet_reason: precisaAet ? porQueAet.trim() : undefined,
+                });
+                setConcluindo(null);
+                reload();
+              } catch (err) {
+                setErroAoFechar(
+                  err instanceof Error ? err.message : "Falha ao concluir",
+                );
+              } finally {
+                setFechando(false);
+              }
+            }}
+          >
+            <label className="form-field">
+              O que foi constatado
+              <textarea
+                value={constatacoes}
+                onChange={(e) => setConstatacoes(e.target.value)}
+                placeholder="O que a avaliação encontrou no posto de trabalho."
+              />
+            </label>
+            <label className="muted" style={{ display: "flex", gap: "0.5rem" }}>
+              <input
+                type="checkbox"
+                checked={precisaAet}
+                onChange={(e) => setPrecisaAet(e.target.checked)}
+              />
+              Precisa de AET — análise ergonômica do trabalho (NR-17 17.3.2)
+            </label>
+            {precisaAet && (
+              <label className="form-field">
+                Por que precisa
+                <textarea
+                  value={porQueAet}
+                  onChange={(e) => setPorQueAet(e.target.value)}
+                  required
+                />
+              </label>
+            )}
+            {erroAoFechar && (
+              <p className="form-error" role="alert">
+                {erroAoFechar}
+              </p>
+            )}
+            <div className="form-actions">
+              <Button type="submit" disabled={fechando}>
+                {fechando ? "Concluindo…" : "Concluir"}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setConcluindo(null)}
+              >
+                Cancelar
+              </Button>
+            </div>
+          </form>
+        </Dialog>
+      )}
     </ListShell>
   );
 }
