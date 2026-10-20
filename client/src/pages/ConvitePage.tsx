@@ -17,6 +17,8 @@ export function ConvitePage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirma, setConfirma] = useState("");
+  const [verSenha, setVerSenha] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -41,8 +43,16 @@ export function ConvitePage() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    setSaving(true);
     setFormError(null);
+    if (password !== confirma) {
+      setFormError("As duas senhas não estão iguais.");
+      return;
+    }
+    if (password.length < 8) {
+      setFormError("A senha precisa de pelo menos 8 caracteres.");
+      return;
+    }
+    setSaving(true);
     try {
       /*
         Matrícula e vínculo saíram daqui: quem aprova é que define. Marcar-se
@@ -117,16 +127,48 @@ export function ConvitePage() {
               <label className="login-field">
                 Senha
                 <input
-                  type="password"
+                  type={verSenha ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   minLength={8}
                   autoComplete="new-password"
                 />
+                {/*
+                  O mínimo de 8 só aparecia ao tentar enviar, e não havia
+                  como ver o que foi digitado nem confirmar. [S1-N]
+                */}
+                <span className="login-hint">
+                  Pelo menos 8 caracteres.
+                </span>
+              </label>
+              <label className="login-field">
+                Repita a senha
+                <input
+                  type={verSenha ? "text" : "password"}
+                  value={confirma}
+                  onChange={(e) => setConfirma(e.target.value)}
+                  required
+                  minLength={8}
+                  autoComplete="new-password"
+                />
+                {confirma && confirma !== password && (
+                  <span className="login-hint">As duas não estão iguais.</span>
+                )}
+              </label>
+              <label className="login-check">
+                <input
+                  type="checkbox"
+                  checked={verSenha}
+                  onChange={(e) => setVerSenha(e.target.checked)}
+                />
+                Mostrar a senha
               </label>
               {formError && <p className="login-error">{formError}</p>}
-              <Button type="submit" disabled={saving}>
+              <Button
+                type="submit"
+                disabled={saving || !password || password !== confirma}
+              >
                 {saving ? "Enviando…" : "Pedir acesso"}
               </Button>
             </form>

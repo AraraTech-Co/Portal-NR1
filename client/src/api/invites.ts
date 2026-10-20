@@ -9,9 +9,13 @@ export type InviteLink = {
   role: string;
   org_role: string;
   active: boolean;
+  /** Em que pé está o link, de verdade. [S1-N] [S5-I] */
+  situation: "active" | "off" | "expired" | "exhausted";
   expires_at: string | null;
   max_uses: number | null;
   used_count: number;
+  /** Quem entrou (ou pediu para entrar) por este link. [S5-I] */
+  used_by: { name: string; status: string; at: string }[];
   created_at: string;
 };
 
@@ -46,6 +50,8 @@ export function createInviteLink(input: {
   max_uses?: number | null;
   role_mode?: "FIXED" | "ON_APPROVE";
   org_role?: string;
+  /** Último dia em que o link funciona (AAAA-MM-DD). [S1-L] */
+  expires_at?: string | null;
 }) {
   return request<{ link: InviteLink }>("/api/invite-links", {
     method: "POST",
