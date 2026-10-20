@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import prisma from "../model/prisma";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { canManageModule } from "../helper/module-access";
+import { notify } from "../helper/notify";
+import { NotificationKind } from "@prisma/client";
 import {
   REDEMPTION_STATUSES,
   isRedemptionStatus,
@@ -219,6 +221,44 @@ class GamificationController {
     }
   }
 
+  /**
+   * Os resgates pedidos — para quem entrega e para quem pediu.
+   *
+   * Decidir resgate já existia, mas nada listava os pedidos: quem entrega o
+   * prêmio não tinha como saber que alguém pediu. [OB-4]
+   */
+  async listRedemptions(req: Request, res: Response) {
+    try {
+      const auth = req as AuthRequest;
+      const orgId = actorOrgId(auth);
+      const userId = actorUserId(auth);
+      const cuida = Boolean(
+        auth.actor && canManageModule(auth.actor.permission, "gamificacao"),
+      );
+      const rows = await prisma.rewardRedemption.findMany({
+        where: {
+          reward: { organizationId: orgId },
+          ...(cuida ? {} : { userId }),
+        },
+        orderBy: { createdAt: "desc" },
+        take: 200,
+        select: {
+          id: true,
+          status: true,
+          cost: true,
+          createdAt: true,
+          decidedAt: true,
+          user: { select: { id: true, name: true } },
+          reward: { select: { id: true, name: true } },
+          decidedBy: { select: { id: true, name: true } },
+        },
+      });
+      res.json({ redemptions: rows, manages: cuida });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
   async decideRedemption(req: Request, res: Response) {
     try {
       const auth = req as AuthRequest;
@@ -245,14 +285,71 @@ class GamificationController {
         });
         return;
       }
-      const updated = await prisma.rewardRedemption.update({
-        where: { id: redemption.id },
-        data: {
-          status,
-          decidedById: deciderId,
-          decidedAt: new Date(),
-        },
+      if (redemption.status === status) {
+        res.status(409).json({
+          message: "Este resgate já está assim.",
+          code: "ALREADY_DECIDED",
+        });
+        return;
+      }
+
+      const updated = await prisma.$transaction(async (tx) => {
+        /*
+          Quem pede paga os pontos na hora. Recusado, o pagamento volta — e
+          o prêmio volta ao estoque. Sem isso, a pessoa perdia os pontos por
+          um resgate que ninguém entregou. [OB-4]
+        */
+        if (
+          status === REDEMPTION_STATUSES.REJECTED &&
+          redemption.status !== REDEMPTION_STATUSES.REJECTED
+        ) {
+          await tx.pointEntry.create({
+            data: {
+              organizationId: orgId,
+              userId: redemption.userId,
+              activity: `redeem_refund:${redemption.rewardId}`,
+              points: redemption.cost,
+              note: "Resgate recusado: pontos devolvidos.",
+            },
+          });
+          await tx.reward.updateMany({
+            where: { id: redemption.rewardId, stock: { not: null } },
+            data: { stock: { increment: 1 } },
+          });
+        }
+        return tx.rewardRedemption.update({
+          where: { id: redemption.id },
+          data: {
+            status,
+            decidedById: deciderId,
+            decidedAt: new Date(),
+          },
+          select: {
+            id: true,
+            status: true,
+            userId: true,
+            reward: { select: { name: true } },
+          },
+        });
       });
+
+      // Quem pediu precisa saber o que aconteceu com o pedido.
+      await notify({
+        organizationId: orgId,
+        userId: updated.userId,
+        kind: NotificationKind.REWARD_DECIDED,
+        title: `Resgate: ${updated.reward.name}`,
+        body:
+          status === REDEMPTION_STATUSES.REJECTED
+            ? "Recusado. Os pontos voltaram para o seu saldo."
+            : status === REDEMPTION_STATUSES.DELIVERED
+              ? "Entregue."
+              : "Aprovado. Aguarde a entrega.",
+        link: "/gamificacao",
+        entityType: "RewardRedemption",
+        entityId: updated.id,
+      });
+
       res.json({ redemption: updated });
     } catch (err) {
       fail(res, err);

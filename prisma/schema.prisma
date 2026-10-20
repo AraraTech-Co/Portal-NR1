@@ -1612,6 +1612,8 @@ enum NotificationKind {
   ERGONOMIC_COMPLAINT_OPENED
   /// O SST respondeu à queixa ergonômica. [P1]
   ERGONOMIC_COMPLAINT_HANDLED
+  /// O resgate de um prêmio foi aprovado, entregue ou recusado. [OB-4]
+  REWARD_DECIDED
 }
 
 model Notification {
