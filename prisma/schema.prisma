@@ -69,6 +69,10 @@ model User {
   ideasAuthored     Idea[]                @relation("IdeaAuthor")
   ideasDecided      Idea[]                @relation("IdeaDecider")
   announcements     Announcement[]        @relation("AnnouncementAuthor")
+  /// Avisos que esta pessoa corrigiu ou retirou do mural. [S3-I]
+  announcementsEdited    Announcement[]   @relation("AnnouncementEditor")
+  announcementsWithdrawn Announcement[]   @relation("AnnouncementWithdrawer")
+  announcementRevisions  AnnouncementRevision[] @relation("AnnouncementReviser")
   announcementReads AnnouncementRead[]
   hrDocumentsTargeted HrDocument[]        @relation("HrDocumentTarget")
   hrDocumentsAuthored HrDocument[]        @relation("HrDocumentAuthor")
@@ -1555,14 +1559,45 @@ model Announcement {
   expiresAt      DateTime?
   publishedById  String
   createdAt      DateTime         @default(now())
+  /// Última correção do texto. O aviso publicado não tinha conserto. [S3-I]
+  editedAt       DateTime?
+  editedById     String?
+  /// Aviso retirado do mural. O registro fica: é prova de comunicação. [S3-I]
+  withdrawnAt    DateTime?
+  withdrawnById  String?
+  withdrawalReason String?
 
   organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   publishedBy  User              @relation("AnnouncementAuthor", fields: [publishedById], references: [id])
+  editedBy     User?             @relation("AnnouncementEditor", fields: [editedById], references: [id])
+  withdrawnBy  User?             @relation("AnnouncementWithdrawer", fields: [withdrawnById], references: [id])
   reads        AnnouncementRead[]
   /// Para quais unidades vai o aviso. Nenhuma linha = a empresa toda. [CB-33]
   establishments AnnouncementEstablishment[]
+  /// O texto de cada versão anterior. [S3-I]
+  revisions      AnnouncementRevision[]
 
   @@index([organizationId, createdAt])
+}
+
+/// O texto que o aviso tinha antes de uma correção.
+///
+/// Corrigir um aviso publicado é mexer em prova de comunicação de risco: o
+/// que estava escrito antes fica aqui, com quem trocou e quando. [S3-I]
+model AnnouncementRevision {
+  id             String   @id @default(uuid())
+  announcementId String
+  title          String
+  body           String
+  happensAt      DateTime?
+  /// Quando este texto deixou de valer.
+  replacedAt     DateTime @default(now())
+  replacedById   String
+
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  replacedBy   User         @relation("AnnouncementReviser", fields: [replacedById], references: [id])
+
+  @@index([announcementId, replacedAt])
 }
 
 /// As unidades que recebem um aviso do mural.

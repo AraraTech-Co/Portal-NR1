@@ -5,6 +5,8 @@ import {
   fetchAnnouncementReaders,
   fetchAnnouncements,
   markAnnouncementRead,
+  updateAnnouncement,
+  withdrawAnnouncement,
   type AnnouncementKind,
   type AnnouncementListItem,
   type AnnouncementReader,
@@ -12,6 +14,7 @@ import {
 import { fetchEstablishments, type Establishment } from "@/api/operation";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
+import { Dialog } from "@/components/Dialog";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
 import { MarkdownBody } from "@/components/MarkdownBody";
@@ -34,6 +37,14 @@ export function AnnouncementsPage() {
   const [readersOf, setReadersOf] = useState<string | null>(null);
   const [readers, setReaders] = useState<AnnouncementReader[] | null>(null);
   const [readersError, setReadersError] = useState<string | null>(null);
+  /*
+    Aviso publicado não tinha conserto: nem corrigir um erro de digitação,
+    nem tirar do mural o que saiu errado. [S3-I]
+  */
+  const [corrigindo, setCorrigindo] = useState<AnnouncementListItem | null>(null);
+  const [retirando, setRetirando] = useState<AnnouncementListItem | null>(null);
+  const [salvandoConserto, setSalvandoConserto] = useState(false);
+  const [erroDoConserto, setErroDoConserto] = useState<string | null>(null);
 
   async function toggleReaders(id: string) {
     if (readersOf === id) {
@@ -381,7 +392,9 @@ export function AnnouncementsPage() {
                 return (
                   <Fragment key={r.id}>
                     <tr
-                      className={`mural-row is-clickable${open ? " is-open" : ""}`}
+                      className={`mural-row is-clickable${open ? " is-open" : ""}${
+                        r.withdrawnAt ? " is-withdrawn" : ""
+                      }`}
                       onClick={() => toggleRow(r)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
@@ -395,6 +408,13 @@ export function AnnouncementsPage() {
                     >
                       <td>
                         <strong>{r.title}</strong>
+                        {/* O aviso retirado some do mural de quem o recebeu;
+                            para quem cuida do mural ele fica, marcado. [S3-I] */}
+                        {r.withdrawnAt && (
+                          <div>
+                            <Chip tone="danger">Retirado do mural</Chip>
+                          </div>
+                        )}
                       </td>
                       <td>
                         <Chip>{ANNOUNCEMENT_KIND_LABEL[r.kind] ?? r.kind}</Chip>
@@ -442,9 +462,52 @@ export function AnnouncementsPage() {
                                 {r.expiresAt && (
                                   <Chip>Expira: {formatDay(r.expiresAt)}</Chip>
                                 )}
+                                {/* Corrigir mexe em prova de comunicação: a
+                                    correção aparece, não se esconde. [S3-I] */}
+                                {r.editedAt && (
+                                  <Chip tone="warning">
+                                    Corrigido em {formatDay(r.editedAt)}
+                                    {r.editedBy ? ` por ${r.editedBy.name}` : ""}
+                                  </Chip>
+                                )}
                               </div>
                               <MarkdownBody>{r.body}</MarkdownBody>
+                              {r.withdrawnAt && (
+                                <p className="mural-retirado">
+                                  Retirado do mural em {formatDay(r.withdrawnAt)}
+                                  {r.withdrawnBy ? ` por ${r.withdrawnBy.name}` : ""}
+                                  {r.withdrawalReason
+                                    ? `: ${r.withdrawalReason}`
+                                    : "."}
+                                </p>
+                              )}
                               <div className="mural-expand-actions">
+                                {canPublish && !r.withdrawnAt && (
+                                  <>
+                                    <Button
+                                      type="button"
+                                      variant="secondary"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setErroDoConserto(null);
+                                        setCorrigindo(r);
+                                      }}
+                                    >
+                                      Corrigir
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant="secondary"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setErroDoConserto(null);
+                                        setRetirando(r);
+                                      }}
+                                    >
+                                      Retirar do mural
+                                    </Button>
+                                  </>
+                                )}
                                 {canPublish && (
                                   <Button
                                     type="button"
@@ -532,6 +595,138 @@ export function AnnouncementsPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {/*
+        Corrigir o texto. O público não entra aqui: trocar quem recebeu
+        mudaria a quem a empresa comunicou. [S3-I]
+      */}
+      {corrigindo && (
+        <Dialog
+          title="Corrigir o aviso"
+          description="A correção fica à vista no mural, com a data e o seu nome, e o texto anterior fica guardado. Quem já leu não é avisado de novo — se a correção muda o sentido do aviso, publique um aviso novo."
+          onClose={() => setCorrigindo(null)}
+        >
+          <form
+            className="form-grid"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const alvo = corrigindo;
+              const dados = new FormData(e.currentTarget);
+              setSalvandoConserto(true);
+              setErroDoConserto(null);
+              try {
+                await updateAnnouncement(alvo.id, {
+                  title: String(dados.get("titulo") ?? "").trim(),
+                  body: String(dados.get("conteudo") ?? "").trim(),
+                  happens_at: String(dados.get("evento") ?? "") || null,
+                });
+                await reload();
+                setCorrigindo(null);
+              } catch (err) {
+                setErroDoConserto(
+                  err instanceof Error ? err.message : "Falha ao corrigir",
+                );
+              } finally {
+                setSalvandoConserto(false);
+              }
+            }}
+          >
+            <label className="form-field">
+              Título
+              <input
+                name="titulo"
+                defaultValue={corrigindo.title}
+                disabled={salvandoConserto}
+                required
+              />
+            </label>
+            <label className="form-field">
+              Conteúdo
+              <textarea
+                name="conteudo"
+                rows={10}
+                defaultValue={corrigindo.body}
+                disabled={salvandoConserto}
+                required
+              />
+            </label>
+            <label className="form-field">
+              Data do evento (opcional)
+              <input
+                type="date"
+                name="evento"
+                defaultValue={corrigindo.happensAt?.slice(0, 10) ?? ""}
+                disabled={salvandoConserto}
+              />
+            </label>
+            {erroDoConserto && (
+              <p className="form-error" role="alert">
+                {erroDoConserto}
+              </p>
+            )}
+            <div className="form-actions">
+              <Button type="submit" disabled={salvandoConserto}>
+                {salvandoConserto ? "Corrigindo…" : "Salvar a correção"}
+              </Button>
+            </div>
+          </form>
+        </Dialog>
+      )}
+
+      {/* Retirar do mural: o registro fica, com motivo e autor. [S3-I] */}
+      {retirando && (
+        <Dialog
+          title="Retirar o aviso do mural"
+          description="O aviso sai do mural de quem o recebeu e o sino deixa de apontar para ele. O registro fica, com o motivo e o seu nome: apagar a comunicação é pior que o erro que levou a retirá-la."
+          onClose={() => setRetirando(null)}
+        >
+          <form
+            className="form-grid"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const alvo = retirando;
+              const dados = new FormData(e.currentTarget);
+              setSalvandoConserto(true);
+              setErroDoConserto(null);
+              try {
+                await withdrawAnnouncement(
+                  alvo.id,
+                  String(dados.get("motivo") ?? "").trim(),
+                );
+                await reload();
+                setRetirando(null);
+              } catch (err) {
+                setErroDoConserto(
+                  err instanceof Error ? err.message : "Falha ao retirar",
+                );
+              } finally {
+                setSalvandoConserto(false);
+              }
+            }}
+          >
+            <label className="form-field">
+              Por que está sendo retirado
+              <textarea
+                name="motivo"
+                rows={3}
+                placeholder="Ex.: a data da campanha mudou; será republicado"
+                disabled={salvandoConserto}
+                required
+              />
+            </label>
+            {erroDoConserto && (
+              <p className="form-error" role="alert">
+                {erroDoConserto}
+              </p>
+            )}
+            <div className="form-actions">
+              <Button type="submit" disabled={salvandoConserto}>
+                {salvandoConserto ? "Retirando…" : "Retirar do mural"}
+              </Button>
+            </div>
+          </form>
+        </Dialog>
       )}
     </div>
   );

@@ -122,6 +122,8 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   "people.import": "Pessoas cadastradas por planilha",
   "hr_document.create": "Documento de RH publicado",
   "announcement.create": "Aviso publicado",
+  "announcement.edit": "Aviso corrigido",
+  "announcement.withdraw": "Aviso retirado do mural",
   "idea.create": "Ideia registrada",
   "idea.decide": "Ideia decidida",
   "climate_survey.create": "Pesquisa de clima criada",

@@ -17,6 +17,13 @@ export type AnnouncementListItem = {
   /** Quantas pessoas do público leram, e quantas são. [CB-36] */
   read_count: number;
   audience_count: number;
+  /** Quando o texto foi corrigido, e por quem. [S3-I] */
+  editedAt?: string | null;
+  editedBy?: { id: string; name: string } | null;
+  /** Aviso retirado do mural — o registro fica. [S3-I] */
+  withdrawnAt?: string | null;
+  withdrawnBy?: { id: string; name: string } | null;
+  withdrawalReason?: string | null;
 };
 
 export function fetchAnnouncements(includeExpired = false) {
@@ -59,6 +66,28 @@ export function createAnnouncement(input: {
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+/**
+ * Corrigir o texto de um aviso publicado. O público não muda: trocar quem
+ * recebeu mudaria a quem a empresa comunicou. [S3-I]
+ */
+export function updateAnnouncement(
+  id: string,
+  input: { title?: string; body?: string; happens_at?: string | null },
+) {
+  return request<{ announcement: AnnouncementListItem }>(
+    `/api/announcements/${id}`,
+    { method: "PATCH", body: JSON.stringify(input) },
+  );
+}
+
+/** Retirar do mural, com motivo. O registro fica. [S3-I] */
+export function withdrawAnnouncement(id: string, reason: string) {
+  return request<{ announcement: AnnouncementListItem }>(
+    `/api/announcements/${id}/retirar`,
+    { method: "POST", body: JSON.stringify({ reason }) },
+  );
 }
 
 export type AnnouncementReader = {

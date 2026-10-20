@@ -16,6 +16,13 @@ router.post("/api/announcements", writeRh, (req, res) =>
 router.get("/api/announcements/:id", read, (req, res) =>
   announcements.get(req, res),
 );
+/* Corrigir e retirar aviso publicado — antes não havia nem um nem outro. [S3-I] */
+router.patch("/api/announcements/:id", writeRh, (req, res) =>
+  announcements.update(req, res),
+);
+router.post("/api/announcements/:id/retirar", writeRh, (req, res) =>
+  announcements.withdraw(req, res),
+);
 /** Quem leu e quem não leu — para quem publica. [S3-H] */
 router.get("/api/announcements/:id/leituras", read, (req, res) =>
   announcements.readers(req, res),
