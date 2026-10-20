@@ -15,6 +15,7 @@ import {
   logout as apiLogout,
   SessionUser,
 } from "@/api/auth";
+import { TOKEN_KEY } from "@/api/token";
 
 type AuthState = {
   user: SessionUser | null;
@@ -40,6 +41,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then((data) => setUser(data.user))
       .catch(() => clearToken())
       .finally(() => setBooting(false));
+  }, []);
+
+  /*
+    Num computador compartilhado, alguém entrava numa aba nova e a aba que já
+    estava aberta continuava mostrando o nome da primeira pessoa — enquanto
+    gravava em nome da segunda, porque o acesso fica no navegador e vale para
+    todas as abas. A aba aberta passa a acompanhar a troca. [CB-25]
+  */
+  useEffect(() => {
+    function trocou(e: StorageEvent) {
+      if (e.key !== TOKEN_KEY) return;
+      if (!e.newValue) {
+        // Saiu em outra aba: esta também sai.
+        setUser(null);
+        return;
+      }
+      fetchSession()
+        .then((data) => setUser(data.user))
+        .catch(() => setUser(null));
+    }
+    window.addEventListener("storage", trocou);
+    return () => window.removeEventListener("storage", trocou);
   }, []);
 
   const login = useCallback(async (loginId: string, password: string) => {

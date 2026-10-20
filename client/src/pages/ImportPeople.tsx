@@ -189,6 +189,20 @@ function tone(status: string): "success" | "info" | "neutral" | "danger" {
 }
 
 /**
+ * Só as fichas vão ao papel: a marca no body diz à folha de estilo o que
+ * esconder, e sai no fim da impressão. [B2-1-E]
+ */
+function imprimirFichas() {
+  document.body.classList.add("imprimindo-fichas");
+  window.addEventListener(
+    "afterprint",
+    () => document.body.classList.remove("imprimindo-fichas"),
+    { once: true },
+  );
+  window.print();
+}
+
+/**
  * Cadastro em massa: cola a planilha, confere a prévia, cadastra. As senhas
  * de primeiro acesso aparecem uma vez — o portal não as guarda em texto. [S1-A]
  */
@@ -320,6 +334,39 @@ export function ImportPeople() {
         )}
       </div>
 
+      {/* As fichas: existem para o papel, e só aparecem na impressão. [B2-1-E] */}
+      {relatorio && (
+        <div className="import-slips">
+          {relatorio.results
+            .filter((r) => r.temporary_password)
+            .map((r) => (
+              <section key={`ficha-${r.line}`} className="import-slip">
+                <h2>Primeiro acesso ao Portal NR-1</h2>
+                <dl>
+                  <div>
+                    <dt>Nome</dt>
+                    <dd>{r.name}</dd>
+                  </div>
+                  <div>
+                    <dt>Entrar com</dt>
+                    <dd>{r.login}</dd>
+                  </div>
+                  <div>
+                    <dt>Senha provisória</dt>
+                    <dd>
+                      <code>{r.temporary_password}</code>
+                    </dd>
+                  </div>
+                </dl>
+                <p>
+                  Na primeira entrada o portal pede para trocar a senha. Depois
+                  disso, esta folha não serve para mais nada — rasgue.
+                </p>
+              </section>
+            ))}
+        </div>
+      )}
+
       {mostrado && (
         <div className="import-report">
           <p className="muted">
@@ -328,10 +375,22 @@ export function ImportPeople() {
               : `Prévia: ${previa!.created} entrariam, ${previa!.completed} teriam a ficha completada, ${previa!.skipped} ficariam como estão, ${previa!.errors} com erro. Nada foi gravado ainda.`}
           </p>
           {relatorio && relatorio.created > 0 && (
-            <p className="import-warning">
-              As senhas abaixo aparecem <strong>uma única vez</strong>. Entregue
-              a cada pessoa — na primeira entrada o portal obriga a trocar.
-            </p>
+            <>
+              <p className="import-warning">
+                As senhas abaixo aparecem <strong>uma única vez</strong>. Entregue
+                a cada pessoa — na primeira entrada o portal obriga a trocar.
+              </p>
+              {/*
+                Copiar senha por senha para entregar a 30 pessoas era o
+                gargalo de um cadastro que leva um minuto. Sai uma ficha por
+                pessoa, para recortar e entregar. [B2-1-E]
+              */}
+              <div className="form-actions">
+                <Button type="button" variant="secondary" onClick={imprimirFichas}>
+                  Imprimir as fichas de primeiro acesso
+                </Button>
+              </div>
+            </>
           )}
           <div className="data-table-wrap">
             <table className="data-table">
