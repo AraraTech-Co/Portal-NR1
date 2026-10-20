@@ -325,3 +325,94 @@ export const switchAccount = (accountId: string) =>
       body: JSON.stringify({ account_id: accountId }),
     },
   );
+
+/*
+  As telas que só listavam ganham porta de entrada: o servidor sempre
+  aceitou criar, e faltava a tela. [OB-4] [CB-14] [CB-45]
+*/
+
+/** Pesquisa de clima: nasce como rascunho, com as perguntas. [OB-4] */
+export const createClimateSurvey = (input: {
+  title: string;
+  description?: string;
+  is_anonymous?: boolean;
+  questions?: Array<{ order: number; prompt: string }>;
+}) =>
+  request<{ survey: { id: string } }>("/api/climate-surveys", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+
+/** Convocação para reunião, CIPA, treinamento. [OB-4] */
+export const createSummon = (input: {
+  title: string;
+  description?: string;
+  scheduled_for: string;
+  location?: string;
+  invitee_ids?: string[];
+}) =>
+  request<{ summon: { id: string } }>("/api/summons", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+
+/** Passo do roteiro de integração de quem chega. [OB-4] */
+export const createOnboardingStep = (input: {
+  order: number;
+  title: string;
+  description?: string;
+}) =>
+  request<{ step: { id: string } }>("/api/onboarding-steps", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+
+/** Indicação de candidato por quem já trabalha aqui. [OB-4] */
+export const createReferral = (input: {
+  candidate_name: string;
+  position: string;
+  email?: string;
+  phone?: string;
+  linkedin?: string;
+  note?: string;
+}) =>
+  request<{ referral: { id: string } }>("/api/referrals", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+
+/** Ideia de quem faz o trabalho. [OB-4] */
+export const createIdea = (input: { title: string; description: string }) =>
+  request<{ idea: { id: string } }>("/api/ideas", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+
+/** Registro de participação dos trabalhadores — NR-1 1.5.3.2. [CB-45] */
+export const createParticipation = (input: {
+  type: string;
+  subject: string;
+  occurred_at: string;
+  description?: string;
+  establishment_id?: string;
+  participants_count?: number;
+}) =>
+  request<{ participation: { id: string } }>("/api/participations", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+
+/** Avaliação ergonômica aberta pelo SST, sem partir de uma queixa. [CB-45] */
+export const createAep = (input: {
+  establishment_id: string;
+  scope_description: string;
+  method?: string;
+  sector_id?: string;
+  method_rationale?: string;
+  anonymity_measures?: string;
+  workers_consulted?: number;
+}) =>
+  request<{ aep: { id: string } }>("/api/aeps", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
