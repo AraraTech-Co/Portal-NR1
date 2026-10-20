@@ -349,9 +349,16 @@ class AuthController {
       expiresAt: tokenExpiresAt(),
     });
 
+    /*
+      A lista vai junto: a troca de conta saiu de dentro de Conta e usuários
+      e agora acontece em qualquer tela, pelo rodapé do menu. [S1-K]
+    */
+    const accounts = await listAccessibleAccounts(access.user.id);
+
     res.json({
       token: rawToken,
       user: sessionUserFromAccess(access),
+      accounts,
     });
   }
 

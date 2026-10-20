@@ -20,8 +20,24 @@ export type SessionUser = {
   account: { id: string; name: string };
 };
 
+/**
+ * Conta que a pessoa alcança. Vem junto com a sessão desde sempre; o portal
+ * só mostrava a lista dentro de Conta e usuários. [S1-K]
+ */
+export type AccessibleAccount = {
+  id: string;
+  name: string;
+  org_role: string | null;
+  via_master: boolean;
+  organization: { id: string; name: string };
+};
+
 export async function login(loginId: string, password: string) {
-  const data = await request<{ token: string; user: SessionUser }>(
+  const data = await request<{
+    token: string;
+    user: SessionUser;
+    accounts: AccessibleAccount[];
+  }>(
     "/api/auth",
     {
       method: "POST",
@@ -46,7 +62,21 @@ export async function changePassword(
 }
 
 export async function fetchSession() {
-  return request<{ user: SessionUser; accounts: unknown[] }>("/api/auth");
+  return request<{ user: SessionUser; accounts: AccessibleAccount[] }>(
+    "/api/auth",
+  );
+}
+
+/** Trocar a conta ativa sem sair do portal. [S1-K] */
+export async function switchAccount(accountId: string) {
+  return request<{
+    token: string;
+    user: SessionUser;
+    accounts: AccessibleAccount[];
+  }>("/api/auth/switch", {
+    method: "POST",
+    body: JSON.stringify({ account_id: accountId }),
+  });
 }
 
 export async function logout() {

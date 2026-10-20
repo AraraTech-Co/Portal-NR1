@@ -8,27 +8,35 @@ import {
   useState,
 } from "react";
 import {
+  AccessibleAccount,
   clearToken,
   fetchSession,
   getToken,
   login as apiLogin,
   logout as apiLogout,
+  setToken,
   SessionUser,
+  switchAccount as apiSwitchAccount,
 } from "@/api/auth";
 import { TOKEN_KEY } from "@/api/token";
 
 type AuthState = {
   user: SessionUser | null;
+  /** Contas que a pessoa alcança — a sessão já as trazia. [S1-K] */
+  accounts: AccessibleAccount[];
   booting: boolean;
   login: (loginId: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   setUser: (user: SessionUser | null) => void;
+  /** Trocar a conta ativa de qualquer tela. [S1-K] */
+  switchAccount: (accountId: string) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<SessionUser | null>(null);
+  const [accounts, setAccounts] = useState<AccessibleAccount[]>([]);
   const [booting, setBooting] = useState(true);
 
   useEffect(() => {
@@ -38,7 +46,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     fetchSession()
-      .then((data) => setUser(data.user))
+      .then((data) => {
+        setUser(data.user);
+        setAccounts(data.accounts ?? []);
+      })
       .catch(() => clearToken())
       .finally(() => setBooting(false));
   }, []);
@@ -55,11 +66,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!e.newValue) {
         // Saiu em outra aba: esta também sai.
         setUser(null);
+        setAccounts([]);
         return;
       }
       fetchSession()
-        .then((data) => setUser(data.user))
-        .catch(() => setUser(null));
+        .then((data) => {
+          setUser(data.user);
+          setAccounts(data.accounts ?? []);
+        })
+        .catch(() => {
+          setUser(null);
+          setAccounts([]);
+        });
     }
     window.addEventListener("storage", trocou);
     return () => window.removeEventListener("storage", trocou);
@@ -68,16 +86,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (loginId: string, password: string) => {
     const data = await apiLogin(loginId, password);
     setUser(data.user);
+    setAccounts(data.accounts ?? []);
   }, []);
 
   const logout = useCallback(async () => {
     await apiLogout();
     setUser(null);
+    setAccounts([]);
+  }, []);
+
+  const switchAccount = useCallback(async (accountId: string) => {
+    const data = await apiSwitchAccount(accountId);
+    setToken(data.token);
+    setUser(data.user);
+    setAccounts(data.accounts ?? []);
   }, []);
 
   const value = useMemo(
-    () => ({ user, booting, login, logout, setUser }),
-    [user, booting, login, logout],
+    () => ({ user, accounts, booting, login, logout, setUser, switchAccount }),
+    [user, accounts, booting, login, logout, switchAccount],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -10,6 +10,18 @@ export type NavGroup = {
   items: NavItem[];
 };
 
+/**
+ * Nome da tela de um módulo — a primeira que o menu mostra para ele. O
+ * Início precisava disso para dizer do que o papel cuida. [S2-I]
+ */
+export function moduleEntry(moduleId: string): NavItem | undefined {
+  for (const group of NAV_GROUPS) {
+    const found = group.items.find((item) => item.moduleId === moduleId);
+    if (found) return found;
+  }
+  return undefined;
+}
+
 export const NAV_GROUPS: NavGroup[] = [
   {
     title: "Riscos e segurança",

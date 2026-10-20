@@ -20,6 +20,8 @@ export type JobRole = {
   sectorId: string;
   name: string;
   description: string | null;
+  /** Lugar na lista do setor, escolhido pela empresa. [S1-I] */
+  position?: number;
   /** Para não casar função pelo nome na empresa inteira. [CB-6] */
   sector_name?: string;
   establishment?: { id: string; name: string };
@@ -64,6 +66,14 @@ export async function createSector(establishmentId: string, name: string) {
 export async function fetchJobRoles(sectorId?: string) {
   const qs = sectorId ? `?sector_id=${encodeURIComponent(sectorId)}` : "";
   return request<{ job_roles: JobRole[] }>(`/api/job-roles${qs}`);
+}
+
+/** Trocar a função de lugar na lista do setor. [S1-I] */
+export async function moveJobRole(id: string, para: "cima" | "baixo") {
+  return request<{ job_role_ids: string[] }>(`/api/job-roles/${id}/ordem`, {
+    method: "PATCH",
+    body: JSON.stringify({ para }),
+  });
 }
 
 export async function createJobRole(sectorId: string, name: string) {

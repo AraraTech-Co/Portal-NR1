@@ -1,0 +1,113 @@
+/*
+  Quem eu sou, em que conta estou, e como sair dela. Vive no rodapé do menu,
+  que é escuro: as cores saem do próprio texto, não dos tokens claros. [S1-K]
+*/
+.contexto {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0 0.5rem;
+}
+
+.contexto .muted {
+  color: color-mix(in oklch, currentColor 55%, transparent);
+}
+
+.contexto-quem {
+  display: grid;
+  gap: 0.1rem;
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.3;
+}
+
+.contexto-onde {
+  display: grid;
+  gap: 0.05rem;
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.3;
+}
+
+.contexto-rotulo {
+  font-size: 0.62rem;
+  color: color-mix(in oklch, currentColor 50%, transparent);
+}
+
+.contexto-conta {
+  font-weight: 600;
+}
+
+.contexto-empresa {
+  font-size: 0.72rem;
+}
+
+.contexto-trocar {
+  justify-self: start;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-size: 0.74rem;
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.contexto-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.contexto-lista button {
+  width: 100%;
+  display: grid;
+  gap: 0.05rem;
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid color-mix(in oklch, currentColor 30%, transparent);
+  border-radius: var(--radius);
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 0.76rem;
+  cursor: pointer;
+}
+
+.contexto-lista button:hover:not(:disabled) {
+  background: color-mix(in oklch, currentColor 12%, transparent);
+}
+
+.contexto-lista button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.contexto-erro {
+  margin: 0;
+  font-size: 0.74rem;
+  color: color-mix(in oklch, var(--destructive) 45%, white);
+}
+
+/*
+  No telefone o menu fica fechado, então a conta ativa também aparece na
+  faixa de cima. [S1-K]
+*/
+.app-topbar-conta {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  .app-topbar-conta {
+    display: block;
+    min-width: 0;
+    font-size: 0.75rem;
+    color: var(--muted-foreground);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}

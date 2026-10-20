@@ -175,3 +175,23 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
 }
+
+/* A função ganhou ↑ e ↓: nome à esquerda, ordem à direita. [S1-I] */
+.op-job-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.op-job-order {
+  display: inline-flex;
+  gap: 0.2rem;
+  flex-shrink: 0;
+}
+
+.op-job-order .btn {
+  min-width: 1.9rem;
+  padding-inline: 0.4rem;
+  line-height: 1;
+}

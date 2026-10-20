@@ -10,12 +10,6 @@ import {
   type InviteLink,
   type JoinRequest,
 } from "@/api/invites";
-import {
-  fetchAccessibleAccounts,
-  switchAccount,
-  type AccessibleAccount,
-} from "@/api/modules";
-import { setToken } from "@/api/token";
 import { useAuth } from "@/auth/AuthContext";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
@@ -50,8 +44,12 @@ function menorPapelNaEmpresa(papeis: string[]): string {
 }
 
 export function AccountPage() {
-  const { user, setUser } = useAuth();
-  const [accounts, setAccounts] = useState<AccessibleAccount[]>([]);
+  /*
+    As contas acessíveis vêm da sessão, não de uma busca desta tela: a troca
+    também acontece pelo rodapé do menu, e as duas precisam concordar.
+    [S1-K]
+  */
+  const { user, accounts, switchAccount } = useAuth();
   const [links, setLinks] = useState<InviteLink[]>([]);
   const [requests, setRequests] = useState<JoinRequest[]>([]);
   const [assignable, setAssignable] = useState<AssignableRoles>({
@@ -88,9 +86,6 @@ export function AccountPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
-    const acc = await fetchAccessibleAccounts();
-    setAccounts(acc);
-
     let manageOk = false;
     let decideOk = false;
     try {
@@ -149,9 +144,7 @@ export function AccountPage() {
     if (accountId === user?.account.id) return;
     setSwitching(accountId);
     try {
-      const data = await switchAccount(accountId);
-      setToken(data.token);
-      setUser(data.user);
+      await switchAccount(accountId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao trocar conta");
     } finally {

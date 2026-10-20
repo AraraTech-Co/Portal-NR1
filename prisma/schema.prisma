@@ -438,6 +438,8 @@ model JobRole {
   sectorId       String
   name           String
   description    String?
+  /// Ordem escolhida pela empresa dentro do setor, para juntar as parecidas. [S1-I]
+  position       Int       @default(0)
   archivedAt     DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -451,6 +453,7 @@ model JobRole {
 
   @@index([organizationId, archivedAt])
   @@index([sectorId])
+  @@index([sectorId, position])
 }
 
 model Activity {
