@@ -1,7 +1,7 @@
 import { useResourceList } from "@/hooks/useResourceList";
 import { fetchParticipations } from "@/api/modules";
 import { ListShell } from "@/components/ListShell";
-import { formatDay } from "@/lib/labels";
+import { formatDay, PARTICIPATION_TYPE_LABEL } from "@/lib/labels";
 
 export function ParticipationsPage() {
   const { rows, loading, error } = useResourceList(fetchParticipations);
@@ -31,7 +31,7 @@ export function ParticipationsPage() {
           <tbody>
             {rows.map((r) => (
               <tr key={r.id}>
-                  <td>{r.type}</td>
+                  <td>{PARTICIPATION_TYPE_LABEL[r.type] ?? r.type}</td>
                   <td><strong>{r.subject}</strong></td>
                   <td>{r.establishment?.name ?? "—"}</td>
                   <td>{formatDay(r.occurredAt)}</td>

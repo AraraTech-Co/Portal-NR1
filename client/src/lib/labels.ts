@@ -14,6 +14,16 @@ export const ACTION_PRIORITY_LABEL: Record<string, string> = {
   CRITICAL: "Crítica",
 };
 
+/** De onde veio a ação. "MANUAL" aparecia cru na coluna Origem. [B2-1-C] */
+export const ACTION_SOURCE_LABEL: Record<string, string> = {
+  RISK: "Risco",
+  CHANGE_EVENT: "Mudança na operação",
+  OCCURRENCE: "Ocorrência",
+  AUDIT: "Auditoria",
+  LEGAL_REQUIREMENT: "Exigência legal",
+  MANUAL: "Aberta à mão",
+};
+
 export const RISK_LEVEL_LABEL: Record<string, string> = {
   TRIVIAL: "Trivial",
   TOLERABLE: "Tolerável",
@@ -140,6 +150,45 @@ function calendarDay(value: string | Date | null | undefined): CalendarDay | nul
     ? { year: d.getUTCFullYear(), month: d.getUTCMonth(), day: d.getUTCDate() }
     : { year: d.getFullYear(), month: d.getMonth(), day: d.getDate() };
 }
+
+/** Como a avaliação ergonômica foi feita. Saía "OBSERVATION". [B2-1-C] */
+export const AEP_METHOD_LABEL: Record<string, string> = {
+  OBSERVATION: "Observação do trabalho",
+  INTERVIEW: "Entrevista",
+  QUESTIONNAIRE: "Questionário",
+  WORKSHOP: "Oficina",
+  FOCUS_GROUP: "Grupo focal",
+  COMBINED: "Métodos combinados",
+};
+
+export const AEP_STATUS_LABEL: Record<string, string> = {
+  DRAFT: "Em andamento",
+  CONCLUDED: "Concluída",
+};
+
+/** Pesquisa de clima: saía "OPEN" na coluna de situação. [B2-1-C] */
+export const SURVEY_STATUS_LABEL: Record<string, string> = {
+  DRAFT: "Rascunho",
+  OPEN: "Aberta para respostas",
+  CLOSED: "Encerrada",
+};
+
+/** Tipo do registro de participação. Saía "MEETING" na tela. [B2-1-C] */
+export const PARTICIPATION_TYPE_LABEL: Record<string, string> = {
+  CONSULTATION: "Consulta aos trabalhadores",
+  CIPA_MANIFESTATION: "Manifestação da CIPA",
+  MEETING: "Reunião",
+  RISK_COMMUNICATION: "Comunicação de risco",
+  BASIC_TRAINING: "Treinamento básico",
+  WORKSHOP: "Oficina",
+};
+
+/** O que a função exige. Saía "EXAM" na tela de Saúde. [B2-1-C] */
+export const REQUIREMENT_KIND_LABEL: Record<string, string> = {
+  CERTIFICATE: "Certificado",
+  EXAM: "Exame",
+  TRAINING: "Treinamento",
+};
 
 export const ENROLLMENT_STATUS_LABEL: Record<string, string> = {
   PENDING: "Inscrito",

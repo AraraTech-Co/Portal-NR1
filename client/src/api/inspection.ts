@@ -134,4 +134,20 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   "membership.role_changed": "Papel de uma pessoa alterado",
   "user.password_reset": "Senha redefinida",
   "consulta.view": "Consulta abriu uma tela",
+  /*
+    Faltavam rótulo: o convite, a planilha e o que entrou depois. O Histórico
+    é o que se mostra ao auditor, e ali saía "ACCOUNT_INVITE_LINK_CREATED".
+    [B2-1-C] [B2-4-E]
+  */
+  ACCOUNT_INVITE_LINK_CREATED: "Link de convite criado",
+  ACCOUNT_INVITE_LINK_DEACTIVATED: "Link de convite desativado",
+  ACCOUNT_JOIN_APPROVED: "Pedido de entrada aprovado",
+  ACCOUNT_JOIN_REJECTED: "Pedido de entrada recusado",
+  "aep.hazard.create": "Perigo levado da avaliação ergonômica ao inventário",
+  "ergonomic_complaint.create": "Queixa ergonômica registrada",
+  "ergonomic_complaint.evaluate": "Queixa ergonômica virou avaliação",
+  "ergonomic_complaint.close": "Queixa ergonômica respondida",
+  "ethics_committee.set": "Comitê de ética alterado",
+  "ethics_report.cited": "Pessoa citada numa denúncia",
+  "training_session.attendance": "Presença em turma registrada",
 };

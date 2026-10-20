@@ -68,9 +68,14 @@
   background: var(--muted);
 }
 
+/*
+  O detalhe aberto tinha a mesma cor do cartão e não se via onde começava
+  nem onde terminava. [B2-4-E]
+*/
 .inventory-expand > td {
   padding: 0 !important;
-  background: var(--card);
+  background: var(--muted);
+  box-shadow: inset 3px 0 0 var(--primary);
 }
 
 .risk-history {
@@ -127,6 +132,25 @@
   padding: 0.5rem 0.65rem;
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  background: var(--card);
+}
+
+/* Cada porquê da avaliação com o seu nome. [B2-2-B] */
+.risk-history-why {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.4rem 0 0;
+}
+
+.risk-history-why dt {
+  font-size: 0.8rem;
+  font-weight: 650;
+  color: var(--muted-foreground);
+}
+
+.risk-history-why dd {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .risk-history-list li.is-past {

@@ -1897,7 +1897,8 @@ model Training {
   id             String    @id @default(uuid())
   organizationId String
   title          String
-  category       String     @default("GERAL")
+  /// Agrupa os treinamentos na tela; aparece como está escrito aqui. [B2-1-C]
+  category       String     @default("Geral")
   kind           TrainingKind @default(ONLINE)
   summary        String?
   durationMinutes Int       @default(30)

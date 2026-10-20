@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
 import { fetchRiskHistory, type RiskHistory } from "@/api/inventory";
+import { AUDIT_ACTION_LABEL } from "@/api/inspection";
 import { Chip } from "@/components/Chip";
 import {
+  ACTION_PRIORITY_LABEL,
   ACTION_STATUS_LABEL,
   CONTROL_STATUS_LABEL,
   CONTROL_TYPE_LABEL,
   formatDay,
+  HAZARD_CATEGORY_LABEL,
+  HAZARD_ORIGIN_LABEL,
   RISK_LEVEL_LABEL,
 } from "@/lib/labels";
 
@@ -13,16 +17,15 @@ function formatDateTime(value: string): string {
   return new Date(value).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
 
-/** Nome do que aconteceu, a partir da ação gravada na trilha. */
+/**
+ * Nome do que aconteceu, a partir da ação gravada na trilha.
+ *
+ * Só as mudanças de Operação tinham nome em português; o resto saía como
+ * "assessment.validate". A lista é a mesma do Histórico do painel, com as
+ * poucas que só aparecem aqui. [B2-4-E] [B2-1-C]
+ */
 const CHANGE_LABEL: Record<string, string> = {
-  "establishment.update": "Estabelecimento alterado",
-  "establishment.archive": "Estabelecimento arquivado",
-  "sector.update": "Setor alterado",
-  "sector.archive": "Setor arquivado",
-  "job_role.update": "Função alterada",
-  "job_role.archive": "Função arquivada",
-  "activity.update": "Atividade alterada",
-  "activity.archive": "Atividade arquivada",
+  ...AUDIT_ACTION_LABEL,
   "change_event.create": "Mudança registrada na operação",
 };
 
@@ -34,7 +37,55 @@ const FIELD_LABEL: Record<string, string> = {
   taxId: "CNPJ",
   archivedAt: "arquivado em",
   job_role_ids: "funções",
+  level: "nível",
+  severity: "severidade",
+  probability: "probabilidade",
+  priority: "prioridade",
+  category: "categoria",
+  origin: "origem",
+  status: "situação",
+  title: "título",
+  dueDate: "prazo",
+  scopeDescription: "o que foi avaliado",
+  methodology: "metodologia",
+  implementedAt: "implantada em",
+  validatedAt: "validada em",
+  type: "tipo",
 };
+
+/**
+ * O valor como gente lê.
+ *
+ * A trilha guarda o código ("SUBSTANTIAL", "HIGH", "ACCIDENT"), a data em
+ * formato de sistema e o identificador interno de pessoas e atividades.
+ * Nada disso se lê numa fiscalização. [B2-4-E]
+ *
+ * Os códigos são procurados em todas as listas de rótulo porque a trilha não
+ * diz de que entidade é o campo; na prática eles não se repetem entre
+ * listas, e quando se repetem querem dizer a mesma coisa (VALIDATED).
+ */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}(T|$)/;
+
+function humanValue(raw: unknown): string {
+  if (raw == null || raw === "") return "vazio";
+  if (Array.isArray(raw)) return raw.length === 0 ? "nenhuma" : `${raw.length}`;
+  const texto = String(raw);
+  if (UUID.test(texto)) return "outro registro";
+  if (ISO_DATE.test(texto)) return formatDay(texto);
+  for (const mapa of [
+    RISK_LEVEL_LABEL,
+    ACTION_STATUS_LABEL,
+    ACTION_PRIORITY_LABEL,
+    HAZARD_CATEGORY_LABEL,
+    HAZARD_ORIGIN_LABEL,
+    CONTROL_TYPE_LABEL,
+    CONTROL_STATUS_LABEL,
+  ]) {
+    if (mapa[texto]) return mapa[texto];
+  }
+  return texto;
+}
 
 function describeChange(before: unknown, after: unknown): string[] {
   const b = (before ?? {}) as Record<string, unknown>;
@@ -42,10 +93,16 @@ function describeChange(before: unknown, after: unknown): string[] {
   const keys = [...new Set([...Object.keys(b), ...Object.keys(a)])];
   return keys
     .filter((k) => JSON.stringify(b[k]) !== JSON.stringify(a[k]))
+    /*
+      Campo que guarda o identificador de outro registro não diz nada a quem
+      lê: "activityId: 7f3c…" era ruído, e "activityId: outro registro"
+      continua sendo. A atividade já aparece no cabeçalho do risco. [B2-4-E]
+    */
+    .filter((k) => !/Id$/.test(k))
     .map((k) => {
       const label = FIELD_LABEL[k] ?? k;
-      const from = b[k] == null || b[k] === "" ? "vazio" : String(b[k]);
-      const to = a[k] == null || a[k] === "" ? "vazio" : String(a[k]);
+      const from = humanValue(b[k]);
+      const to = humanValue(a[k]);
       return before === null || before === undefined ? `${label}: ${to}` : `${label}: ${from} → ${to}`;
     });
 }
@@ -150,10 +207,32 @@ export function RiskHistoryPanel({ riskId }: { riskId: string }) {
                     : " · ainda não validado"}
                   {a.expiresAt ? ` · revisar até ${formatDay(a.expiresAt)}` : ""}
                 </p>
+                {/*
+                  Os três porquês saíam unidos por "·", sem nome: quem lia
+                  tinha de deduzir qual era qual — e, se um faltasse, a ordem
+                  deixava de dizer. [B2-2-B]
+                */}
                 {(a.severityReason || a.probabilityReason || a.controlsConsidered) && (
-                  <p className="muted">
-                    {[a.severityReason, a.probabilityReason, a.controlsConsidered].filter(Boolean).join(" · ")}
-                  </p>
+                  <dl className="risk-history-why">
+                    {a.severityReason && (
+                      <div>
+                        <dt>Por que esta severidade</dt>
+                        <dd>{a.severityReason}</dd>
+                      </div>
+                    )}
+                    {a.probabilityReason && (
+                      <div>
+                        <dt>Por que esta probabilidade</dt>
+                        <dd>{a.probabilityReason}</dd>
+                      </div>
+                    )}
+                    {a.controlsConsidered && (
+                      <div>
+                        <dt>Medidas consideradas na avaliação</dt>
+                        <dd>{a.controlsConsidered}</dd>
+                      </div>
+                    )}
+                  </dl>
                 )}
               </li>
             ))}
@@ -206,7 +285,15 @@ export function RiskHistoryPanel({ riskId }: { riskId: string }) {
       </section>
 
       <section>
-        <h4>Mudanças na operação</h4>
+        {/*
+          A lista junta o que aconteceu com o risco (perigo, avaliação,
+          validação, medida, ação) e o que mudou na operação. O título
+          anterior prometia só a segunda metade. [B2-4-E]
+        */}
+        <h4>Tudo o que aconteceu com este risco</h4>
+        <p className="muted">
+          Na ordem em que foi gravado, com quem fez e quando.
+        </p>
         {changes.length === 0 ? (
           <p className="muted">Nada registrado.</p>
         ) : (

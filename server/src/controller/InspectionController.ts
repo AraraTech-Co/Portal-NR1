@@ -6,6 +6,10 @@ import { REQUIRED_PGR_DOCUMENTS } from "../helper/compliance";
 import { formatCalendarDay } from "../helper/calendar-day";
 import { canSeeAllInModule, isReadOnlyRole } from "../helper/module-access";
 import type { AuthRequest } from "../types/auth";
+import {
+  ACTION_STATUS_LABEL,
+  PARTICIPATION_TYPE_LABEL,
+} from "../helper/rotulos";
 
 /**
  * Quem vê o painel nome por nome: quem responde pelo PGR e a fiscalização.
@@ -510,7 +514,7 @@ class InspectionController {
           detail:
             problemas.length > 0
               ? problemas.join(" · ")
-              : `${a.status} · ${a._count.evidences} evidência(s)`,
+              : `${ACTION_STATUS_LABEL[a.status]} · ${a._count.evidences} evidência(s)`,
           who: a.assignee?.name ?? `aberta por ${a.createdBy.name}`,
           when: quando(a.dueDate),
           link: "/acoes",
@@ -639,7 +643,7 @@ class InspectionController {
           participacoes.slice(0, 20).map((p) => ({
             ok: true,
             label: p.subject,
-            detail: `${p.type} · ${p._count.evidences} evidência(s)`,
+            detail: `${PARTICIPATION_TYPE_LABEL[p.type]} · ${p._count.evidences} evidência(s)`,
             who: p.recordedBy.name,
             when: quando(p.occurredAt),
             link: "/participacao",

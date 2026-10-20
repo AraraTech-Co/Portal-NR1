@@ -2,7 +2,7 @@ import { useResourceList } from "@/hooks/useResourceList";
 import { fetchAeps } from "@/api/modules";
 import { ListShell } from "@/components/ListShell";
 import { Chip } from "@/components/Chip";
-import { formatDay } from "@/lib/labels";
+import { AEP_METHOD_LABEL, AEP_STATUS_LABEL, formatDay } from "@/lib/labels";
 import { ErgonomicComplaints } from "./ErgonomicComplaints";
 
 export function AepPage() {
@@ -38,8 +38,12 @@ export function AepPage() {
               <tr key={r.id}>
                   <td>{r.establishment.name}</td>
                   <td>{r.sector?.name ?? "—"}</td>
-                  <td>{r.method}</td>
-                  <td><Chip tone={r.status === "CONCLUDED" ? "success" : "warning"}>{r.status}</Chip></td>
+                  <td>{AEP_METHOD_LABEL[r.method] ?? r.method}</td>
+                  <td>
+                    <Chip tone={r.status === "CONCLUDED" ? "success" : "warning"}>
+                      {AEP_STATUS_LABEL[r.status] ?? r.status}
+                    </Chip>
+                  </td>
                   <td>{formatDay(r.conductedAt)}</td>
                   <td>{r._count.hazards}</td>
                   <td>{r.conductedBy.name}</td>

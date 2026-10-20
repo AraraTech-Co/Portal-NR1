@@ -247,10 +247,11 @@ export function AccountPage() {
                 <tr>
                   <th>Papel</th>
                   <td>
-                    <Chip>{user.role}</Chip>
+                    {/* Papel em palavra, não em código. [B2-1-C] */}
+                    <Chip>{ORG_ROLE_LABEL[user.role] ?? user.role}</Chip>
                     {user.is_master ? (
                       <span style={{ marginLeft: "0.4rem" }}>
-                        <Chip tone="info">MASTER</Chip>
+                        <Chip tone="info">Alcança todas as contas</Chip>
                       </span>
                     ) : null}
                   </td>
@@ -300,7 +301,7 @@ export function AccountPage() {
                       <td>{a.organization.name}</td>
                       <td className="muted">
                         {a.via_master
-                          ? "Via MASTER"
+                          ? "Por ser master da empresa"
                           : (ORG_ROLE_LABEL[a.org_role ?? ""] ?? a.org_role ?? "—")}
                       </td>
                       <td>

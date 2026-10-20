@@ -25,6 +25,8 @@ export type InventoryItem = {
   source: string | null;
   consequences: string | null;
   exposed_group: string | null;
+  /** Quantas pessoas ficam expostas a este perigo. [S2-H] */
+  exposed_workers_count: number | null;
   category: string | null;
   activity: string;
   sector: string;

@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
 import {
   ACTION_PRIORITY_LABEL,
+  ACTION_SOURCE_LABEL,
   ACTION_STATUS_LABEL,
   formatDay,
   isOverdue,
@@ -311,7 +312,7 @@ export function ActionsPage() {
                         ? "Ocorrência"
                         : a.riskId
                           ? "Risco"
-                          : a.sourceType}
+                          : (ACTION_SOURCE_LABEL[a.sourceType] ?? a.sourceType)}
                     </td>
                   </tr>
                   {open && (
