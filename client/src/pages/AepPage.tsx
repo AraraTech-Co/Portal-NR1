@@ -1,5 +1,9 @@
+import { useEffect, useState } from "react";
 import { useResourceList } from "@/hooks/useResourceList";
-import { fetchAeps } from "@/api/modules";
+import { createAep, fetchAeps } from "@/api/modules";
+import { fetchEstablishments, type Establishment } from "@/api/operation";
+import { NewRecordSection } from "@/components/NewRecordSection";
+import { useModuleAccess } from "@/lib/module-access";
 import { ListShell } from "@/components/ListShell";
 import { Chip } from "@/components/Chip";
 import { AEP_METHOD_LABEL, AEP_STATUS_LABEL, formatDay } from "@/lib/labels";
@@ -7,6 +11,26 @@ import { ErgonomicComplaints } from "./ErgonomicComplaints";
 
 export function AepPage() {
   const { rows, loading, error, reload } = useResourceList(fetchAeps);
+  /* Abrir avaliação é de quem responde tecnicamente. [CB-45] [P1] */
+  const { canManage } = useModuleAccess("aep");
+  const [unidade, setUnidade] = useState("");
+  const [escopo, setEscopo] = useState("");
+  const [metodo, setMetodo] = useState("OBSERVATION");
+  const [porque, setPorque] = useState("");
+  const [anonimato, setAnonimato] = useState("");
+  const [ouvidos, setOuvidos] = useState("");
+  const [unidades, setUnidades] = useState<Establishment[]>([]);
+
+  useEffect(() => {
+    if (!canManage) return;
+    fetchEstablishments()
+      .then((d) => {
+        const ativas = d.establishments.filter((u) => !u.archivedAt);
+        setUnidades(ativas);
+        setUnidade((atual) => atual || ativas[0]?.id || "");
+      })
+      .catch(() => setUnidades([]));
+  }, [canManage]);
 
   return (
     <ListShell
@@ -18,7 +42,95 @@ export function AepPage() {
       emptyTitle="Nenhuma AEP registrada"
       emptyDescription="Quando houver avaliações ergonômicas, elas aparecem aqui."
       /* Quem trabalha diz onde dói; o SST decide o que vira avaliação. [P1] */
-      before={<ErgonomicComplaints onEvaluated={reload} />}
+      before={
+        <>
+          <ErgonomicComplaints onEvaluated={reload} />
+          <NewRecordSection
+            canWrite={canManage}
+            openLabel="Nova avaliação"
+            title="Nova avaliação ergonômica"
+            description="Nasce em andamento: os perigos e as constatações entram depois. Para avaliar a partir de uma queixa, use o botão da própria queixa."
+            submitLabel="Abrir avaliação"
+            disabled={!unidade || !escopo.trim()}
+            onSubmit={async () => {
+              await createAep({
+                establishment_id: unidade,
+                scope_description: escopo.trim(),
+                method: metodo,
+                method_rationale: porque.trim() || undefined,
+                anonymity_measures: anonimato.trim() || undefined,
+                workers_consulted: ouvidos ? Number(ouvidos) : undefined,
+              });
+              setEscopo("");
+              setPorque("");
+              setAnonimato("");
+              setOuvidos("");
+              await reload();
+              return "Avaliação aberta.";
+            }}
+          >
+            <div className="form-grid cols-2">
+              <label className="form-field">
+                Unidade
+                <select value={unidade} onChange={(e) => setUnidade(e.target.value)} required>
+                  <option value="">Escolha a unidade</option>
+                  {unidades.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="form-field">
+                Como vai ser feita
+                <select value={metodo} onChange={(e) => setMetodo(e.target.value)}>
+                  {Object.entries(AEP_METHOD_LABEL).map(([v, r]) => (
+                    <option key={v} value={v}>
+                      {r}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <label className="form-field">
+              O que será avaliado
+              <input
+                value={escopo}
+                onChange={(e) => setEscopo(e.target.value)}
+                placeholder="Atividade, posto, função, setor ou grupo"
+                required
+              />
+            </label>
+            <label className="form-field">
+              Por que este método (opcional)
+              <textarea value={porque} onChange={(e) => setPorque(e.target.value)} />
+              <span className="form-hint">
+                A norma não impõe ferramenta, mas cobra coerência com o que
+                está sendo avaliado.
+              </span>
+            </label>
+            {metodo === "QUESTIONNAIRE" && (
+              <label className="form-field">
+                Como o anonimato das respostas foi garantido
+                <textarea
+                  value={anonimato}
+                  onChange={(e) => setAnonimato(e.target.value)}
+                  required
+                />
+              </label>
+            )}
+            <label className="form-field">
+              Quantos trabalhadores foram ouvidos (opcional)
+              <input
+                type="number"
+                min={0}
+                value={ouvidos}
+                onChange={(e) => setOuvidos(e.target.value)}
+              />
+            </label>
+          </NewRecordSection>
+        </>
+      }
     >
       <div className="data-table-wrap">
         <table className="data-table">

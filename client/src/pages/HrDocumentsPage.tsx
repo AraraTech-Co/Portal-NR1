@@ -2,7 +2,7 @@ import { useResourceList } from "@/hooks/useResourceList";
 import { fetchHrDocuments } from "@/api/modules";
 import { ListShell } from "@/components/ListShell";
 import { Chip } from "@/components/Chip";
-import { formatDay } from "@/lib/labels";
+import { formatDay, HR_DOCUMENT_KIND_LABEL } from "@/lib/labels";
 
 export function HrDocumentsPage() {
   const { rows, loading, error } = useResourceList(fetchHrDocuments);
@@ -34,7 +34,7 @@ export function HrDocumentsPage() {
             {rows.map((r) => (
               <tr key={r.id}>
                   <td><strong>{r.title}</strong></td>
-                  <td>{r.kind}</td>
+                  <td>{HR_DOCUMENT_KIND_LABEL[r.kind] ?? r.kind}</td>
                   <td>{r.target?.name ?? "Todos"}</td>
                   <td>{r.publishedBy.name}</td>
                   <td>{r._count.acks}</td>

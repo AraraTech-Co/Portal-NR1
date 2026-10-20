@@ -1,11 +1,22 @@
+import { useState } from "react";
 import { useResourceList } from "@/hooks/useResourceList";
-import { fetchClimateSurveys } from "@/api/modules";
+import { createClimateSurvey, fetchClimateSurveys } from "@/api/modules";
 import { ListShell } from "@/components/ListShell";
 import { Chip } from "@/components/Chip";
+import { NewRecordSection } from "@/components/NewRecordSection";
 import { formatDay, SURVEY_STATUS_LABEL } from "@/lib/labels";
+import { useModuleAccess } from "@/lib/module-access";
 
 export function ClimatePage() {
-  const { rows, loading, error } = useResourceList(fetchClimateSurveys);
+  const { rows, loading, error, reload } = useResourceList(fetchClimateSurveys);
+  /*
+    Montar pesquisa é de quem cuida do módulo; o colaborador escreve em
+    clima para RESPONDER, e o servidor já exige administração aqui.
+  */
+  const { canManage } = useModuleAccess("clima");
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [perguntas, setPerguntas] = useState("");
 
   return (
     <ListShell
@@ -16,6 +27,50 @@ export function ClimatePage() {
       empty={rows.length === 0}
       emptyTitle="Nenhuma pesquisa"
       emptyDescription="Pesquisas de clima aparecem quando publicadas."
+      before={
+        <NewRecordSection
+          canWrite={canManage}
+          openLabel="Nova pesquisa"
+          title="Nova pesquisa de clima"
+          description="Nasce como rascunho: dá para revisar antes de abrir para respostas. A resposta é anônima."
+          submitLabel="Criar rascunho"
+          disabled={!title.trim()}
+          onSubmit={async () => {
+            const questions = perguntas
+              .split("\n")
+              .map((p) => p.trim())
+              .filter(Boolean)
+              .map((prompt, i) => ({ order: i + 1, prompt }));
+            await createClimateSurvey({
+              title: title.trim(),
+              description: description.trim() || undefined,
+              questions,
+            });
+            setTitle("");
+            setDescription("");
+            setPerguntas("");
+            await reload();
+            return "Pesquisa criada como rascunho.";
+          }}
+        >
+          <label className="form-field">
+            Título
+            <input value={title} onChange={(e) => setTitle(e.target.value)} required />
+          </label>
+          <label className="form-field">
+            Para que serve (opcional)
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} />
+          </label>
+          <label className="form-field">
+            Perguntas, uma por linha
+            <textarea
+              value={perguntas}
+              onChange={(e) => setPerguntas(e.target.value)}
+              placeholder={"Como você avalia a carga de trabalho?\nVocê se sente respeitado no dia a dia?"}
+            />
+          </label>
+        </NewRecordSection>
+      }
     >
       <div className="data-table-wrap">
         <table className="data-table">

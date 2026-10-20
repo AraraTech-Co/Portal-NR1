@@ -151,6 +151,34 @@ function calendarDay(value: string | Date | null | undefined): CalendarDay | nul
     : { year: d.getFullYear(), month: d.getMonth(), day: d.getDate() };
 }
 
+/*
+  Mais três listas com código na tela, achadas ao abrir as telas que só
+  listavam — a varredura anterior não as viu porque o banco local não tinha
+  nenhum registro nelas. [B2-1-C] [OB-4]
+*/
+export const IDEA_STATUS_LABEL: Record<string, string> = {
+  NEW: "Nova",
+  IN_ANALYSIS: "Em análise",
+  IMPLEMENTED: "Implantada",
+  REJECTED: "Recusada",
+};
+
+export const REFERRAL_STATUS_LABEL: Record<string, string> = {
+  RECEIVED: "Recebida",
+  IN_PROCESS: "Em processo",
+  HIRED: "Contratado",
+  DISCARDED: "Descartada",
+};
+
+export const HR_DOCUMENT_KIND_LABEL: Record<string, string> = {
+  CONTRACT: "Contrato",
+  WARNING: "Advertência",
+  NOTICE: "Comunicado",
+  RECEIPT: "Recibo",
+  TERM: "Termo",
+  OTHER: "Outro",
+};
+
 /** Como a avaliação ergonômica foi feita. Saía "OBSERVATION". [B2-1-C] */
 export const AEP_METHOD_LABEL: Record<string, string> = {
   OBSERVATION: "Observação do trabalho",
