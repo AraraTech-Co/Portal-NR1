@@ -1,9 +1,15 @@
 import { useEffect, useState } from "react";
 import {
+  createJobRoleRequirement,
+  createOccupationalExam,
   fetchJobRoleRequirements,
   fetchOccupationalExams,
   fetchWorkerCertificates,
 } from "@/api/modules";
+import { fetchJobRoles, type JobRole } from "@/api/operation";
+import { NewRecordSection } from "@/components/NewRecordSection";
+import { PeoplePicker } from "@/components/PeoplePicker";
+import { useModuleAccess } from "@/lib/module-access";
 import { Chip } from "@/components/Chip";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
@@ -32,6 +38,30 @@ export function HealthPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
+  /*
+    O painel cobrava exigência por função e exame, e nenhum dos dois tinha
+    tela: a empresa fazia tudo o que o portal permitia e o cartão continuava
+    pendente. [B2-4-C]
+  */
+  const { canManage } = useModuleAccess("saude");
+  const [funcoes, setFuncoes] = useState<JobRole[]>([]);
+  const [recarregar, setRecarregar] = useState(0);
+  const [funcao, setFuncao] = useState("");
+  const [exigencia, setExigencia] = useState("");
+  const [tipoExigencia, setTipoExigencia] = useState("CERTIFICATE");
+  const [validade, setValidade] = useState("");
+  const [quem, setQuem] = useState("");
+  const [tipoExame, setTipoExame] = useState("PERIODIC");
+  const [feitoEm, setFeitoEm] = useState("");
+  const [proximo, setProximo] = useState("");
+  const [apto, setApto] = useState(true);
+
+  useEffect(() => {
+    if (!canManage) return;
+    fetchJobRoles()
+      .then((d) => setFuncoes(d.job_roles))
+      .catch(() => setFuncoes([]));
+  }, [canManage]);
   // Quem vê o registro de outras pessoas (RH, SST, fiscal) precisa saber de
   // quem é cada certificado e exame. [S5-K]
   const showPeople =
@@ -62,7 +92,7 @@ export function HealthPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [recarregar]);
 
   const empty =
     requirements.length === 0 &&
@@ -87,6 +117,145 @@ export function HealthPage() {
           description="Exigências, certificados e exames ocupacionais aparecem aqui."
         />
       )}
+
+      {/* Os formulários não dependem de já haver lista. [B2-4-C] */}
+      <NewRecordSection
+          canWrite={canManage}
+          openLabel="Nova exigência por função"
+          title="O que a função exige"
+          description="É daqui que sai a cobrança de certificado, exame e treinamento de cada pessoa — e é isto que o Painel da fiscalização procura."
+          submitLabel="Salvar exigência"
+          disabled={!funcao || !exigencia.trim()}
+          onSubmit={async () => {
+            await createJobRoleRequirement({
+              job_role_id: funcao,
+              name: exigencia.trim(),
+              kind: tipoExigencia,
+              validity_months: validade ? Number(validade) : undefined,
+            });
+            setExigencia("");
+            setValidade("");
+            setRecarregar((v) => v + 1);
+            return "Exigência salva.";
+          }}
+        >
+          <div className="form-grid cols-2">
+            <label className="form-field">
+              Função
+              <select value={funcao} onChange={(e) => setFuncao(e.target.value)} required>
+                <option value="">Escolha a função</option>
+                {funcoes.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.name}
+                    {f.establishment ? ` · ${f.establishment.name}` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="form-field">
+              Tipo
+              <select
+                value={tipoExigencia}
+                onChange={(e) => setTipoExigencia(e.target.value)}
+              >
+                {Object.entries(REQUIREMENT_KIND_LABEL).map(([v, r]) => (
+                  <option key={v} value={v}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <label className="form-field">
+            O que é exigido
+            <input
+              value={exigencia}
+              onChange={(e) => setExigencia(e.target.value)}
+              placeholder="Ex.: NR-35 trabalho em altura"
+              required
+            />
+          </label>
+          <label className="form-field">
+            Vale por quantos meses (opcional)
+            <input
+              type="number"
+              min={1}
+              value={validade}
+              onChange={(e) => setValidade(e.target.value)}
+            />
+            <span className="form-hint">
+              Em branco, não vence.
+            </span>
+          </label>
+        </NewRecordSection>
+
+      <NewRecordSection
+          canWrite={canManage}
+          openLabel="Registrar exame"
+          title="Exame ocupacional"
+          description="Admissional, periódico, de retorno, de mudança de função ou demissional. O próximo vencimento alimenta o aviso do Início e o Painel da fiscalização."
+          submitLabel="Registrar exame"
+          disabled={!quem}
+          onSubmit={async () => {
+            await createOccupationalExam({
+              user_id: quem,
+              kind: tipoExame,
+              performed_at: feitoEm || undefined,
+              due_at: proximo || undefined,
+              fit: apto,
+            });
+            setQuem("");
+            setFeitoEm("");
+            setProximo("");
+            setRecarregar((v) => v + 1);
+            return "Exame registrado.";
+          }}
+        >
+          <label className="form-field">
+            De quem
+            <PeoplePicker value={quem} onChange={(userId) => setQuem(userId)} />
+          </label>
+          <div className="form-grid cols-2">
+            <label className="form-field">
+              Tipo
+              <select value={tipoExame} onChange={(e) => setTipoExame(e.target.value)}>
+                {Object.entries(EXAM_KIND_LABEL).map(([v, r]) => (
+                  <option key={v} value={v}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="form-field">
+              Feito em
+              <input
+                type="date"
+                value={feitoEm}
+                onChange={(e) => setFeitoEm(e.target.value)}
+              />
+            </label>
+          </div>
+          <div className="form-grid cols-2">
+            <label className="form-field">
+              Próximo até
+              <input
+                type="date"
+                value={proximo}
+                onChange={(e) => setProximo(e.target.value)}
+              />
+            </label>
+            <label className="form-field">
+              Resultado
+              <select
+                value={apto ? "sim" : "nao"}
+                onChange={(e) => setApto(e.target.value === "sim")}
+              >
+                <option value="sim">Apto</option>
+                <option value="nao">Inapto</option>
+              </select>
+            </label>
+          </div>
+        </NewRecordSection>
 
       {!loading && !error && requirements.length > 0 && (
         <section className="form-section">

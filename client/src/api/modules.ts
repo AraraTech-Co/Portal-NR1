@@ -477,3 +477,44 @@ export const decideRedemption = (id: string, status: string) =>
     method: "POST",
     body: JSON.stringify({ status }),
   });
+
+/*
+  O Painel da fiscalização cobrava cadastros que não tinham tela: a empresa
+  fazia tudo o que o portal permitia e o cartão continuava pendente. [B2-4-C]
+*/
+
+/** O que a função exige: certificado, exame ou treinamento. [B2-4-C] */
+export const createJobRoleRequirement = (input: {
+  job_role_id: string;
+  name: string;
+  kind?: string;
+  description?: string;
+  validity_months?: number;
+}) =>
+  request("/api/job-role-requirements", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+
+/** Exame ocupacional de uma pessoa. [B2-4-C] */
+export const createOccupationalExam = (input: {
+  user_id: string;
+  kind?: string;
+  performed_at?: string;
+  due_at?: string;
+  fit?: boolean;
+}) =>
+  request("/api/occupational-exams", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+
+/** Concluir a avaliação ergonômica — o painel pede a concluída. [B2-4-C] */
+export const concludeAep = (
+  id: string,
+  input: { findings?: string; needs_aet?: boolean; aet_reason?: string },
+) =>
+  request(`/api/aeps/${encodeURIComponent(id)}/conclude`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
