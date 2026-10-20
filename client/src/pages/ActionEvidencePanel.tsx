@@ -395,6 +395,16 @@ export function ActionEvidencePanel({ action, userId, canReview, onReviewed }: P
           Você executou esta ação. A validação precisa ser feita por outra pessoa.
         </p>
       )}
+      {/*
+        Sem isto a tela ficava muda para quem escreve no plano mas não
+        valida: via a ação parada e nenhuma explicação. [OB-6]
+      */}
+      {waiting && !canReview && (
+        <p className="action-panel-note">
+          Esta ação espera validação do técnico de SST, do dono da conta ou do
+          master da empresa.
+        </p>
+      )}
     </div>
   );
 }
