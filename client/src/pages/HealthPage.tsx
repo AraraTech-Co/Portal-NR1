@@ -7,7 +7,12 @@ import {
 import { Chip } from "@/components/Chip";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
-import { CERTIFICATE_STATUS_LABEL, EXAM_KIND_LABEL, formatDay } from "@/lib/labels";
+import {
+  CERTIFICATE_STATUS_LABEL,
+  EXAM_KIND_LABEL,
+  formatDay,
+  REQUIREMENT_KIND_LABEL,
+} from "@/lib/labels";
 import { useAuth } from "@/auth/AuthContext";
 import { Button } from "@/components/Button";
 import { openProtectedFile } from "@/lib/protected-file";
@@ -100,7 +105,7 @@ export function HealthPage() {
                   <tr key={r.id}>
                     <td>{r.jobRole.name}</td>
                     <td>
-                      <Chip>{r.kind}</Chip>
+                      <Chip>{REQUIREMENT_KIND_LABEL[r.kind] ?? r.kind}</Chip>
                     </td>
                     <td>
                       <strong>{r.name}</strong>

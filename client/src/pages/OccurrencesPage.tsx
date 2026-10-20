@@ -331,7 +331,9 @@ export function OccurrencesPage() {
                 <th>Descrição</th>
                 <th>Local</th>
                 <th>Análise</th>
-                <th>Ações</th>
+                {/* "0 · 0 ev." não dizia do que eram os números. [S2-J] */}
+                <th>Ações abertas</th>
+                <th>Evidências</th>
               </tr>
             </thead>
             <tbody>
@@ -362,14 +364,24 @@ export function OccurrencesPage() {
                     </td>
                     <td>
                       {analyzed ? (
-                        <Chip tone="success">Analisada</Chip>
+                        <>
+                          <Chip tone="success">Analisada</Chip>
+                          {/*
+                            Analisada sem ação aberta não é o fim do caminho:
+                            a tela diz o que falta. [S2-J]
+                          */}
+                          {row._count.actions === 0 && (
+                            <div className="muted" style={{ marginTop: "0.2rem" }}>
+                              sem ação aberta
+                            </div>
+                          )}
+                        </>
                       ) : (
                         <Chip tone="warning">Pendente</Chip>
                       )}
                     </td>
-                    <td className="muted">
-                      {row._count.actions} · {row._count.evidences} ev.
-                    </td>
+                    <td className="muted">{row._count.actions}</td>
+                    <td className="muted">{row._count.evidences}</td>
                   </tr>
                 );
               })}

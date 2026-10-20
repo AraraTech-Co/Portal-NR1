@@ -2,7 +2,7 @@ import { useResourceList } from "@/hooks/useResourceList";
 import { fetchClimateSurveys } from "@/api/modules";
 import { ListShell } from "@/components/ListShell";
 import { Chip } from "@/components/Chip";
-import { formatDay } from "@/lib/labels";
+import { formatDay, SURVEY_STATUS_LABEL } from "@/lib/labels";
 
 export function ClimatePage() {
   const { rows, loading, error } = useResourceList(fetchClimateSurveys);
@@ -31,7 +31,9 @@ export function ClimatePage() {
             {rows.map((r) => (
               <tr key={r.id}>
                   <td><strong>{r.title}</strong></td>
-                  <td><Chip>{r.status}</Chip></td>
+                  <td>
+                    <Chip>{SURVEY_STATUS_LABEL[r.status] ?? r.status}</Chip>
+                  </td>
                   <td>{r._count?.responses ?? 0}</td>
                   <td>{formatDay(r.createdAt)}</td>
               </tr>

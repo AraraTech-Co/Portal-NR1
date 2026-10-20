@@ -209,9 +209,11 @@ export function AnnouncementsPage() {
         <section className="form-section">
           <h2>Publicar aviso</h2>
           <p className="muted">
-            O conteúdo aceita Markdown (títulos, listas, negrito). Ao publicar,
-            o portal avisa sozinho quem é do público — não é preciso
-            compartilhar o link.
+            {/* "Markdown" não é termo de quem escreve o aviso. [S3-F] */}
+            Para dar forma ao texto: <code>## </code> no começo da linha faz um
+            título, <code>- </code> faz item de lista e{" "}
+            <code>**assim**</code> deixa em negrito. Ao publicar, o portal avisa
+            sozinho quem é do público — não é preciso compartilhar o link.
           </p>
           <form className="form-grid" onSubmit={onPublish}>
             <div className="form-grid cols-2">
@@ -239,7 +241,7 @@ export function AnnouncementsPage() {
               </label>
             </div>
             <label className="form-field">
-              Conteúdo (Markdown)
+              Conteúdo do aviso
               <textarea
                 value={body}
                 onChange={(e) => setBody(e.target.value)}

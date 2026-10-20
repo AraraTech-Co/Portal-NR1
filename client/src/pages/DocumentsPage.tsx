@@ -119,7 +119,8 @@ export function DocumentsPage() {
     <div>
       <PageHeader
         title="Documentos do PGR"
-        description="Emissão append-only dos três documentos exigidos: inventário, plano de ação e critérios do GRO."
+        /* "append-only" não é palavra de quem usa a tela. [S2-K] */
+        description="Os três documentos exigidos: inventário de riscos, plano de ação e critérios do GRO. Cada emissão cria uma versão nova — nenhuma versão emitida é apagada ou alterada."
       />
 
       {missing.length > 0 && (

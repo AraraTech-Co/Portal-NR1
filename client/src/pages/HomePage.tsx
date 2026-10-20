@@ -108,7 +108,10 @@ export function HomePage() {
       <PageHeader
         title={`Olá, ${user.name}`}
         description="O que precisa da sua atenção hoje."
-        actions={user.is_master ? <Chip tone="ouro">MASTER</Chip> : undefined}
+        /* O papel em palavra, não em código. [B2-1-C] */
+        actions={
+          user.is_master ? <Chip tone="ouro">Master da empresa</Chip> : undefined
+        }
       />
 
       {carregando && <LoadingState label="Montando o seu painel…" />}

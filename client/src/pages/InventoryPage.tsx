@@ -63,6 +63,9 @@ function flattenRows(items: InventoryItem[]) {
     level: string | null;
     status: string;
     place: string;
+    /** De onde vem o perigo e quanta gente fica exposta. [S2-H] */
+    activity: string | null;
+    exposed: number | null;
   }[] = [];
 
   for (const item of items) {
@@ -76,6 +79,8 @@ function flattenRows(items: InventoryItem[]) {
         level: null,
         status: controlStatus(item),
         place: `${item.establishment} · ${item.sector}`,
+        activity: item.activity ?? null,
+        exposed: item.exposed_workers_count ?? null,
       });
       continue;
     }
@@ -91,6 +96,8 @@ function flattenRows(items: InventoryItem[]) {
           ? "Reavaliar"
           : controlStatus({ ...item, risks: [risk] }),
         place: `${item.establishment} · ${item.sector}`,
+        activity: item.activity ?? null,
+        exposed: item.exposed_workers_count ?? null,
       });
     }
   }
@@ -205,6 +212,9 @@ export function InventoryPage() {
                 <th>Risco</th>
                 <th>Nível</th>
                 <th>Status</th>
+                {/* De onde vem e quanta gente pega. [S2-H] */}
+                <th>Atividade</th>
+                <th>Expostos</th>
                 <th>Local</th>
                 <th aria-label="Histórico" />
               </tr>
@@ -227,6 +237,10 @@ export function InventoryPage() {
                         )}
                       </td>
                       <td>{row.status}</td>
+                      <td className="muted">{row.activity ?? "—"}</td>
+                      <td className="muted">
+                        {row.exposed === null ? "—" : row.exposed}
+                      </td>
                       <td className="muted">{row.place}</td>
                       <td className="inventory-actions">
                         {/* Avaliar só se fazia pela tela de registro, perigo
@@ -254,7 +268,7 @@ export function InventoryPage() {
                     </tr>
                     {open && row.riskId && (
                       <tr className="inventory-expand">
-                        <td colSpan={6}>
+                        <td colSpan={8}>
                           <RiskHistoryPanel riskId={row.riskId} />
                         </td>
                       </tr>
