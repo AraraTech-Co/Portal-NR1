@@ -156,6 +156,14 @@ function calendarDay(value: string | Date | null | undefined): CalendarDay | nul
   listavam — a varredura anterior não as viu porque o banco local não tinha
   nenhum registro nelas. [B2-1-C] [OB-4]
 */
+/** Em que pé está o resgate de um prêmio. [OB-4] */
+export const REDEMPTION_STATUS_LABEL: Record<string, string> = {
+  REQUESTED: "Pedido",
+  APPROVED: "Aprovado",
+  DELIVERED: "Entregue",
+  REJECTED: "Recusado",
+};
+
 export const IDEA_STATUS_LABEL: Record<string, string> = {
   NEW: "Nova",
   IN_ANALYSIS: "Em análise",

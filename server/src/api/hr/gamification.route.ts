@@ -26,6 +26,10 @@ router.post("/api/rewards", writeRh, (req, res) =>
 router.post("/api/rewards/:id/redeem", read, (req, res) =>
   game.redeem(req, res),
 );
+/** Os resgates pedidos: quem cuida vê todos; quem pediu, os seus. [OB-4] */
+router.get("/api/reward-redemptions", read, (req, res) =>
+  game.listRedemptions(req, res),
+);
 router.post("/api/reward-redemptions/:redemptionId/decide", writeRh, (req, res) =>
   game.decideRedemption(req, res),
 );

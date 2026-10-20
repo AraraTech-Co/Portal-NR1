@@ -283,6 +283,8 @@ export const fetchRewards = () =>
     rewards: Array<{
       id: string;
       name: string;
+      /** O que é o prêmio, quando quem publicou explicou. [OB-4] */
+      description: string | null;
       cost: number;
       stock: number | null;
       archivedAt: string | null;
@@ -415,4 +417,63 @@ export const createAep = (input: {
   request<{ aep: { id: string } }>("/api/aeps", {
     method: "POST",
     body: JSON.stringify(input),
+  });
+
+// ---- Gamificação: a tela mostrava saldo e prêmios, e nada se podia fazer. [OB-4]
+
+export type PointRule = { id: string; activity: string; points: number };
+
+export const fetchPointRules = () =>
+  request<{ rules: PointRule[] }>("/api/point-rules").then((d) => d.rules);
+
+export const savePointRule = (input: { activity: string; points: number }) =>
+  request<{ rule: PointRule }>("/api/point-rules", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+
+export const grantPoints = (input: {
+  user_id: string;
+  activity: string;
+  points: number;
+  note?: string;
+}) =>
+  request("/api/point-entries", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+
+export const createReward = (input: {
+  name: string;
+  cost: number;
+  description?: string;
+  stock?: number;
+}) =>
+  request("/api/rewards", { method: "POST", body: JSON.stringify(input) });
+
+export const redeemReward = (rewardId: string) =>
+  request(`/api/rewards/${encodeURIComponent(rewardId)}/redeem`, {
+    method: "POST",
+  });
+
+export type Redemption = {
+  id: string;
+  status: string;
+  cost: number;
+  createdAt: string;
+  decidedAt: string | null;
+  user: { id: string; name: string };
+  reward: { id: string; name: string };
+  decidedBy: { id: string; name: string } | null;
+};
+
+export const fetchRedemptions = () =>
+  request<{ redemptions: Redemption[]; manages: boolean }>(
+    "/api/reward-redemptions",
+  );
+
+export const decideRedemption = (id: string, status: string) =>
+  request(`/api/reward-redemptions/${encodeURIComponent(id)}/decide`, {
+    method: "POST",
+    body: JSON.stringify({ status }),
   });
