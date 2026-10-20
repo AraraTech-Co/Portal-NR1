@@ -224,3 +224,46 @@
   margin: 0.2rem 0 0;
   font-size: 0.875rem;
 }
+
+/*
+  O que é deste papel. O Início era o mesmo para o SST, o RH e o colaborador,
+  e não dizia a ninguém qual era o seu. [S2-I]
+*/
+.home-papel {
+  margin-bottom: 1.5rem;
+  padding: 0.9rem 1.15rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+
+.home-papel h2 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+}
+
+.home-papel ul {
+  list-style: none;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.6rem;
+  font-size: 0.875rem;
+}
+
+.home-papel li::after {
+  content: "·";
+  margin-left: 0.6rem;
+  color: var(--muted-foreground);
+}
+
+.home-papel li:last-child::after {
+  content: "";
+  margin-left: 0;
+}
+
+.home-papel p {
+  margin: 0;
+  font-size: 0.8rem;
+}

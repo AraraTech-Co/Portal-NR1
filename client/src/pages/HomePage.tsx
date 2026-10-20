@@ -6,8 +6,9 @@ import { useAuth } from "@/auth/AuthContext";
 import { Chip } from "@/components/Chip";
 import { LoadingState } from "@/components/LoadingState";
 import { PageHeader } from "@/components/PageHeader";
+import { moduleEntry } from "@/layout/nav";
 import { ORG_ROLE_LABEL } from "@/lib/labels";
-import { useModuleAccess } from "@/lib/module-access";
+import { managedModules, useModuleAccess } from "@/lib/module-access";
 import "./home.css";
 
 const SHORTCUTS = [
@@ -104,6 +105,19 @@ export function HomePage() {
     return nivel === "read" || nivel === "write";
   });
 
+  const papel = ORG_ROLE_LABEL[user.role] ?? user.role;
+  /*
+    O que é deste papel, mesmo quando não há pendência nenhuma: o Início do
+    SST mostrava só um aviso do mural, igual ao de qualquer colaborador.
+    [S2-I]
+  */
+  const cuidaDe = managedModules(modules, user.permission)
+    .map((id) => moduleEntry(id))
+    .filter((item): item is NonNullable<typeof item> => item !== undefined)
+    .filter(
+      (item, i, todos) => todos.findIndex((o) => o.href === item.href) === i,
+    );
+
   const emDia =
     data?.compliance !== null &&
     data?.compliance !== undefined &&
@@ -114,9 +128,16 @@ export function HomePage() {
       <PageHeader
         title={`Olá, ${user.name}`}
         description="O que precisa da sua atenção hoje."
-        /* O papel em palavra, não em código. [B2-1-C] */
+        /*
+          O papel em palavra, não em código [B2-1-C] — e à vista: o Início
+          não dizia a ninguém com que papel estava entrando, só no rodapé da
+          página. [S2-I]
+        */
         actions={
-          user.is_master ? <Chip tone="ouro">Master da empresa</Chip> : undefined
+          <>
+            <Chip>{papel}</Chip>
+            {user.is_master && <Chip tone="ouro">Master da empresa</Chip>}
+          </>
         }
       />
 
@@ -215,6 +236,23 @@ export function HomePage() {
         </section>
       )}
 
+      {cuidaDe.length > 0 && (
+        <section className="home-papel" aria-label="O seu papel nesta conta">
+          <h2>Como {papel}, você cuida de</h2>
+          <ul>
+            {cuidaDe.map((item) => (
+              <li key={item.href}>
+                <Link to={item.href}>{item.label}</Link>
+              </li>
+            ))}
+          </ul>
+          <p className="muted">
+            O que aparece acima vem destes módulos. Quem decide quem cuida de
+            quê é o papel, em Conta e usuários.
+          </p>
+        </section>
+      )}
+
       {atalhos.length > 0 && (
         <section className="home-shortcuts" aria-label="Atalhos">
           {atalhos.map((item) => (
@@ -234,13 +272,6 @@ export function HomePage() {
         <div>
           <p className="label-cond home-meta-label">Conta</p>
           <p className="home-meta-value">{user.account.name}</p>
-        </div>
-        <div>
-          {/* Um papel só, e é este que decide o que a pessoa vê. [OB-3] */}
-          <p className="label-cond home-meta-label">Seu papel</p>
-          <p className="home-meta-value">
-            {ORG_ROLE_LABEL[user.role] ?? user.role}
-          </p>
         </div>
       </section>
     </div>

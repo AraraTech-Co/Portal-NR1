@@ -304,7 +304,11 @@ class WorkplaceController {
       */
       const rows = await prisma.jobRole.findMany({
         where: query as never,
-        orderBy: { createdAt: "asc" },
+        /*
+          A ordem é a que a empresa escolheu: a função nova entra no fim, e
+          `position` deixa aproximar as parecidas. [S1-I]
+        */
+        orderBy: [{ position: "asc" }, { createdAt: "asc" }],
         include: {
           sector: {
             select: {
@@ -348,11 +352,16 @@ class WorkplaceController {
         res.status(400).json({ message: "Setor inválido." });
         return;
       }
+      const ultima = await prisma.jobRole.aggregate({
+        where: { organizationId: orgId, sectorId: sector_id, archivedAt: null },
+        _max: { position: true },
+      });
       const row = await new JobRole().create.new({
         organizationId: orgId,
         sectorId: sector_id,
         name: name.trim(),
         description: description ?? null,
+        position: (ultima._max.position ?? -1) + 1,
       });
       await audit(req, "job_role.create", "JobRole", row.id, null, { name: row.name });
       res.status(201).json({ job_role: row });
@@ -392,6 +401,68 @@ class WorkplaceController {
         { name: existing.name, description: existing.description },
         { name: row?.name, description: row?.description });
       res.json({ job_role: row });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
+  /**
+   * Trocar a função de lugar na lista do setor. A ordem era a de criação e
+   * não havia como mudá-la, então função parecida ficava longe da outra.
+   * [S1-I]
+   */
+  async moveJobRole(req: Request, res: Response) {
+    try {
+      const orgId = actorOrgId(req as AuthRequest);
+      const para = (req.body as { para?: string }).para;
+      if (para !== "cima" && para !== "baixo") {
+        res.status(400).json({ message: 'Informe para: "cima" ou "baixo".' });
+        return;
+      }
+
+      const alvo = await prisma.jobRole.findFirst({
+        where: { id: req.params.id, organizationId: orgId, archivedAt: null },
+        select: { id: true, sectorId: true, name: true },
+      });
+      if (!alvo) {
+        res.status(404).json({ message: "Função não encontrada." });
+        return;
+      }
+
+      const job_roles = await prisma.$transaction(async (tx) => {
+        const irmas = await tx.jobRole.findMany({
+          where: {
+            organizationId: orgId,
+            sectorId: alvo.sectorId,
+            archivedAt: null,
+          },
+          orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+          select: { id: true },
+        });
+        const de = irmas.findIndex((j) => j.id === alvo.id);
+        const ate = para === "cima" ? de - 1 : de + 1;
+        if (de < 0 || ate < 0 || ate >= irmas.length) {
+          // Já está na ponta: nada a trocar, e não é erro.
+          return irmas.map((j) => j.id);
+        }
+        const nova = irmas.map((j) => j.id);
+        [nova[de], nova[ate]] = [nova[ate], nova[de]];
+        /*
+          Grava a sequência inteira, não só as duas trocadas: antes desta
+          coluna todas valiam 0, e empate deixaria a ordem por criação de
+          novo.
+        */
+        for (const [i, id] of nova.entries()) {
+          await tx.jobRole.update({ where: { id }, data: { position: i } });
+        }
+        return nova;
+      });
+
+      await audit(req, "job_role.reorder", "JobRole", alvo.id, null, {
+        para,
+        name: alvo.name,
+      });
+      res.json({ job_role_ids: job_roles });
     } catch (err) {
       fail(res, err);
     }

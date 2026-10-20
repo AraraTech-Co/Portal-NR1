@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
+import { ContextoDaConta } from "./ContextoDaConta";
 import { NAV_GROUPS, type NavGroup } from "./nav";
 import { canReadModule } from "@/lib/module-access";
 import "./sidebar.css";
@@ -151,12 +152,12 @@ export function Sidebar({ mobileOpen, onCloseMobile }: Props) {
       })}
 
       <div className="sidebar-footer">
-        {user && (
-          <p className="sidebar-user">
-            <strong>{user.name}</strong>
-            <span className="muted">{user.organization.name}</span>
-          </p>
-        )}
+        {/*
+          O rodapé dizia o nome e a empresa; faltava a conta em que se está
+          gravando, e trocar de conta só dava dentro de Conta e usuários.
+          [S1-K]
+        */}
+        <ContextoDaConta onNavigate={onCloseMobile} />
         <button
           type="button"
           className="sidebar-logout"

@@ -306,27 +306,11 @@ export const fetchSummons = () =>
     }>;
   }>("/api/summons").then((d) => d.summons);
 
-export type AccessibleAccount = {
-  id: string;
-  name: string;
-  org_role: string | null;
-  via_master: boolean;
-  organization: { id: string; name: string };
-};
-
-export const fetchAccessibleAccounts = () =>
-  request<{ accounts: AccessibleAccount[] }>("/api/auth").then(
-    (d) => d.accounts ?? [],
-  );
-
-export const switchAccount = (accountId: string) =>
-  request<{ token: string; user: import("./auth").SessionUser }>(
-    "/api/auth/switch",
-    {
-      method: "POST",
-      body: JSON.stringify({ account_id: accountId }),
-    },
-  );
+/*
+  Conta ativa e troca de conta moram em `api/auth.ts` e na sessão: eram duas
+  listas, uma desta tela e outra do menu, que podiam discordar. [S1-K]
+*/
+export type { AccessibleAccount } from "./auth";
 
 /*
   As telas que só listavam ganham porta de entrada: o servidor sempre

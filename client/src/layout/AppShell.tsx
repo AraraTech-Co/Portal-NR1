@@ -3,6 +3,7 @@ import { Outlet } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
 import { isReadOnlyPermission } from "@/lib/module-access";
 import { NotificationBell } from "./NotificationBell";
+import "./contexto.css";
 import { Sidebar } from "./Sidebar";
 import "./shell.css";
 
@@ -27,6 +28,13 @@ export function AppShell() {
             ☰
           </button>
           <span className="app-topbar-brand font-display">Portal NR-1</span>
+          {/*
+            No telefone o menu fica fechado: sem isto, nenhuma tela dizia em
+            que conta se está gravando. [S1-K]
+          */}
+          {user && (
+            <span className="app-topbar-conta">{user.account.name}</span>
+          )}
           <NotificationBell />
         </header>
         <main className="app-content">

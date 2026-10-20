@@ -40,6 +40,10 @@ router.post("/api/job-roles", write, (req, res) =>
 router.patch("/api/job-roles/:id", write, (req, res) =>
   workplace.updateJobRole(req, res),
 );
+/* Trocar a função de lugar na lista do setor. [S1-I] */
+router.patch("/api/job-roles/:id/ordem", write, (req, res) =>
+  workplace.moveJobRole(req, res),
+);
 router.delete("/api/job-roles/:id", write, (req, res) =>
   workplace.archiveJobRole(req, res),
 );

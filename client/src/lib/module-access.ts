@@ -47,6 +47,29 @@ export function useModuleAccess(moduleId: string) {
   };
 }
 
+/**
+ * Módulos dos quais este papel cuida — grava e não é só o próprio registro.
+ * O Início era igual para todos e não dizia o que era do papel de quem
+ * entrou. [S2-I]
+ */
+export function managedModules(
+  modules: Record<string, ModuleAccessLevel> | undefined,
+  permission: string | undefined,
+): string[] {
+  const papel = permission === "user" ? "colaborador" : (permission ?? "");
+  const proprios = [
+    ...(SELF_SERVICE_ONLY[papel] ?? []),
+    /*
+      Todo papel grava em "denuncia" — é fazer a sua própria denúncia, não
+      cuidar do canal. Quem cuida do canal é o comitê, que é outro módulo.
+    */
+    "denuncia",
+  ];
+  return Object.entries(modules ?? {})
+    .filter(([id, level]) => level === "write" && !proprios.includes(id))
+    .map(([id]) => id);
+}
+
 /** Papel só de consulta (fiscal): lê, nunca grava. */
 export function isReadOnlyPermission(permission: string | undefined): boolean {
   return permission === "fiscal";

@@ -6,6 +6,7 @@ import {
   createEstablishment,
   createJobRole,
   createSector,
+  moveJobRole,
   updateJobRole,
   updateSector,
   fetchActivities,
@@ -192,10 +193,29 @@ export function OperationPage() {
     [sectors, establishmentId],
   );
 
+  const [movendo, setMovendo] = useState<string | null>(null);
+
   const visibleJobRoles = useMemo(
     () => (sectorId ? jobRoles.filter((j) => j.sectorId === sectorId) : []),
     [jobRoles, sectorId],
   );
+
+  /*
+    Troca a função de lugar e recarrega: a ordem nova vem do servidor, que é
+    quem decide o empate. [S1-I]
+  */
+  async function onMove(id: string, para: "cima" | "baixo") {
+    setMovendo(id);
+    setError(null);
+    try {
+      await moveJobRole(id, para);
+      await reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao mudar a ordem");
+    } finally {
+      setMovendo(null);
+    }
+  }
 
   const visibleActivities = useMemo(
     () => (sectorId ? activities.filter((a) => a.sectorId === sectorId) : []),
@@ -370,7 +390,14 @@ export function OperationPage() {
             )}
           </Column>
 
-          <Column title="Funções" hint="Cargos que atuam no setor.">
+          <Column
+            title="Funções"
+            hint={
+              canEdit
+                ? "Cargos que atuam no setor. A ordem é sua: use ↑ e ↓ para deixar as parecidas juntas."
+                : "Cargos que atuam no setor."
+            }
+          >
             {!sectorId ? (
               <p className="muted">Selecione um setor.</p>
             ) : (
@@ -379,9 +406,44 @@ export function OperationPage() {
                   {visibleJobRoles.length === 0 && (
                     <p className="muted">Nenhuma função neste setor.</p>
                   )}
-                  {visibleJobRoles.map((j) => (
+                  {visibleJobRoles.map((j, i) => (
                     <div key={j.id} className="op-job">
-                      <span className="op-picker-title">{j.name}</span>
+                      <div className="op-job-head">
+                        <span className="op-picker-title">{j.name}</span>
+                        {/*
+                          A ordem era a de criação e não se mexia: o cargo
+                          novo ia para o fim, longe do parecido. [S1-I]
+                        */}
+                        {canEdit && visibleJobRoles.length > 1 && (
+                          <span className="op-job-order">
+                            <Button
+                              type="button"
+                              size="compact"
+                              variant="ghost"
+                              disabled={i === 0 || movendo !== null}
+                              aria-label={`Subir ${j.name}`}
+                              title="Subir na lista"
+                              onClick={() => onMove(j.id, "cima")}
+                            >
+                              ↑
+                            </Button>
+                            <Button
+                              type="button"
+                              size="compact"
+                              variant="ghost"
+                              disabled={
+                                i === visibleJobRoles.length - 1 ||
+                                movendo !== null
+                              }
+                              aria-label={`Descer ${j.name}`}
+                              title="Descer na lista"
+                              onClick={() => onMove(j.id, "baixo")}
+                            >
+                              ↓
+                            </Button>
+                          </span>
+                        )}
+                      </div>
                       <NameActions
                         label="a função"
                         name={j.name}
