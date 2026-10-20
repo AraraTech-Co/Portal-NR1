@@ -5,46 +5,17 @@ import { Chip } from "@/components/Chip";
 
 type Acesso = {
   id: string;
+  kind: "entrada" | "tela";
+  screen: string;
+  /** O registro aberto, quando a tela abre um. */
+  record: string | null;
   path: string;
   at: string;
+  until: string;
+  /** Quantas vezes seguidas a mesma tela foi aberta. */
+  times: number;
   user: { id: string; name: string } | null;
 };
-
-/** Rota da API → nome da tela, para quem lê o registro. */
-const ROUTE_LABEL: [string, string][] = [
-  ["/api/pgr-documents", "Documentos do PGR"],
-  ["/api/inventory", "Inventário de riscos"],
-  ["/api/hazards", "Inventário de riscos"],
-  ["/api/risks", "Inventário de riscos"],
-  ["/api/assessments", "Inventário de riscos"],
-  ["/api/controls", "Inventário de riscos"],
-  ["/api/methodologies", "Critérios de avaliação"],
-  ["/api/actions", "Plano de ação"],
-  ["/api/evidences", "Evidência de ação"],
-  ["/api/occurrences", "Ocorrências"],
-  ["/api/aeps", "Avaliação ergonômica"],
-  ["/api/psychosocial-factors", "Avaliação ergonômica"],
-  ["/api/preliminary-surveys", "Avaliação ergonômica"],
-  ["/api/emergency-procedures", "Emergências"],
-  ["/api/establishments", "Operação"],
-  ["/api/sectors", "Operação"],
-  ["/api/activities", "Operação"],
-  ["/api/job-roles", "Operação"],
-  ["/api/change-events", "Operação"],
-  ["/api/contractors", "Terceiros"],
-  ["/api/participations", "Participação"],
-  ["/api/trainings", "Treinamentos"],
-  ["/api/occupational-exams", "Saúde: exames"],
-  ["/api/worker-certificates", "Saúde: certificados"],
-  ["/api/job-role-requirements", "Saúde: exigências por função"],
-  ["/api/hr-documents", "Documentos do RH"],
-  ["/api/summons", "Convocações"],
-  ["/api/employee-profiles", "Colaboradores"],
-];
-
-function screenOf(path: string): string {
-  return ROUTE_LABEL.find(([prefix]) => path.startsWith(prefix))?.[1] ?? "Outra consulta";
-}
 
 function formatDateTime(value: string): string {
   const d = new Date(value);
@@ -52,19 +23,50 @@ function formatDateTime(value: string): string {
   return d.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
 
+function formatTime(value: string): string {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+}
+
+function formatDia(iso: string): string {
+  return new Date(`${iso}T12:00:00`).toLocaleDateString("pt-BR");
+}
+
 /**
- * O que o fiscal (acesso só de consulta) abriu no portal. Fica com quem dá
- * o acesso: Conta e usuários. [S7-A]
+ * O que o fiscal (acesso só de consulta) abriu no portal.
+ *
+ * Era uma linha por requisição — 147 numa sessão, com o endereço interno
+ * embaixo e o Painel da fiscalização aparecendo como "Outra consulta".
+ * Agora é uma linha por tela, com o nome do registro aberto, a entrada no
+ * portal, e escolha de dia e de fiscal. [B2-4-H]
+ *
+ * Fica com quem dá o acesso: Conta e usuários. [S7-A]
  */
 export function ConsultaAcessos() {
   const [rows, setRows] = useState<Acesso[] | null>(null);
+  const [dias, setDias] = useState<string[]>([]);
+  const [dia, setDia] = useState<string>("");
+  const [quem, setQuem] = useState<string>("");
+  const [tudo, setTudo] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    request<{ acessos: Acesso[] }>("/api/consulta-acessos")
+    const params = new URLSearchParams();
+    if (dia) params.set("day", dia);
+    if (quem) params.set("user_id", quem);
+    if (tudo) params.set("tudo", "true");
+    const qs = params.toString();
+    setRows(null);
+    request<{ acessos: Acesso[]; day: string | null; days: string[] }>(
+      `/api/consulta-acessos${qs ? `?${qs}` : ""}`,
+    )
       .then((data) => {
-        if (!cancelled) setRows(data.acessos);
+        if (cancelled) return;
+        setRows(data.acessos);
+        setDias(data.days);
+        if (!dia && data.day) setDia(data.day);
       })
       .catch((err) => {
         if (!cancelled) setError(err instanceof Error ? err.message : "Falha ao carregar");
@@ -72,22 +74,67 @@ export function ConsultaAcessos() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [dia, quem, tudo]);
+
+  /** Os fiscais que aparecem no dia escolhido, para filtrar por pessoa. */
+  const pessoas = [
+    ...new Map(
+      (rows ?? [])
+        .filter((r) => r.user)
+        .map((r) => [r.user!.id, r.user!] as const),
+    ).values(),
+  ];
 
   return (
     <section className="form-section">
       <h2>O que o fiscal consultou</h2>
       <p className="muted">
-        Quem tem acesso de fiscal só lê, e cada tela que abre fica registrada aqui.
-        Mostra as 500 consultas mais recentes.
+        Quem tem acesso de fiscal só lê, e cada tela que abre fica registrada
+        aqui — uma linha por tela, na ordem em que foram abertas.
       </p>
+
+      <div className="form-grid cols-2">
+        <label className="form-field">
+          Dia
+          <select value={dia} onChange={(e) => setDia(e.target.value)}>
+            {dias.length === 0 && <option value="">Sem consultas</option>}
+            {dias.map((d) => (
+              <option key={d} value={d}>
+                {formatDia(d)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="form-field">
+          Fiscal
+          <select value={quem} onChange={(e) => setQuem(e.target.value)}>
+            <option value="">Todos</option>
+            {pessoas.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <label className="muted" style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+        <input
+          type="checkbox"
+          checked={tudo}
+          onChange={(e) => setTudo(e.target.checked)}
+        />
+        Mostrar também as consultas que a tela faz sozinha
+      </label>
+
       {error && (
         <p className="form-error" role="alert">
           {error}
         </p>
       )}
       {!error && rows === null && <p className="muted">Carregando…</p>}
-      {rows && rows.length === 0 && <p className="muted">Nenhuma consulta registrada.</p>}
+      {rows && rows.length === 0 && (
+        <p className="muted">Nenhuma consulta registrada neste dia.</p>
+      )}
       {rows && rows.length > 0 && (
         <div className="data-table-wrap">
           <table className="data-table">
@@ -101,13 +148,41 @@ export function ConsultaAcessos() {
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id}>
-                  <td className="muted">{formatDateTime(r.at)}</td>
+                  <td className="muted">
+                    {formatDateTime(r.at)}
+                    {r.times > 1 && (
+                      <div style={{ fontSize: "0.78rem" }}>
+                        até {formatTime(r.until)} · {r.times} vezes
+                      </div>
+                    )}
+                  </td>
                   <td>{r.user?.name ?? "—"}</td>
                   <td>
-                    {screenOf(r.path)}
-                    <div className="muted" style={{ fontSize: "0.78rem", wordBreak: "break-all" }}>
-                      {r.path}
-                    </div>
+                    {r.kind === "entrada" ? (
+                      <Chip tone="info">Entrou no portal</Chip>
+                    ) : (
+                      <>
+                        {r.screen}
+                        {r.record && (
+                          <div className="muted" style={{ fontSize: "0.85rem" }}>
+                            {r.record}
+                          </div>
+                        )}
+                        {/*
+                          O endereço interno só no modo que mostra tudo: ali
+                          é o que distingue uma consulta de apoio da outra.
+                          [B2-4-H]
+                        */}
+                        {tudo && (
+                          <div
+                            className="muted"
+                            style={{ fontSize: "0.78rem", wordBreak: "break-all" }}
+                          >
+                            {r.path}
+                          </div>
+                        )}
+                      </>
+                    )}
                   </td>
                 </tr>
               ))}

@@ -171,3 +171,76 @@ describe("a ficha que o fiscal lê [CB-43]", () => {
     expect(oDesligado?.dismissalReason).toBe(MOTIVO);
   });
 });
+
+describe("a caixa de avisos não leva a becos [B2-4-F]", () => {
+  it("aviso de módulo fechado não chega ao fiscal", async () => {
+    const eu = await request(app).get("/api/auth").set(as(fiscal));
+    const meuId = eu.body.user.id as string;
+
+    /*
+      Um aviso de mural dirigido ao fiscal: é o que existia de verdade, de
+      antes de o mural passar a ter público.
+    */
+    const beco = await prisma.notification.create({
+      data: {
+        organizationId: ORG_ID,
+        userId: meuId,
+        kind: "ANNOUNCEMENT_PUBLISHED",
+        title: `Aviso de mural para o fiscal ${SUFIXO}`,
+        link: "/mural?open=qualquer",
+      },
+      select: { id: true },
+    });
+    const valido = await prisma.notification.create({
+      data: {
+        organizationId: ORG_ID,
+        userId: meuId,
+        kind: "SERVICE_ORDER_ISSUED",
+        title: `Ordem de serviço para o fiscal ${SUFIXO}`,
+        link: "/ordens-servico",
+      },
+      select: { id: true },
+    });
+
+    try {
+      const res = await request(app).get("/api/notificacoes").set(as(fiscal));
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      const ids = (res.body.notifications as Array<{ id: string }>).map((n) => n.id);
+      expect(ids).not.toContain(beco.id);
+      // O que ele abre continua chegando — e contando.
+      expect(ids).toContain(valido.id);
+      expect(res.body.unread).toBeGreaterThan(0);
+
+      const titulos = (res.body.notifications as Array<{ title: string }>).map(
+        (n) => n.title,
+      );
+      expect(titulos.join(" ")).not.toContain("mural");
+    } finally {
+      await prisma.notification.deleteMany({
+        where: { id: { in: [beco.id, valido.id] } },
+      });
+    }
+  });
+
+  it("quem tem o módulo continua recebendo o mesmo aviso", async () => {
+    const rhMe = await request(app).get("/api/auth").set(as(rh));
+    const rhId = rhMe.body.user.id as string;
+    const doRh = await prisma.notification.create({
+      data: {
+        organizationId: ORG_ID,
+        userId: rhId,
+        kind: "ANNOUNCEMENT_PUBLISHED",
+        title: `Aviso de mural para o RH ${SUFIXO}`,
+        link: "/mural?open=qualquer",
+      },
+      select: { id: true },
+    });
+    try {
+      const res = await request(app).get("/api/notificacoes").set(as(rh));
+      const ids = (res.body.notifications as Array<{ id: string }>).map((n) => n.id);
+      expect(ids).toContain(doRh.id);
+    } finally {
+      await prisma.notification.delete({ where: { id: doRh.id } });
+    }
+  });
+});

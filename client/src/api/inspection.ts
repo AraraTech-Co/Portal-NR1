@@ -150,4 +150,12 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   "ethics_committee.set": "Comitê de ética alterado",
   "ethics_report.cited": "Pessoa citada numa denúncia",
   "training_session.attendance": "Presença em turma registrada",
+  /*
+    Escritos como ternário, escapavam da varredura dos rótulos até ela ser
+    alargada. [B2-1-C]
+  */
+  "fiscal.access_changed": "Prazo do fiscal alterado",
+  "fiscal.access_ended": "Acesso do fiscal encerrado",
+  "membership.suspend": "Acesso de uma pessoa suspenso",
+  "membership.restore": "Acesso de uma pessoa devolvido",
 };

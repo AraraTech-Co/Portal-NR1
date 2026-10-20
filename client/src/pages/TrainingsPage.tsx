@@ -162,8 +162,16 @@ export function TrainingsPage() {
                     <td>{r.durationMinutes}</td>
                     <td>{r._count?.enrollments ?? 0}</td>
                     <td onClick={(e) => e.stopPropagation()}>
+                      {/*
+                        "Fazer" convida quem só consulta a começar um curso
+                        que o servidor recusa. Para ela, o treinamento se
+                        abre para ver, não para fazer. [B2-4-F]
+                      */}
                       <Link to={`/treinamentos/${r.id}`}>
-                        {r.kind === "CLASSROOM" ? "Abrir" : "Fazer"}
+                        {isReadOnlyPermission(user?.permission) ||
+                        r.kind === "CLASSROOM"
+                          ? "Abrir"
+                          : "Fazer"}
                       </Link>
                     </td>
                   </tr>

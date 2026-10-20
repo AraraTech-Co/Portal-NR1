@@ -12,7 +12,9 @@ import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
 import { LoadingState } from "@/components/LoadingState";
 import { PageHeader } from "@/components/PageHeader";
+import { useAuth } from "@/auth/AuthContext";
 import { formatDay } from "@/lib/labels";
+import { isReadOnlyPermission } from "@/lib/module-access";
 import "@/components/form.css";
 import "./training-page.css";
 
@@ -29,6 +31,7 @@ function formatDateTime(value: string): string {
  * API, e não havia tela nenhuma para o conteúdo nem para a prova. [S4-C]
  */
 export function TrainingPage() {
+  const { user } = useAuth();
   const { id = "" } = useParams();
   const [training, setTraining] = useState<TrainingFull | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -106,6 +109,7 @@ export function TrainingPage() {
   if (!training) return <LoadingState label="Carregando o treinamento…" />;
 
   const matricula = training.my_enrollment;
+  const soConsulta = isReadOnlyPermission(user?.permission);
   const concluido = matricula?.status === "COMPLETED";
   const reprovado = matricula?.status === "FAILED";
   const presencial = training.kind === "CLASSROOM";
@@ -184,7 +188,18 @@ export function TrainingPage() {
         </section>
       )}
 
-      {!presencial && !concluido && passo === 0 && (
+      {/*
+        Quem só consulta lê o conteúdo do treinamento; começar seria
+        recusado pelo servidor, e o botão só prometia erro. [B2-4-F]
+      */}
+      {soConsulta && !presencial && (
+        <p className="muted">
+          Acesso de consulta: o conteúdo abre para leitura, sem inscrição nem
+          prova.
+        </p>
+      )}
+
+      {!soConsulta && !presencial && !concluido && passo === 0 && (
         <section className="form-section">
           {reprovado && (
             <p className="tr-retry">

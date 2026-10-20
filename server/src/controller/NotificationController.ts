@@ -1,6 +1,8 @@
 import { Request, Response } from "express";
 import prisma from "../model/prisma";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
+import { canReadModule } from "../helper/module-access";
+import { moduloDaRota } from "../helper/rota-do-modulo";
 import type { AuthRequest } from "../types/auth";
 
 function fail(res: Response, err: unknown) {
@@ -17,7 +19,18 @@ class NotificationController {
         userId: actorUserId(auth),
         organizationId: actorOrgId(auth),
       };
-      const [rows, unread] = await Promise.all([
+      /*
+        Aviso que leva a uma tela que a pessoa não abre não é aviso: é um
+        beco. Acontece com quem perdeu acesso a um módulo depois de já ter
+        recebido o aviso — o fiscal e o mural, por exemplo. [B2-4-F]
+      */
+      const permitido = (link: string | null) => {
+        const modulo = moduloDaRota(link);
+        if (!modulo) return true;
+        return canReadModule(auth.actor?.permission ?? "", modulo);
+      };
+
+      const [rows, naoLidos] = await Promise.all([
         prisma.notification.findMany({
           where,
           // Não lido primeiro. `asc` sozinho joga NULL para o fim no Postgres:
@@ -38,9 +51,15 @@ class NotificationController {
           },
         }),
         // O contador é de tudo, não só do que coube na página.
-        prisma.notification.count({ where: { ...where, readAt: null } }),
+        prisma.notification.findMany({
+          where: { ...where, readAt: null },
+          select: { link: true },
+        }),
       ]);
-      res.json({ notifications: rows, unread });
+      res.json({
+        notifications: rows.filter((n) => permitido(n.link)),
+        unread: naoLidos.filter((n) => permitido(n.link)).length,
+      });
     } catch (err) {
       fail(res, err);
     }
