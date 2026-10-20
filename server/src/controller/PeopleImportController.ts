@@ -61,6 +61,19 @@ function dataDeCalendario(raw: unknown, campo: string): Date | null {
   return new Date(`${dia}T00:00:00.000Z`);
 }
 
+/** Arroba, CPF, data ou comprimento de linha inteira num campo de nome. */
+const CPF_SOLTO = /\d{3}[.\s]?\d{3}[.\s]?\d{3}[-.\s]?\d{2}/;
+const DATA_SOLTA = /\d{2}\/\d{2}\/\d{4}|\d{4}-\d{2}-\d{2}/;
+
+export function pareceLinhaInteira(nome: string): boolean {
+  return (
+    nome.includes("@") ||
+    CPF_SOLTO.test(nome) ||
+    DATA_SOLTA.test(nome) ||
+    nome.length > 80
+  );
+}
+
 class PeopleImportController {
   /**
    * Completa a ficha de quem já está no portal com o que a planilha traz —
@@ -197,6 +210,22 @@ class PeopleImportController {
 
         try {
           if (!nome) throw new Error("Informe o nome.");
+          /*
+            Linha colada sem separador caía inteira no nome, e entrava uma
+            pessoa chamada "Paulo Ribeiro 10 444.444.444-44 paulo@… Torneiro
+            15/10/2019". A tela já recusa na prévia; aqui é a mesma regra no
+            lugar em que o registro nasce. [B2-1-L]
+
+            A regra procura o que não cabe num nome — arroba, CPF, data,
+            comprimento de linha inteira — e não um dígito solto: há quem se
+            chame "Maria de Souza 2" na folha, e recusar isso seria trocar um
+            problema por outro.
+          */
+          if (pareceLinhaInteira(nome)) {
+            throw new Error(
+              "O nome parece uma linha inteira caída na coluna do nome: tem arroba, CPF ou data dentro.",
+            );
+          }
 
           const matricula = texto(linha.registration);
           const email = texto(linha.email)?.toLowerCase() ?? null;
@@ -232,6 +261,17 @@ class PeopleImportController {
           }
           if (!canAssignOrgRole(actor, orgRole)) {
             throw new Error("Você não pode dar este papel.");
+          }
+          /*
+            O acesso do fiscal cai sozinho na data marcada, e a planilha não
+            tem onde dizer a data: importar um fiscal criava acesso de
+            consulta sem prazo nenhum. O caminho dele é o pedido de entrada,
+            onde se informa "Acesso até". [S7-A] [B2-1-D]
+          */
+          if (orgRole === Role.FISCAL) {
+            throw new Error(
+              "Fiscal não entra por planilha: o acesso dele tem prazo, definido ao aprovar o pedido de entrada.",
+            );
           }
 
           // Repetido dentro da própria planilha.

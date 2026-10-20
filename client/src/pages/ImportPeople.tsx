@@ -9,6 +9,7 @@ import { fetchContractorList } from "@/api/contractors";
 import { fetchJobRoles, type JobRole } from "@/api/operation";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
+import { ORG_ROLE_LABEL } from "@/lib/labels";
 import "@/components/data-table.css";
 import "@/components/form.css";
 import "./import-people.css";
@@ -41,6 +42,30 @@ const COLUNAS: Record<string, keyof ImportRowLocal> = {
   unidade: "establishment",
   estabelecimento: "establishment",
 };
+
+/**
+ * Papéis que a planilha aceita.
+ *
+ * Fora: master e dono da conta (não se dá por planilha), "Admin (legado)"
+ * (ninguém escolhe de propósito um papel chamado legado) e o fiscal, cujo
+ * acesso tem prazo e vem pelo pedido de entrada. [B2-1-D] [S7-A]
+ */
+const PAPEIS_DA_PLANILHA = Object.entries(ORG_ROLE_LABEL)
+  .filter(([codigo]) => !["MASTER", "OWNER", "ADMIN", "FISCAL"].includes(codigo))
+  .map(([, rotulo]) => rotulo);
+
+/** A mesma regra do servidor: o que não cabe num nome. [B2-1-L] */
+const CPF_SOLTO = /\d{3}[.\s]?\d{3}[.\s]?\d{3}[-.\s]?\d{2}/;
+const DATA_SOLTA = /\d{2}\/\d{2}\/\d{4}|\d{4}-\d{2}-\d{2}/;
+
+function pareceLinhaInteira(nome: string): boolean {
+  return (
+    nome.includes("@") ||
+    CPF_SOLTO.test(nome) ||
+    DATA_SOLTA.test(nome) ||
+    nome.length > 80
+  );
+}
 
 function semAcento(texto: string): string {
   return texto.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
@@ -98,6 +123,9 @@ function parse(
   const vinculos = new Map(
     Object.entries(WORKER_BOND_LABEL).map(([codigo, rotulo]) => [semAcento(rotulo), codigo]),
   );
+  const papeis = new Map(
+    Object.entries(ORG_ROLE_LABEL).map(([codigo, rotulo]) => [semAcento(rotulo), codigo]),
+  );
 
   const rows: ImportRow[] = [];
   const problems: string[] = [];
@@ -114,6 +142,38 @@ function parse(
 
     if (!row.name) {
       problems.push(`Linha ${numero}: sem nome.`);
+      continue;
+    }
+
+    /*
+      Linha copiada do Excel que perde as tabulações vira uma coluna só: o
+      nome passava a ser a linha inteira e a prévia dava "Entra" para uma
+      pessoa sem matrícula, sem CPF e sem função. A prévia existe para
+      proteger. [B2-1-L]
+    */
+    if (temCabecalho && cabecalho.length > 1 && celulas.length === 1) {
+      problems.push(
+        `Linha ${numero}: veio sem separador — o cabeçalho tem ${cabecalho.length} colunas e esta linha tem 1. Cole de novo mantendo o ponto e vírgula ou a tabulação.`,
+      );
+      continue;
+    }
+    if (temCabecalho && celulas.length > cabecalho.length) {
+      problems.push(
+        `Linha ${numero}: tem ${celulas.length} colunas e o cabeçalho tem ${cabecalho.length}. Deve haver um separador dentro de algum campo.`,
+      );
+      continue;
+    }
+    /*
+      Arroba, CPF ou data dentro do nome é sinal de linha inteira caída ali,
+      ou de coluna trocada. Dígito solto passa: há quem se chame "Maria de
+      Souza 2" na folha. [B2-1-L]
+    */
+    if (pareceLinhaInteira(row.name)) {
+      problems.push(
+        `Linha ${numero}: "${row.name.slice(0, 40)}${
+          row.name.length > 40 ? "…" : ""
+        }" não parece um nome — tem arroba, CPF ou data dentro. Confira se as colunas estão no lugar.`,
+      );
       continue;
     }
     if (row.job_role_id) {
@@ -147,6 +207,22 @@ function parse(
       }
     }
     delete (row as ImportRowLocal).establishment;
+    /*
+      O papel chegava só como código interno, e a explicação nem o
+      mencionava: a planilha passa a aceitar "Supervisor" como aceita
+      "Terceirizado". [B2-1-D]
+    */
+    if (row.org_role) {
+      const codigo = ORG_ROLE_LABEL[row.org_role.toUpperCase()]
+        ? row.org_role.toUpperCase()
+        : papeis.get(semAcento(row.org_role));
+      if (!codigo) {
+        problems.push(`Linha ${numero}: papel "${row.org_role}" desconhecido.`);
+        delete row.org_role;
+      } else {
+        row.org_role = codigo;
+      }
+    }
     if (row.bond) {
       const codigo = WORKER_BOND_LABEL[row.bond.toUpperCase()]
         ? row.bond.toUpperCase()
@@ -186,6 +262,37 @@ function tone(status: string): "success" | "info" | "neutral" | "danger" {
   if (status === "completed") return "info";
   if (status === "skipped") return "neutral";
   return "danger";
+}
+
+/**
+ * O modelo da planilha, para quem monta no Excel.
+ *
+ * A tela falava em planilha e não oferecia uma: cada um montava de um jeito,
+ * e descobria no erro o que o portal esperava. Vai com cabeçalho, duas
+ * linhas de exemplo e tudo em português. [B2-1-D]
+ */
+const MODELO = [
+  "nome;matricula;cpf;email;funcao;unidade;admissao;vinculo;empresa;papel",
+  "Maria de Souza;1023;529.982.247-25;maria@empresa.com.br;Torneiro;Matriz;10/03/2025;Empregado;;Colaborador",
+  "João Pereira;1024;;;Ajudante;Matriz;01/04/2025;Terceirizado;Limpeza Industrial Ltda;Colaborador",
+].join("\r\n");
+
+function baixarModelo() {
+  /*
+    O BOM é o que faz o Excel abrir os acentos certos; sem ele, "João" vira
+    "JoÃ£o" na planilha de quem recebe.
+  */
+  const blob = new Blob([`\ufeff${MODELO}\r\n`], {
+    type: "text/csv;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "modelo-cadastro-de-pessoas.csv";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 /**
@@ -268,6 +375,13 @@ export function ImportPeople() {
         o que estiver errado volta com o motivo, e o resto entra.
       </p>
 
+      {/* Sem modelo, cada um montava a planilha de um jeito. [B2-1-D] */}
+      <div className="form-actions">
+        <Button type="button" variant="ghost" onClick={baixarModelo}>
+          Baixar a planilha modelo
+        </Button>
+      </div>
+
       <label className="form-field">
         Planilha
         <textarea
@@ -284,9 +398,17 @@ export function ImportPeople() {
         />
         <span className="form-hint">
           Colunas: nome; matrícula; CPF; e-mail; função; unidade; admissão;
-          vínculo; empresa contratada. Só o nome é obrigatório. Vínculo:{" "}
-          {Object.values(WORKER_BOND_LABEL).join(", ")}. A empresa precisa estar
-          cadastrada em Terceiros.
+          vínculo; empresa contratada; papel. Só o nome é obrigatório.
+          <br />
+          Vínculo: {Object.values(WORKER_BOND_LABEL).join(", ")}. A empresa
+          precisa estar cadastrada em Terceiros.
+          <br />
+          {/* A coluna "papel" existia e a explicação não a mencionava. [B2-1-D] */}
+          Papel: {PAPEIS_DA_PLANILHA.join(", ")}. Em branco, entra como
+          Colaborador. O fiscal não entra por aqui: o acesso dele tem prazo,
+          definido ao aprovar o pedido de entrada.
+          <br />
+          Datas em DD/MM/AAAA ou AAAA-MM-DD.
         </span>
       </label>
 
