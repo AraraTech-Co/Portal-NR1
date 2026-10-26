@@ -3,7 +3,6 @@ import {
   importPeople,
   WORKER_BOND_LABEL,
   type ImportReport,
-  type ImportRow,
 } from "@/api/people";
 import { fetchContractorList } from "@/api/contractors";
 import { fetchJobRoles, type JobRole } from "@/api/operation";
@@ -13,248 +12,15 @@ import { ORG_ROLE_LABEL } from "@/lib/labels";
 import "@/components/data-table.css";
 import "@/components/form.css";
 import "./import-people.css";
+import {
+  CABECALHO_OFICIAL,
+  lerLinhas,
+  type FuncaoDaEmpresa,
+} from "@/lib/planilha";
 
-const EXEMPLO = `nome;matricula;cpf;email;funcao;unidade;admissao;vinculo;empresa
-Maria de Souza;1023;529.982.247-25;maria@empresa.com.br;Torneiro;Matriz;2025-03-10;Empregado;
-João Pereira;1024;;;Ajudante;Matriz;2025-04-01;Terceirizado;Limpeza Industrial Ltda`;
-
-/** Cabeçalhos aceitos, com e sem acento, para a planilha colada. */
-/** A unidade não vai para o servidor: serve para achar a função certa. [CB-6] */
-type ImportRowLocal = ImportRow & { establishment?: string };
-
-const COLUNAS: Record<string, keyof ImportRowLocal> = {
-  nome: "name",
-  name: "name",
-  matricula: "registration",
-  registration: "registration",
-  cpf: "tax_id",
-  email: "email",
-  "e-mail": "email",
-  funcao: "job_role_id",
-  cargo: "job_role_id",
-  admissao: "admitted_at",
-  vinculo: "bond",
-  papel: "org_role",
-  /// Terceirizado sem empresa deixa a lacuna à mostra na ficha. [S1-R] [CB-8]
-  empresa: "contractor_id",
-  contratada: "contractor_id",
-  /// Desempata função de mesmo nome em duas unidades. [CB-6]
-  unidade: "establishment",
-  estabelecimento: "establishment",
-};
-
-/**
- * Papéis que a planilha aceita.
- *
- * Fora: master e dono da conta (não se dá por planilha), "Admin (legado)"
- * (ninguém escolhe de propósito um papel chamado legado) e o fiscal, cujo
- * acesso tem prazo e vem pelo pedido de entrada. [B2-1-D] [S7-A]
- */
 const PAPEIS_DA_PLANILHA = Object.entries(ORG_ROLE_LABEL)
   .filter(([codigo]) => !["MASTER", "OWNER", "ADMIN", "FISCAL"].includes(codigo))
   .map(([, rotulo]) => rotulo);
-
-/** A mesma regra do servidor: o que não cabe num nome. [B2-1-L] */
-const CPF_SOLTO = /\d{3}[.\s]?\d{3}[.\s]?\d{3}[-.\s]?\d{2}/;
-const DATA_SOLTA = /\d{2}\/\d{2}\/\d{4}|\d{4}-\d{2}-\d{2}/;
-
-function pareceLinhaInteira(nome: string): boolean {
-  return (
-    nome.includes("@") ||
-    CPF_SOLTO.test(nome) ||
-    DATA_SOLTA.test(nome) ||
-    nome.length > 80
-  );
-}
-
-function semAcento(texto: string): string {
-  return texto.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
-}
-
-function separador(linha: string): string {
-  if (linha.includes("\t")) return "\t";
-  if (linha.includes(";")) return ";";
-  return ",";
-}
-
-type Parsed = { rows: ImportRow[]; problems: string[] };
-
-/**
- * Lê a planilha colada. O vínculo e a função chegam por nome na planilha e
- * saem daqui como código e id — quem monta a planilha escreve "Vendedor",
- * não um uuid. [S1-A]
- */
-function parse(
-  texto: string,
-  funcoes: JobRole[],
-  empresas: { id: string; name: string }[],
-): Parsed {
-  const linhas = texto
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean);
-  if (linhas.length === 0) return { rows: [], problems: [] };
-
-  const sep = separador(linhas[0]!);
-  const cabecalho = linhas[0]!.split(sep).map((c) => semAcento(c));
-  const temCabecalho = cabecalho.some((c) => c in COLUNAS);
-  const campos = temCabecalho
-    ? cabecalho.map((c) => COLUNAS[c] ?? null)
-    : ([
-        "name",
-        "registration",
-        "tax_id",
-        "email",
-        "job_role_id",
-        "admitted_at",
-        "bond",
-      ] as (keyof ImportRowLocal)[]);
-
-  /*
-    Função com o mesmo nome em duas unidades casava pela primeira encontrada
-    e ligava a pessoa à unidade errada, sem aviso. [CB-6]
-  */
-  const porNome = new Map<string, JobRole[]>();
-  for (const f of funcoes) {
-    const chave = semAcento(f.name);
-    porNome.set(chave, [...(porNome.get(chave) ?? []), f]);
-  }
-  const empresaPorNome = new Map(empresas.map((c) => [semAcento(c.name), c.id]));
-  const vinculos = new Map(
-    Object.entries(WORKER_BOND_LABEL).map(([codigo, rotulo]) => [semAcento(rotulo), codigo]),
-  );
-  const papeis = new Map(
-    Object.entries(ORG_ROLE_LABEL).map(([codigo, rotulo]) => [semAcento(rotulo), codigo]),
-  );
-
-  const rows: ImportRow[] = [];
-  const problems: string[] = [];
-
-  for (const [i, linha] of linhas.slice(temCabecalho ? 1 : 0).entries()) {
-    const numero = i + 1;
-    const celulas = linha.split(sep).map((c) => c.trim());
-    const row: ImportRow = { name: "" };
-    celulas.forEach((valor, coluna) => {
-      const campo = campos[coluna];
-      if (!campo || !valor) return;
-      (row as Record<string, string>)[campo] = valor;
-    });
-
-    if (!row.name) {
-      problems.push(`Linha ${numero}: sem nome.`);
-      continue;
-    }
-
-    /*
-      Linha copiada do Excel que perde as tabulações vira uma coluna só: o
-      nome passava a ser a linha inteira e a prévia dava "Entra" para uma
-      pessoa sem matrícula, sem CPF e sem função. A prévia existe para
-      proteger. [B2-1-L]
-    */
-    if (temCabecalho && cabecalho.length > 1 && celulas.length === 1) {
-      problems.push(
-        `Linha ${numero}: veio sem separador — o cabeçalho tem ${cabecalho.length} colunas e esta linha tem 1. Cole de novo mantendo o ponto e vírgula ou a tabulação.`,
-      );
-      continue;
-    }
-    if (temCabecalho && celulas.length > cabecalho.length) {
-      problems.push(
-        `Linha ${numero}: tem ${celulas.length} colunas e o cabeçalho tem ${cabecalho.length}. Deve haver um separador dentro de algum campo.`,
-      );
-      continue;
-    }
-    /*
-      Arroba, CPF ou data dentro do nome é sinal de linha inteira caída ali,
-      ou de coluna trocada. Dígito solto passa: há quem se chame "Maria de
-      Souza 2" na folha. [B2-1-L]
-    */
-    if (pareceLinhaInteira(row.name)) {
-      problems.push(
-        `Linha ${numero}: "${row.name.slice(0, 40)}${
-          row.name.length > 40 ? "…" : ""
-        }" não parece um nome — tem arroba, CPF ou data dentro. Confira se as colunas estão no lugar.`,
-      );
-      continue;
-    }
-    if (row.job_role_id) {
-      const nomeDaFuncao = row.job_role_id;
-      let candidatas = porNome.get(semAcento(nomeDaFuncao)) ?? [];
-      const unidade = (row as ImportRowLocal).establishment;
-      if (unidade) {
-        candidatas = candidatas.filter(
-          (f) => semAcento(f.establishment?.name ?? "") === semAcento(unidade),
-        );
-      }
-      if (candidatas.length === 0) {
-        problems.push(
-          unidade
-            ? `Linha ${numero}: função "${nomeDaFuncao}" não existe na unidade "${unidade}".`
-            : `Linha ${numero}: função "${nomeDaFuncao}" não existe.`,
-        );
-        delete row.job_role_id;
-      } else if (candidatas.length > 1) {
-        const unidades = [
-          ...new Set(candidatas.map((f) => f.establishment?.name ?? "sem unidade")),
-        ];
-        problems.push(
-          `Linha ${numero}: a função "${nomeDaFuncao}" existe em ${unidades.join(
-            " e ",
-          )}. Acrescente a coluna "unidade" para dizer qual.`,
-        );
-        delete row.job_role_id;
-      } else {
-        row.job_role_id = candidatas[0]!.id;
-      }
-    }
-    delete (row as ImportRowLocal).establishment;
-    /*
-      O papel chegava só como código interno, e a explicação nem o
-      mencionava: a planilha passa a aceitar "Supervisor" como aceita
-      "Terceirizado". [B2-1-D]
-    */
-    if (row.org_role) {
-      const codigo = ORG_ROLE_LABEL[row.org_role.toUpperCase()]
-        ? row.org_role.toUpperCase()
-        : papeis.get(semAcento(row.org_role));
-      if (!codigo) {
-        problems.push(`Linha ${numero}: papel "${row.org_role}" desconhecido.`);
-        delete row.org_role;
-      } else {
-        row.org_role = codigo;
-      }
-    }
-    if (row.bond) {
-      const codigo = WORKER_BOND_LABEL[row.bond.toUpperCase()]
-        ? row.bond.toUpperCase()
-        : vinculos.get(semAcento(row.bond));
-      if (!codigo) {
-        problems.push(`Linha ${numero}: vínculo "${row.bond}" desconhecido.`);
-        delete row.bond;
-      } else {
-        row.bond = codigo;
-      }
-    }
-    if (row.contractor_id) {
-      const id = empresaPorNome.get(semAcento(row.contractor_id));
-      if (!id) {
-        problems.push(
-          `Linha ${numero}: empresa contratada "${row.contractor_id}" não está cadastrada em Terceiros.`,
-        );
-        delete row.contractor_id;
-      } else {
-        row.contractor_id = id;
-        if (!row.bond || row.bond === "EMPLOYEE") row.bond = "CONTRACTOR";
-      }
-    }
-    if (row.admitted_at && /^\d{2}\/\d{2}\/\d{4}$/.test(row.admitted_at)) {
-      const [d, m, a] = row.admitted_at.split("/");
-      row.admitted_at = `${a}-${m}-${d}`;
-    }
-    rows.push(row);
-  }
-
-  return { rows, problems };
-}
 
 function tone(status: string): "success" | "info" | "neutral" | "danger" {
   if (status === "created") return "success";
@@ -268,14 +34,31 @@ function tone(status: string): "success" | "info" | "neutral" | "danger" {
  * O modelo da planilha, para quem monta no Excel.
  *
  * A tela falava em planilha e não oferecia uma: cada um montava de um jeito,
- * e descobria no erro o que o portal esperava. Vai com cabeçalho, duas
- * linhas de exemplo e tudo em português. [B2-1-D]
+ * e descobria no erro o que o portal esperava.
+ *
+ * Vai SÓ com o cabeçalho: as duas linhas de exemplo usavam função e unidade
+ * que não existem na empresa e, esquecidas na planilha, entravam como
+ * pessoas. O exemplo ficou na explicação da tela. [B2-1-D]
  */
-const MODELO = [
-  "nome;matricula;cpf;email;funcao;unidade;admissao;vinculo;empresa;papel",
-  "Maria de Souza;1023;529.982.247-25;maria@empresa.com.br;Torneiro;Matriz;10/03/2025;Empregado;;Colaborador",
-  "João Pereira;1024;;;Ajudante;Matriz;01/04/2025;Terceirizado;Limpeza Industrial Ltda;Colaborador",
-].join("\r\n");
+const MODELO = CABECALHO_OFICIAL.join(";");
+
+/**
+ * Lê o arquivo da planilha como texto.
+ *
+ * O Excel em português salva CSV em Windows-1252 quando não se escolhe "CSV
+ * UTF-8": lido como UTF-8, "José" vira "Jos\uFFFD". Com BOM, é UTF-8 e pronto;
+ * sem BOM, tenta UTF-8 e, se aparecer caractere de substituição, lê de novo
+ * em Windows-1252. [B3-1-B]
+ */
+export async function lerPlanilha(arquivo: File): Promise<string> {
+  const bytes = new Uint8Array(await arquivo.arrayBuffer());
+  const temBom = bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf;
+  const comoUtf8 = new TextDecoder("utf-8").decode(bytes);
+  if (temBom || !comoUtf8.includes("\uFFFD")) {
+    return temBom ? comoUtf8.slice(1) : comoUtf8;
+  }
+  return new TextDecoder("windows-1252").decode(bytes);
+}
 
 function baixarModelo() {
   /*
@@ -315,6 +98,13 @@ function imprimirFichas() {
  */
 export function ImportPeople() {
   const [texto, setTexto] = useState("");
+  /*
+    A colagem sai: o cadastro passa a ser pelo envio do arquivo da planilha
+    modelo, como combinado com a empresa em 21/10/2026. Colar do Excel
+    perdia separador e transformava a linha inteira em nome. [B3-1-B] [S1-G]
+  */
+  const [arquivo, setArquivo] = useState<File | null>(null);
+  const [erroDoArquivo, setErroDoArquivo] = useState<string | null>(null);
   const [funcoes, setFuncoes] = useState<JobRole[]>([]);
   const [empresas, setEmpresas] = useState<{ id: string; name: string }[]>([]);
   const [previa, setPrevia] = useState<ImportReport | null>(null);
@@ -332,7 +122,11 @@ export function ImportPeople() {
   }, []);
 
   const lido = useMemo(
-    () => parse(texto, funcoes, empresas),
+    () =>
+      lerLinhas(texto, funcoes as FuncaoDaEmpresa[], empresas, {
+        papeis: ORG_ROLE_LABEL,
+        vinculos: WORKER_BOND_LABEL,
+      }),
     [texto, funcoes, empresas],
   );
 
@@ -369,10 +163,16 @@ export function ImportPeople() {
   return (
     <section className="form-section">
       <h2>Cadastrar várias pessoas</h2>
+      {/*
+        O texto dizia que quem já está cadastrado é pulado, e a decisão CB-2
+        mudou isso: a planilha completa o que está em branco. A tela
+        contradizia o que o portal faz. [CB-51]
+      */}
       <p className="muted">
-        Cole a planilha com uma pessoa por linha. Aceita ponto e vírgula,
-        vírgula ou a colagem direta do Excel. Quem já está cadastrado é pulado,
-        o que estiver errado volta com o motivo, e o resto entra.
+        Baixe o modelo, preencha uma pessoa por linha e envie o arquivo. Quem
+        já está no portal tem a ficha <strong>completada</strong> com o que
+        estiver em branco — nada é sobrescrito. O que estiver errado volta com
+        o motivo, e o resto entra.
       </p>
 
       {/* Sem modelo, cada um montava a planilha de um jeito. [B2-1-D] */}
@@ -383,22 +183,38 @@ export function ImportPeople() {
       </div>
 
       <label className="form-field">
-        Planilha
-        <textarea
-          className="import-sheet"
-          value={texto}
-          onChange={(e) => {
-            setTexto(e.target.value);
+        Arquivo da planilha
+        <input
+          type="file"
+          accept=".csv,text/csv,text/plain"
+          onChange={async (e) => {
+            const f = e.target.files?.[0] ?? null;
+            setArquivo(f);
             setPrevia(null);
             setRelatorio(null);
+            setErroDoArquivo(null);
+            if (!f) {
+              setTexto("");
+              return;
+            }
+            try {
+              setTexto(await lerPlanilha(f));
+            } catch {
+              setTexto("");
+              setErroDoArquivo("Não consegui ler este arquivo. Envie o CSV do modelo.");
+            }
           }}
-          rows={8}
-          spellCheck={false}
-          placeholder={EXEMPLO}
         />
         <span className="form-hint">
-          Colunas: nome; matrícula; CPF; e-mail; função; unidade; admissão;
-          vínculo; empresa contratada; papel. Só o nome é obrigatório.
+          {arquivo ? `${arquivo.name} — ` : ""}
+          Colunas: {CABECALHO_OFICIAL.join("; ")}. Só o nome é obrigatório.
+          <br />
+          No Excel, salve com <strong>Salvar como → CSV UTF-8</strong>; no
+          Excel em português o separador sai como ponto e vírgula, que é o do
+          modelo.
+          <br />
+          Exemplo de linha: Maria de Souza;1023;529.982.247-25;
+          maria@empresa.com.br;Torneiro;Matriz;10/03/2025;Empregado;;Colaborador
           <br />
           Vínculo: {Object.values(WORKER_BOND_LABEL).join(", ")}. A empresa
           precisa estar cadastrada em Terceiros.
@@ -411,6 +227,12 @@ export function ImportPeople() {
           Datas em DD/MM/AAAA ou AAAA-MM-DD.
         </span>
       </label>
+
+      {erroDoArquivo && (
+        <p className="form-error" role="alert">
+          {erroDoArquivo}
+        </p>
+      )}
 
       {lido.rows.length > 0 && (
         <p className="muted">
