@@ -6,6 +6,9 @@ export type TimeEntry = {
   userId: string;
   day: string;
   balanceMinutes: number;
+  /** Quem lançou. Nulo nos lançamentos anteriores à coluna. [CB-66] */
+  createdBy?: { id: string; name: string } | null;
+  createdAt?: string;
   note: string | null;
 };
 

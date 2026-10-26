@@ -14,7 +14,7 @@ router.get("/api/time-entries", read, (req, res) => time.list(req, res));
  * que quisesse. [S5-O]
  */
 router.post("/api/time-entries", cuidaDoPonto, (req, res) =>
-  time.upsert(req, res),
+  time.create(req, res),
 );
 
 export default router;
