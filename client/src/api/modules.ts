@@ -149,6 +149,8 @@ export const fetchJobRoleRequirements = () =>
       kind: string;
       name: string;
       jobRole: { name: string };
+      /** O curso do portal que atende a exigência. [CB-70] */
+      training: { id: string; title: string } | null;
     }>;
   }>("/api/job-role-requirements").then((d) => d.requirements);
 
@@ -515,6 +517,12 @@ export const createJobRoleRequirement = (input: {
   kind?: string;
   description?: string;
   validity_months?: number;
+  /**
+   * O curso do portal que atende esta exigência. O campo existia só no
+   * servidor, então o Painel nunca contava o curso concluído aqui dentro.
+   * [CB-70] [S7-G]
+   */
+  training_id?: string;
 }) =>
   request("/api/job-role-requirements", {
     method: "POST",

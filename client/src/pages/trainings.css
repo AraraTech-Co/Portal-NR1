@@ -47,3 +47,15 @@
   display: block;
   font-size: 0.8rem;
 }
+
+/* O número do certificado era o link e não parecia. [S7-G] */
+.training-certificado {
+  display: inline-grid;
+  gap: 0.05rem;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.training-certificado .training-sub {
+  text-decoration: none;
+}

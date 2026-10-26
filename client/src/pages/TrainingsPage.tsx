@@ -70,8 +70,16 @@ function Enrollments({ trainingId, reloadKey }: { trainingId: string; reloadKey:
             <td>
               {/* Era só o código na lista: o RH também não tinha o que
                   entregar nem o que mostrar à fiscalização. [B2-3-C] */}
+              {/*
+                  O número era o link, mas parecia só um código: o testador
+                  entendeu que não havia como baixar o certificado. Agora diz
+                  o que faz. [S7-G]
+              */}
               {e.certificateCode ? (
-                <Link to={`/certificados/${e.id}`}>{e.certificateCode}</Link>
+                <Link to={`/certificados/${e.id}`} className="training-certificado">
+                  Abrir certificado
+                  <span className="muted training-sub">{e.certificateCode}</span>
+                </Link>
               ) : (
                 "—"
               )}
