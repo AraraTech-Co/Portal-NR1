@@ -102,20 +102,23 @@
   esta regra não valer em nenhuma outra tela que imprime. [B2-1-E]
 */
 @media print {
-  body.imprimindo-fichas > * {
-    visibility: hidden;
-  }
+  /*
+    O resto da tela SAI DO FLUXO, não fica só invisível: com
+    `visibility: hidden` o espaço continuava contando, e duas fichas saíam
+    com 12 páginas, 11 em branco. O número crescia com o tamanho da tela de
+    Conta e usuários, que tem nove seções e a lista inteira de pessoas.
+    [B3-1-D]
 
-  body.imprimindo-fichas .import-slips,
-  body.imprimindo-fichas .import-slips * {
-    visibility: visible;
+    As fichas são filhas diretas do `body` (portal do React), então basta
+    esconder as outras.
+  */
+  body.imprimindo-fichas > *:not(.import-slips) {
+    display: none !important;
   }
 
   body.imprimindo-fichas .import-slips {
     display: block;
-    position: absolute;
-    top: 0;
-    left: 0;
+    position: static;
     width: 100%;
   }
 
@@ -127,4 +130,11 @@
     break-inside: avoid;
     page-break-inside: avoid;
   }
+}
+
+/* De que empresa é a ficha e onde entrar. [B2-1-E] */
+.import-slip-onde {
+  margin: 0 0 0.6rem;
+  font-size: 0.85rem;
+  color: #444;
 }

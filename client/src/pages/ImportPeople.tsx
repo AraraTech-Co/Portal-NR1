@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   importPeople,
   WORKER_BOND_LABEL,
@@ -9,6 +10,7 @@ import { fetchJobRoles, type JobRole } from "@/api/operation";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
 import { ORG_ROLE_LABEL } from "@/lib/labels";
+import { useAuth } from "@/auth/AuthContext";
 import "@/components/data-table.css";
 import "@/components/form.css";
 import "./import-people.css";
@@ -97,6 +99,9 @@ function imprimirFichas() {
  * de primeiro acesso aparecem uma vez — o portal não as guarda em texto. [S1-A]
  */
 export function ImportPeople() {
+  /* A ficha não dizia de que empresa é nem onde entrar. [B2-1-E] */
+  const { user } = useAuth();
+  const empresa = user?.organization.name ?? null;
   const [texto, setTexto] = useState("");
   /*
     A colagem sai: o cadastro passa a ser pelo envio do arquivo da planilha
@@ -278,38 +283,54 @@ export function ImportPeople() {
         )}
       </div>
 
-      {/* As fichas: existem para o papel, e só aparecem na impressão. [B2-1-E] */}
-      {relatorio && (
-        <div className="import-slips">
-          {relatorio.results
-            .filter((r) => r.temporary_password)
-            .map((r) => (
-              <section key={`ficha-${r.line}`} className="import-slip">
-                <h2>Primeiro acesso ao Portal NR-1</h2>
-                <dl>
-                  <div>
-                    <dt>Nome</dt>
-                    <dd>{r.name}</dd>
-                  </div>
-                  <div>
-                    <dt>Entrar com</dt>
-                    <dd>{r.login}</dd>
-                  </div>
-                  <div>
-                    <dt>Senha provisória</dt>
-                    <dd>
-                      <code>{r.temporary_password}</code>
-                    </dd>
-                  </div>
-                </dl>
-                <p>
-                  Na primeira entrada o portal pede para trocar a senha. Depois
-                  disso, esta folha não serve para mais nada — rasgue.
-                </p>
-              </section>
-            ))}
-        </div>
-      )}
+      {/*
+        As fichas: existem para o papel, e só aparecem na impressão. [B2-1-E]
+
+        Vão para fora da tela, direto no `body`: a impressão escondia o resto
+        com `visibility: hidden`, e o espaço dele continuava contando — duas
+        fichas saíam com 12 páginas, 11 em branco. Como filhas do `body`, o
+        resto sai do fluxo de verdade. [B3-1-D]
+      */}
+      {relatorio &&
+        createPortal(
+          <div className="import-slips">
+            {relatorio.results
+              .filter((r) => r.temporary_password)
+              .map((r) => (
+                <section key={`ficha-${r.line}`} className="import-slip">
+                  <h2>Primeiro acesso ao Portal NR-1</h2>
+                  {/* Quem recebe a ficha não sabia onde entrar. [B2-1-E] */}
+                  <p className="import-slip-onde">
+                    {empresa ?? "Portal NR-1"}
+                    <br />
+                    {window.location.origin}
+                  </p>
+                  <dl>
+                    <div>
+                      <dt>Nome</dt>
+                      <dd>{r.name}</dd>
+                    </div>
+                    <div>
+                      <dt>Entrar com</dt>
+                      <dd>{r.login}</dd>
+                    </div>
+                    <div>
+                      <dt>Senha provisória</dt>
+                      <dd>
+                        <code>{r.temporary_password}</code>
+                      </dd>
+                    </div>
+                  </dl>
+                  <p>
+                    Na primeira entrada o portal pede para trocar a senha.
+                    Depois disso, esta folha não serve para mais nada — rasgue
+                    e jogue fora.
+                  </p>
+                </section>
+              ))}
+          </div>,
+          document.body,
+        )}
 
       {mostrado && (
         <div className="import-report">
@@ -334,6 +355,18 @@ export function ImportPeople() {
                   Imprimir as fichas de primeiro acesso
                 </Button>
               </div>
+              {/*
+                As senhas provisórias aparecem uma vez só: guardá-las para
+                reimprimir depois seria guardar senha em claro. Quem fechar a
+                tela antes de imprimir tem um caminho, e a tela passa a
+                dizê-lo. [B2-1-E]
+              */}
+              <p className="muted">
+                Imprima agora: as senhas provisórias aparecem uma vez e não
+                ficam guardadas. Se perder a folha, use{" "}
+                <strong>Redefinir senha</strong> em Pessoas e acessos — sai uma
+                senha provisória nova para entregar.
+              </p>
             </>
           )}
           <div className="data-table-wrap">
