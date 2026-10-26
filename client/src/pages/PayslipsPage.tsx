@@ -55,6 +55,11 @@ export function PayslipsPage() {
   */
   const [naoConferiu, setNaoConferiu] = useState<string[]>([]);
   const [motivoForaDoPadrao, setMotivoForaDoPadrao] = useState("");
+  /*
+    Documento de outra pessoa ou de outra competência não se publica com
+    justificativa: a tela nem oferece a caixa. [B3-3-A]
+  */
+  const [aceitaMotivo, setAceitaMotivo] = useState(false);
   const [questionsError, setQuestionsError] = useState<string | null>(null);
 
   const now = useMemo(() => new Date(), []);
@@ -146,10 +151,15 @@ export function PayslipsPage() {
       setFile(null);
       setNaoConferiu([]);
       setMotivoForaDoPadrao("");
+      setAceitaMotivo(false);
       await reload();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Falha ao publicar");
       setNaoConferiu(err instanceof ApiError ? err.reasons : []);
+      const cabeMotivo =
+        err instanceof ApiError && err.body.can_override === true;
+      setAceitaMotivo(cabeMotivo);
+      if (!cabeMotivo) setMotivoForaDoPadrao("");
     } finally {
       setPublishing(false);
     }
@@ -345,8 +355,10 @@ export function PayslipsPage() {
               </div>
             )}
             {/* A conferência não cai, mas um holerite correto de outra
-                contabilidade não pode travar o RH para sempre. [CB-28] */}
-            {naoConferiu.length > 0 && (
+                contabilidade não pode travar o RH para sempre [CB-28] — e a
+                exceção vale só aí: documento de outra pessoa ou de outra
+                competência é recusado sem saída. [B3-3-A] */}
+            {aceitaMotivo && (
               <label className="form-field">
                 Publicar assim mesmo — por quê?
                 <input

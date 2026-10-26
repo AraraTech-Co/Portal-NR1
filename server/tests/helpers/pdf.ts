@@ -41,3 +41,21 @@ export function holerite(matricula: string, nome: string, competencia: string): 
     "TOTAL LIQUIDO 2.450,00",
   ]);
 }
+
+/**
+ * Layout que o portal não sabe ler: traz a competência e os valores, mas não
+ * imprime "matrícula - nome" no formato da folha. É o caso para o qual a
+ * exceção com justificativa foi feita [CB-28] — diferente de um holerite de
+ * outra pessoa, que não tem exceção. [B3-3-A]
+ */
+export function holeriteSemPessoa(competencia: string): string {
+  return pdfBase64([
+    "DEMONSTRATIVO DE PAGAMENTO",
+    "EMPRESA TESTE LTDA",
+    competencia,
+    "Vencimentos   3.000,00",
+    "Descontos       550,00",
+    "TOTAL LIQUIDO 2.450,00",
+    "Assinatura do empregado",
+  ]);
+}
