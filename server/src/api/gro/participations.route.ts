@@ -22,5 +22,9 @@ router.patch("/api/participations/:id", write, (req, res) =>
 router.post("/api/participations/:id/evidences", write, (req, res) =>
   participation.addEvidence(req, res),
 );
+/* A evidência da participação precisa sair, não só entrar. [B3-4-B] [S7-E] */
+router.get("/api/participations/:id/evidences/:evidenceId/file", read, (req, res) =>
+  participation.evidenceFile(req, res),
+);
 
 export default router;

@@ -16,6 +16,7 @@ import {
   EVIDENCE_TYPES,
   EVIDENCE_VALIDATION_STATUSES,
 } from "../constants";
+import { sendPrivateFile } from "../helper/send-private-file";
 import type { AuthRequest } from "../types/auth";
 
 function fail(res: Response, err: unknown) {
@@ -75,6 +76,18 @@ class EmergencyController {
             orderBy: { performedAt: "desc" },
             include: {
               recordedBy: { select: { id: true, name: true } },
+              /* A tela de detalhe lista e baixa a ata. [B3-4-B] */
+              evidences: {
+                orderBy: { uploadedAt: "desc" },
+                select: {
+                  id: true,
+                  fileName: true,
+                  description: true,
+                  mimeType: true,
+                  sizeBytes: true,
+                  uploadedAt: true,
+                },
+              },
               _count: { select: { evidences: true } },
             },
           },
@@ -366,6 +379,35 @@ class EmergencyController {
   }
 
   /** 1.5.6.3.1: evidências do exercício simulado. */
+  /**
+   * Baixar a evidência do simulado (ata assinada, foto).
+   *
+   * A rota que serve arquivo de evidência só atende evidência de ação, então
+   * a ata entrava e não saía — e é o fiscal quem pede para ver. [B3-4-B]
+   * [S7-E]
+   */
+  async drillEvidenceFile(req: Request, res: Response) {
+    try {
+      const orgId = actorOrgId(req as AuthRequest);
+      const evidence = await prisma.evidence.findFirst({
+        where: {
+          id: req.params.evidenceId,
+          organizationId: orgId,
+          drillId: req.params.drillId,
+          drill: { procedureId: req.params.id },
+        },
+        select: { storagePath: true, fileName: true, mimeType: true },
+      });
+      if (!evidence) {
+        res.status(404).json({ message: "Evidência não encontrada." });
+        return;
+      }
+      sendPrivateFile(res, evidence, "Esta evidência foi registrada sem arquivo.");
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
   async addDrillEvidence(req: Request, res: Response) {
     try {
       const orgId = actorOrgId(req as AuthRequest);

@@ -40,6 +40,47 @@ export const fetchParticipations = () =>
     }>;
   }>("/api/participations").then((d) => d.participations);
 
+export type ParticipationEvidence = {
+  id: string;
+  fileName: string | null;
+  description: string | null;
+  mimeType: string | null;
+  sizeBytes: number | null;
+  uploadedAt: string;
+};
+
+/** O registro aberto, com a evidência que a própria tela pedia. [B3-4-B] */
+export const fetchParticipation = (id: string) =>
+  request<{
+    participation: {
+      id: string;
+      type: string;
+      subject: string;
+      description: string | null;
+      occurredAt: string;
+      participantsCount: number | null;
+      establishment: { id: string; name: string } | null;
+      recordedBy: { id: string; name: string };
+      evidences: ParticipationEvidence[];
+    };
+  }>(`/api/participations/${id}`).then((d) => d.participation);
+
+/**
+ * Anexar a lista de presença, a foto ou a ata. Opcional: a decisão B3-4-F
+ * pôs o registro do portal como prova e o papel como anexo. [B3-4-B]
+ */
+export const addParticipationEvidence = (
+  id: string,
+  input: { file_name: string; mime_type: string; content_base64: string; description?: string },
+) =>
+  request<{ evidence: ParticipationEvidence }>(
+    `/api/participations/${id}/evidences`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+
+export const participationEvidenceUrl = (id: string, evidenceId: string) =>
+  `/api/participations/${id}/evidences/${evidenceId}/file`;
+
 export const fetchEmployeeProfiles = () =>
   request<{
     profiles: Array<{

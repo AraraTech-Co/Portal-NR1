@@ -1,12 +1,20 @@
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { Fragment, FormEvent, useCallback, useEffect, useState } from "react";
 import {
+  addDrillEvidence,
   createEmergencyDrill,
   createEmergencyProcedure,
+  drillEvidenceUrl,
   drillStatus,
+  fetchEmergencyProcedure,
   fetchEmergencyProcedures,
   type DrillStatus,
   type EmergencyProcedure,
+  type EmergencyProcedureDetail,
 } from "@/api/emergencies";
+import { createActionFromFinding } from "@/api/actions";
+import { baixarArquivoPrivado } from "@/api/arquivo-privado";
+import { AnexarPapel } from "@/components/AnexarPapel";
+import { Dialog } from "@/components/Dialog";
 import { fetchEstablishments, type Establishment } from "@/api/operation";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
@@ -62,6 +70,24 @@ export function EmergenciesPage() {
   const [largeScaleMeasures, setLargeScaleMeasures] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  /*
+    O plano (primeiros socorros, responsáveis, saída) e o simulado
+    (participantes, achados) não abriam em tela nenhuma, embora o servidor
+    tivesse a consulta. [B3-4-B] [S7-E]
+  */
+  const [abertoId, setAbertoId] = useState<string | null>(null);
+  const [aberto, setAberto] = useState<EmergencyProcedureDetail | null>(null);
+  const [erroAberto, setErroAberto] = useState<string | null>(null);
+  /* O achado do simulado não virava ação nem aparecia em outro lugar. */
+  const [acaoDoAchado, setAcaoDoAchado] = useState<
+    { drillId: string; findings: string } | null
+  >(null);
+  const [responsavel, setResponsavel] = useState("");
+  const [prazoDaAcao, setPrazoDaAcao] = useState("");
+  const [abrindoAcao, setAbrindoAcao] = useState(false);
+  const [erroDaAcao, setErroDaAcao] = useState<string | null>(null);
+  const [acaoFeita, setAcaoFeita] = useState<string | null>(null);
 
   const [drillFor, setDrillFor] = useState<string | null>(null);
   const [performedAt, setPerformedAt] = useState("");
@@ -149,6 +175,55 @@ export function EmergenciesPage() {
       setFormError(err instanceof Error ? err.message : "Falha ao salvar");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function carregarAberto(id: string) {
+    setErroAberto(null);
+    try {
+      const { procedure } = await fetchEmergencyProcedure(id);
+      setAberto(procedure);
+    } catch (err) {
+      setAberto(null);
+      setErroAberto(
+        err instanceof Error ? err.message : "Falha ao abrir o procedimento",
+      );
+    }
+  }
+
+  async function alternar(id: string) {
+    if (abertoId === id) {
+      setAbertoId(null);
+      setAberto(null);
+      return;
+    }
+    setAbertoId(id);
+    setAberto(null);
+    await carregarAberto(id);
+  }
+
+  /* O achado do simulado vira ação do plano, com responsável e prazo. */
+  async function abrirAcaoDoAchado(e: FormEvent) {
+    e.preventDefault();
+    if (!acaoDoAchado || !responsavel || !prazoDaAcao) return;
+    setAbrindoAcao(true);
+    setErroDaAcao(null);
+    try {
+      const { action } = await createActionFromFinding({
+        title: acaoDoAchado.findings.slice(0, 160),
+        description: `Achado do simulado de emergência: ${acaoDoAchado.findings}`,
+        assignee_id: responsavel,
+        due_date: prazoDaAcao,
+        priority: "HIGH",
+      });
+      setAcaoDoAchado(null);
+      setResponsavel("");
+      setPrazoDaAcao("");
+      setAcaoFeita(`Ação aberta no plano: "${action.title}".`);
+    } catch (err) {
+      setErroDaAcao(err instanceof Error ? err.message : "Falha ao abrir a ação");
+    } finally {
+      setAbrindoAcao(false);
     }
   }
 
@@ -334,8 +409,22 @@ export function EmergenciesPage() {
             <tbody>
               {procedures.map((p) => {
                 const status = drillStatus(p);
+                const open = abertoId === p.id;
                 return (
-                  <tr key={p.id}>
+                  <Fragment key={p.id}>
+                  <tr
+                    className={`is-clickable${open ? " is-open" : ""}`}
+                    onClick={() => void alternar(p.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        void alternar(p.id);
+                      }
+                    }}
+                    tabIndex={0}
+                    role="button"
+                    aria-expanded={open}
+                  >
                     <td>
                       <strong>{p.scenario}</strong>
                     </td>
@@ -347,7 +436,7 @@ export function EmergenciesPage() {
                         {DRILL_LABEL[status]}
                       </Chip>
                     </td>
-                    <td>
+                    <td onClick={(e) => e.stopPropagation()}>
                       {canWrite && (
                         <button
                           type="button"
@@ -361,11 +450,163 @@ export function EmergenciesPage() {
                       )}
                     </td>
                   </tr>
+                  {open && (
+                    <tr>
+                      <td colSpan={6} onClick={(e) => e.stopPropagation()}>
+                        {erroAberto && (
+                          <p className="form-error" role="alert">
+                            {erroAberto}
+                          </p>
+                        )}
+                        {!aberto && !erroAberto && <p className="muted">Abrindo…</p>}
+                        {aberto && (
+                          <div className="registro-aberto">
+                            <h3 className="plano-titulo">O plano</h3>
+                            <p>
+                              <strong>Primeiros socorros e encaminhamento:</strong>{" "}
+                              {aberto.firstAidMeans ?? (
+                                <span className="muted">não registrado</span>
+                              )}
+                            </p>
+                            <p>
+                              <strong>Responsáveis:</strong>{" "}
+                              {aberto.responsibles ?? (
+                                <span className="muted">não registrado</span>
+                              )}
+                            </p>
+                            <p>
+                              <strong>Abandono do local:</strong>{" "}
+                              {aberto.evacuationPlan ?? (
+                                <span className="muted">não registrado</span>
+                              )}
+                            </p>
+                            {aberto.largeScaleMeasures && (
+                              <p>
+                                <strong>Grande porte:</strong>{" "}
+                                {aberto.largeScaleMeasures}
+                              </p>
+                            )}
+
+                            <h3 className="plano-titulo">Simulados</h3>
+                            {aberto.drills.length === 0 ? (
+                              <p className="muted">Nenhum simulado registrado.</p>
+                            ) : (
+                              <ul className="simulados">
+                                {aberto.drills.map((d) => (
+                                  <li key={d.id}>
+                                    <p className="simulado-cabeca">
+                                      <strong>{formatDay(d.performedAt)}</strong>
+                                      <span className="muted">
+                                        {d.participants != null
+                                          ? ` · ${d.participants} participante(s)`
+                                          : " · participantes não registrados"}
+                                        {` · registrado por ${d.recordedBy.name}`}
+                                      </span>
+                                    </p>
+                                    <p>
+                                      <strong>Achados:</strong>{" "}
+                                      {d.findings ?? (
+                                        <span className="muted">nenhum registrado</span>
+                                      )}
+                                    </p>
+                                    {canWrite && d.findings && (
+                                      <Button
+                                        type="button"
+                                        size="compact"
+                                        variant="secondary"
+                                        onClick={() => {
+                                          setErroDaAcao(null);
+                                          setAcaoFeita(null);
+                                          setAcaoDoAchado({
+                                            drillId: d.id,
+                                            findings: d.findings!,
+                                          });
+                                        }}
+                                      >
+                                        Abrir ação para este achado
+                                      </Button>
+                                    )}
+                                    <AnexarPapel
+                                      canWrite={canWrite}
+                                      label="Ata do simulado assinada"
+                                      hint="Opcional: o registro no portal já é a prova. Até 20 MB."
+                                      anexos={d.evidences ?? []}
+                                      onSend={async (input) => {
+                                        await addDrillEvidence(aberto.id, d.id, input);
+                                        await carregarAberto(aberto.id);
+                                      }}
+                                      onOpen={(anexo) =>
+                                        baixarArquivoPrivado(
+                                          drillEvidenceUrl(aberto.id, d.id, anexo.id),
+                                          anexo.fileName ?? "ata",
+                                        )
+                                      }
+                                    />
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                            {acaoFeita && (
+                              <p className="muted" role="status">
+                                {acaoFeita}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 );
               })}
             </tbody>
           </table>
         </div>
+      )}
+
+      {/* O achado vira ação do plano: responsável e prazo são obrigatórios. */}
+      {acaoDoAchado && (
+        <Dialog
+          title="Abrir ação para o achado do simulado"
+          description="A ação entra no Plano de ação, sem risco do inventário ligado — o achado veio do simulado, não de um perigo avaliado."
+          onClose={() => setAcaoDoAchado(null)}
+        >
+          <form className="form-grid" onSubmit={abrirAcaoDoAchado}>
+            <p className="form-hint">{acaoDoAchado.findings}</p>
+            <label className="form-field">
+              Responsável
+              <PeoplePicker
+                value={responsavel}
+                onChange={(id) => setResponsavel(id)}
+                disabled={abrindoAcao}
+                required
+              />
+            </label>
+            <label className="form-field">
+              Prazo
+              <input
+                type="date"
+                value={prazoDaAcao}
+                onChange={(e) => setPrazoDaAcao(e.target.value)}
+                disabled={abrindoAcao}
+                required
+              />
+            </label>
+            {erroDaAcao && (
+              <p className="form-error" role="alert">
+                {erroDaAcao}
+              </p>
+            )}
+            <div className="form-actions">
+              <Button
+                type="submit"
+                disabled={abrindoAcao || !responsavel || !prazoDaAcao}
+              >
+                {abrindoAcao ? "Abrindo…" : "Abrir ação"}
+              </Button>
+            </div>
+          </form>
+        </Dialog>
       )}
 
       {canWrite && drillFor && (

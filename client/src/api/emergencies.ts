@@ -22,6 +22,7 @@ export type EmergencyProcedureDetail = EmergencyProcedure & {
     participants: number | null;
     findings: string | null;
     recordedBy: { id: string; name: string };
+    evidences?: DrillEvidence[];
     _count: { evidences: number };
   }[];
 };
@@ -83,6 +84,38 @@ export async function createEmergencyDrill(
       }),
     },
   );
+}
+
+export type DrillEvidence = {
+  id: string;
+  fileName: string | null;
+  description: string | null;
+  mimeType: string | null;
+  sizeBytes: number | null;
+  uploadedAt: string;
+};
+
+/**
+ * A ata assinada do simulado. Anexar é opcional: a decisão B3-4-F pôs o
+ * registro do portal como prova e o papel como anexo. [B3-4-B] [B3-4-F]
+ */
+export async function addDrillEvidence(
+  procedureId: string,
+  drillId: string,
+  input: { file_name: string; mime_type: string; content_base64: string; description?: string },
+) {
+  return request<{ evidence: DrillEvidence }>(
+    `/api/emergency-procedures/${procedureId}/drills/${drillId}/evidences`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+export function drillEvidenceUrl(
+  procedureId: string,
+  drillId: string,
+  evidenceId: string,
+): string {
+  return `/api/emergency-procedures/${procedureId}/drills/${drillId}/evidences/${evidenceId}/file`;
 }
 
 export type DrillStatus =

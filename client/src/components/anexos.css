@@ -1,0 +1,89 @@
+/* Papel anexado a um registro: o que já veio e o campo para mandar. [B3-4-B] */
+.anexos {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.anexos-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+}
+
+.anexos-abrir {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.anexos-abrir:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.anexos-vazio {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.anexos-form {
+  display: grid;
+  gap: 0.5rem;
+  padding-top: 0.4rem;
+  border-top: 1px dashed var(--border);
+}
+
+/* O registro aberto dentro da lista. [B3-4-B] */
+.registro-aberto {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.6rem 0.2rem;
+}
+
+.registro-aberto > p {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+/* O plano de emergência e os simulados, abertos na linha. [B3-4-B] */
+.plano-titulo {
+  margin: 0.5rem 0 0;
+  font-size: 0.9rem;
+}
+
+.simulados {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.8rem;
+}
+
+.simulados > li {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  justify-items: start;
+}
+
+.simulados p {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.simulado-cabeca {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+}

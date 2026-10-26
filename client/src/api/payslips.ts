@@ -1,5 +1,6 @@
 import { getToken } from "./token";
 import { request } from "./client";
+import { baixarArquivoPrivado } from "./arquivo-privado";
 
 export type PayslipListItem = {
   id: string;
@@ -161,61 +162,12 @@ export function answerPayslipQuestion(
   );
 }
 
-/** iPhone e iPad — o iPadOS se apresenta como Mac, mas tem tela de toque. */
-function isIOS(): boolean {
-  const ua = navigator.userAgent;
-  return (
-    /iPad|iPhone|iPod/.test(ua) ||
-    (ua.includes("Macintosh") && navigator.maxTouchPoints > 1)
-  );
-}
-
-/** Tempo para o visualizador terminar de carregar antes de liberar o arquivo da memória. */
-const REVOKE_AFTER_MS = 60_000;
-
+/**
+ * Abre o holerite. O GET marca "Visto" no servidor — é o documento aberto que
+ * conta, não a tela. [S4-E]
+ */
 export async function downloadPayslipFile(id: string, fileName: string) {
-  /*
-    No iPhone, o Safari abre o PDF na própria aba em vez de baixar — pequeno —
-    e o link do arquivo era revogado na mesma hora: ao voltar, o visualizador
-    não achava mais o arquivo. [S4-F]
-
-    No iOS, o PDF abre numa aba própria, no visualizador nativo em tela cheia,
-    e a aba do portal fica intacta. A aba é aberta AGORA, ainda dentro do
-    toque: depois do `await`, o Safari a bloquearia como pop-up.
-  */
-  const viewer = isIOS() ? window.open("", "_blank") : null;
-
-  let blob: Blob;
-  try {
-    const headers = new Headers();
-    const token = getToken();
-    if (token) headers.set("Authorization", `Bearer ${token}`);
-    const res = await fetch(`/api/payslips/${id}/file`, { headers });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(
-        (data as { message?: string }).message || `Erro ${res.status}`,
-      );
-    }
-    blob = await res.blob();
-  } catch (err) {
-    viewer?.close();
-    throw err;
-  }
-
-  const url = URL.createObjectURL(blob);
-  if (viewer) {
-    viewer.location.href = url;
-  } else {
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-  }
-  // Liberado depois que o visualizador carregou — não na mesma hora.
-  window.setTimeout(() => URL.revokeObjectURL(url), REVOKE_AFTER_MS);
+  await baixarArquivoPrivado(`/api/payslips/${id}/file`, fileName);
 }
 
 export function fileToBase64(file: File): Promise<string> {
