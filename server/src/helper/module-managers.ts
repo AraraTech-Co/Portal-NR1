@@ -1,6 +1,10 @@
 import prisma from "../model/prisma";
 import { effectivePermission } from "./auth";
-import { canHandleErgonomicComplaint, canValidateAction } from "./module-access";
+import {
+  canHandleErgonomicComplaint,
+  canManageModule,
+  canValidateAction,
+} from "./module-access";
 import { accessEnded } from "./access-period";
 
 /**
@@ -47,6 +51,29 @@ export async function usersWhoValidateActions(
       (m) =>
         !accessEnded(m.accessExpiresAt, now) &&
         canValidateAction(effectivePermission(m.role)),
+    )
+    .map((m) => m.userId);
+}
+
+/**
+ * Quem entrega os prêmios da gamificação.
+ *
+ * O resgate pedido ficava parado até alguém do RH entrar na tela por acaso.
+ * [B3-3-F]
+ */
+export async function usersWhoManageRewards(
+  organizationId: string,
+  now = new Date(),
+): Promise<string[]> {
+  const membros = await prisma.membership.findMany({
+    where: { organizationId, suspendedAt: null, user: { active: true } },
+    select: { userId: true, role: true, accessExpiresAt: true },
+  });
+  return membros
+    .filter(
+      (m) =>
+        !accessEnded(m.accessExpiresAt, now) &&
+        canManageModule(effectivePermission(m.role), "gamificacao"),
     )
     .map((m) => m.userId);
 }

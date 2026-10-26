@@ -17,11 +17,25 @@ import { accessEnded } from "./access-period";
  * - quem está com o acesso suspenso ou com o prazo vencido;
  * - a pessoa desativada no sistema.
  *
- * Com unidades escolhidas, entra só quem trabalha nelas — a unidade da
- * pessoa é a do setor da sua função. Quem não está ligado a nenhuma função
- * (acesso só administrativo, por exemplo) não entra num aviso de unidade:
- * não há como dizer de que unidade essa pessoa é.
+ * Com unidades escolhidas, entra quem trabalha nelas — a unidade da pessoa é
+ * a do setor da sua função.
+ *
+ * E entra também quem NÃO está ligado a nenhuma função e não é colaborador:
+ * supervisor, SST, RH, gerente e dono costumam não ter função de chão de
+ * fábrica, e são justamente quem precisa saber do aviso da unidade. A regra
+ * antiga deixava de fora o líder da usinagem, o SST, o RH e o gerente — um
+ * aviso para a Brasmetal chegava a 8 das 19 pessoas. Como o portal não sabe
+ * a que unidade essas pessoas atendem, elas recebem os avisos de todas: ficar
+ * de fora é pior que receber a mais. [CB-60]
+ *
+ * O colaborador sem função é ficha incompleta, não administrativo: continua
+ * fora do aviso de unidade, e recebe os da empresa toda.
  */
+/** Papéis cuja unidade vem da função; os demais atendem a empresa. [CB-60] */
+function ehColaborador(role: Role): boolean {
+  return role === Role.COLABORADOR;
+}
+
 export async function announcementAudience(
   organizationId: string,
   establishmentIds: readonly string[],
@@ -38,6 +52,7 @@ export async function announcementAudience(
     },
     select: {
       userId: true,
+      role: true,
       accessExpiresAt: true,
       user: {
         select: {
@@ -61,7 +76,9 @@ export async function announcementAudience(
       if (ficha?.dismissedAt) return false;
       if (!porUnidade) return true;
       const unidade = ficha?.jobRole?.sector.establishmentId ?? null;
-      return unidade !== null && establishmentIds.includes(unidade);
+      if (unidade !== null) return establishmentIds.includes(unidade);
+      /* Sem função: entra se não for colaborador. [CB-60] */
+      return !ehColaborador(m.role);
     })
     .map((m) => m.userId);
 }
@@ -99,7 +116,18 @@ export async function announcementVisibility(
   });
   const minhaUnidade = ficha?.jobRole?.sector.establishmentId ?? null;
   const daEmpresaToda = { establishments: { none: {} } };
-  if (!minhaUnidade) return daEmpresaToda;
+  if (!minhaUnidade) {
+    /*
+      Sem função: se recebe os avisos de todas as unidades, precisa vê-los no
+      mural também — senão o aviso chega ao sino e some da lista. [CB-60]
+    */
+    const membro = await prisma.membership.findFirst({
+      where: { organizationId, userId },
+      select: { role: true },
+    });
+    if (membro && !ehColaborador(membro.role)) return {};
+    return daEmpresaToda;
+  }
   return {
     OR: [daEmpresaToda, { establishments: { some: { establishmentId: minhaUnidade } } }],
   };

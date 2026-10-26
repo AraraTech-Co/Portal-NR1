@@ -218,12 +218,25 @@ describe("quem recebe o aviso [CB-33]", () => {
   });
 
   it("a tela diz quantas pessoas receberam", async () => {
-    const { notified } = await publicar(rh.token, {
+    const daEmpresa = await publicar(rh.token, {
+      title: `Aviso de todos para contar ${SUFIXO}`,
+    });
+    const daFilial = await publicar(rh.token, {
       title: `Aviso com contagem ${SUFIXO}`,
       establishment_ids: [unidadeB],
     });
-    // Só a pessoa da filial, criada aqui.
-    expect(notified).toBe(1);
+    /*
+      A conta é o público de verdade. Não é mais "uma pessoa só": o aviso de
+      unidade passou a alcançar também quem não tem função e não é
+      colaborador — SST, RH, gerente, dono —, que atendem a empresa toda
+      [CB-60]. Continua menor que o da empresa inteira, que leva os
+      colaboradores das outras unidades.
+    */
+    expect(daFilial.notified).toBe(
+      (await avisados(daFilial.announcement.id)).length,
+    );
+    expect(daFilial.notified).toBeGreaterThan(0);
+    expect(daFilial.notified).toBeLessThan(daEmpresa.notified);
   });
 
   it("unidade de outra empresa, ou inexistente, é recusada", async () => {
@@ -303,8 +316,11 @@ describe("o mural mostra o que é para quem olha [CB-33]", () => {
     const achado = lista.body.announcements.find(
       (a: { id: string }) => a.id === announcement.id,
     );
-    expect(achado.audience_count).toBe(1);
-    expect(achado.read_count).toBe(0);
+    /* O público do aviso de unidade cresceu com o CB-60; a conta o segue. */
+    expect(achado.audience_count).toBe(
+      (await avisados(announcement.id)).length,
+    );
+    expect(achado.read_count, "quem publicou é de outra unidade").toBe(0);
 
     const leituras = await request(app)
       .get(`/api/announcements/${announcement.id}/leituras`)
@@ -357,8 +373,18 @@ describe("quem leu conta só quem devia ler [CB-36]", () => {
     expect(res.status, JSON.stringify(res.body)).toBe(200);
 
     const ids = res.body.readers.map((p: { id: string }) => p.id);
-    expect(ids).toEqual([pessoas.daFilial!.id]);
-    expect(res.body.pending).toBe(1);
+    expect(ids).toContain(pessoas.daFilial!.id);
+    /*
+      Quem fica fora é o que o CB-33 e o CB-36 cobram: o colaborador de outra
+      unidade (inclusive o de ficha sem função), o fiscal, o desligado e o
+      RH, que tem função na unidade A. Quem não tem função e não é
+      colaborador entra, por decisão do CB-60.
+    */
+    expect(ids).not.toContain(pessoas.semUnidade!.id);
+    expect(ids).not.toContain(pessoas.fiscal!.id);
+    expect(ids).not.toContain(pessoas.desligado!.id);
+    expect(ids).not.toContain(rh.user.id);
+    expect(res.body.pending).toBe(ids.length);
     expect(res.body.read).toBe(0);
     expect(res.body.announcement.establishments.map((u: { id: string }) => u.id)).toEqual([
       unidadeB,
@@ -379,6 +405,11 @@ describe("quem leu conta só quem devia ler [CB-36]", () => {
       .get(`/api/announcements/${announcement.id}/leituras`)
       .set(as(rh.token));
     expect(res.body.read).toBe(1);
-    expect(res.body.pending).toBe(0);
+    /* Quem leu sai da pendência; os outros do público continuam nela. */
+    expect(res.body.read + res.body.pending).toBe(res.body.readers.length);
+    const leu = res.body.readers.find(
+      (p: { id: string }) => p.id === pessoas.daFilial!.id,
+    );
+    expect(leu?.read_at, "a leitura dela ficou registrada").toBeTruthy();
   });
 });

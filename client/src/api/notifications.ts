@@ -13,7 +13,14 @@ export type Notification = {
     | "PAYSLIP_ANSWERED"
     | "CERTIFICATE_REVIEWED"
     | "ETHICS_MESSAGE"
-    | "TRAINING_COMPLETED";
+    | "TRAINING_COMPLETED"
+    /* Fatos que aconteciam sem aviso nenhum. [CB-29] [CB-53] [B3-3-F] [B3-3-I] */
+    | "JOIN_REQUEST_OPENED"
+    | "LEAVE_DECIDED"
+    | "POINTS_GRANTED"
+    | "REWARD_REQUESTED"
+    | "SUMMON_OPENED"
+    | "ETHICS_REPORT_OPENED";
   title: string;
   body: string | null;
   link: string | null;

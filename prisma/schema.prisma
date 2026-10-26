@@ -1654,6 +1654,18 @@ enum NotificationKind {
   ERGONOMIC_COMPLAINT_HANDLED
   /// O resgate de um prêmio foi aprovado, entregue ou recusado. [OB-4]
   REWARD_DECIDED
+  /// Alguém pediu para entrar pelo link de convite. [CB-53]
+  JOIN_REQUEST_OPENED
+  /// Férias, folga ou licença aprovada ou recusada. [B3-3-I]
+  LEAVE_DECIDED
+  /// Pontos lançados para a pessoa. [B3-3-F]
+  POINTS_GRANTED
+  /// Alguém pediu o resgate de um prêmio. [B3-3-F]
+  REWARD_REQUESTED
+  /// Convocado para uma reunião, treinamento ou exame. [CB-64]
+  SUMMON_OPENED
+  /// Denúncia nova no canal de ética, para quem é do comitê. [CB-29]
+  ETHICS_REPORT_OPENED
 }
 
 model Notification {

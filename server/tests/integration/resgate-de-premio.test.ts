@@ -181,6 +181,12 @@ describe("recusar devolve o que foi pago [OB-4]", () => {
       where: {
         entityType: "RewardRedemption",
         entityId: resgate.body.redemption.id,
+        /*
+          O resgate tem dois avisos: o do pedido, para quem entrega, e o da
+          decisão, para quem pediu. Sem dizer qual, a busca pegava um dos
+          dois ao acaso. [B3-3-F]
+        */
+        kind: "REWARD_DECIDED",
       },
       select: { userId: true, body: true },
     });

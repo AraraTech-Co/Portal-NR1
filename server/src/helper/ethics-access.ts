@@ -1,5 +1,7 @@
 import prisma from "../model/prisma";
 import { canReadModule } from "./module-access";
+import { effectivePermission } from "./auth";
+import { accessEnded } from "./access-period";
 import type { AuthRequest } from "../types/auth";
 import type { Response, NextFunction, Request } from "express";
 
@@ -29,6 +31,33 @@ export async function isEthicsCommittee(
     select: { userId: true },
   });
   return Boolean(souDoComite);
+}
+
+/**
+ * Quem recebe uma denúncia nova: o comitê designado, ou — enquanto não
+ * houver ninguém designado — quem lê o módulo comite, a mesma regra de
+ * `isEthicsCommittee`. [CB-29]
+ */
+export async function usersInEthicsCommittee(
+  organizationId: string,
+): Promise<string[]> {
+  const designados = await prisma.ethicsCommitteeMember.findMany({
+    where: { organizationId },
+    select: { userId: true },
+  });
+  if (designados.length > 0) return designados.map((m) => m.userId);
+
+  const membros = await prisma.membership.findMany({
+    where: { organizationId, suspendedAt: null, user: { active: true } },
+    select: { userId: true, role: true, accessExpiresAt: true },
+  });
+  return membros
+    .filter(
+      (m) =>
+        !accessEnded(m.accessExpiresAt) &&
+        canReadModule(effectivePermission(m.role), "comite"),
+    )
+    .map((m) => m.userId);
 }
 
 /** As denúncias em que a pessoa é citada — e das quais está fora. [CB-27] */
