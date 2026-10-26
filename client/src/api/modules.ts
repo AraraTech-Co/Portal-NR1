@@ -417,7 +417,7 @@ export const createIdea = (input: { title: string; description: string }) =>
     body: JSON.stringify(input),
   });
 
-/** Registro de participação dos trabalhadores — NR-1 1.5.3.2. [CB-45] */
+/** Registro de participação dos trabalhadores — NR-1 1.5.3.3. [CB-45] [B3-4-I] */
 export const createParticipation = (input: {
   type: string;
   subject: string;

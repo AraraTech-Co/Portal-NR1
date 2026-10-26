@@ -559,7 +559,7 @@ class InspectionController {
         ),
       );
 
-      // 5. Ordem de serviço e a ciência (1.4.1 "b"). [S7-F]
+      // 5. Ordem de serviço e a ciência (1.4.1 "c"). [S7-F] [B3-4-I]
       /*
         A ordem fica para trás quando o inventário da função muda depois da
         emissão: o Painel a dava como em ordem enquanto o trabalhador tinha
@@ -614,7 +614,7 @@ class InspectionController {
         check(
           "ordens_servico",
           "Ordens de serviço",
-          'NR-1 1.4.1 "b": ordem de serviço sobre segurança e saúde, com conhecimento dado aos empregados.',
+          'NR-1 1.4.1 "c": elaborar ordens de serviço sobre segurança e saúde no trabalho, dando ciência aos trabalhadores.',
           ordens,
           "Nenhuma função cadastrada.",
         ),
@@ -682,12 +682,12 @@ class InspectionController {
         ),
       );
 
-      // 8. Participação dos trabalhadores (1.5.3.2).
+      // 8. Participação dos trabalhadores (1.5.3.3). [B3-4-I]
       checks.push(
         check(
           "participacao",
           "Participação dos trabalhadores",
-          "NR-1 1.5.3.2: a organização assegura a participação dos trabalhadores no GRO.",
+          "NR-1 1.5.3.3: consultar os trabalhadores sobre a percepção de riscos e comunicar a eles os riscos e as medidas do PGR.",
           participacoes.slice(0, 20).map((p) => ({
             ok: true,
             label: p.subject,
@@ -700,7 +700,7 @@ class InspectionController {
         ),
       );
 
-      // 9. Treinamento e capacitação por função (1.5.5.5).
+      // 9. Treinamento e capacitação por função (1.7.1 e 1.7.1.1). [B3-4-I]
       const treinamentos: Item[] = [];
       for (const q of exigencias) {
         const validos = new Set(
@@ -786,7 +786,7 @@ class InspectionController {
         check(
           "treinamentos",
           "Treinamento e capacitação",
-          "NR-1 1.5.5.5: capacitação dos trabalhadores conforme os riscos da função.",
+          "NR-1 1.7.1 e 1.7.1.1: capacitação dos trabalhadores e certificado com o que a norma exige.",
           treinamentos,
           "Nenhum treinamento cadastrado e nenhuma exigência por função.",
         ),

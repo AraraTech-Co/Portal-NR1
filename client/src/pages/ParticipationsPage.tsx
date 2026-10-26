@@ -91,7 +91,7 @@ export function ParticipationsPage() {
           canWrite={canWrite}
           openLabel="Registrar participação"
           title="Registro de participação"
-          description="NR-1 1.5.3.2: é o que demonstra que os trabalhadores foram ouvidos e informados. A evidência (lista de presença, foto, ata) se anexa depois, no registro."
+          description="NR-1 1.5.3.3: é o que demonstra que os trabalhadores foram consultados sobre os riscos e informados das medidas. A evidência (lista de presença, foto, ata) se anexa no registro, abrindo a linha."
           submitLabel="Registrar"
           disabled={!assunto.trim() || !quando}
           onSubmit={async () => {

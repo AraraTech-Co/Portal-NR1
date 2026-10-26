@@ -320,7 +320,7 @@ export function ServiceOrderViewPage() {
 
       <article className="doc-paper">
         <header className="doc-header">
-          <p className="doc-kicker">Ordem de serviço de segurança e saúde · NR-1 1.4.1 "b"</p>
+          <p className="doc-kicker">Ordem de serviço de segurança e saúde · NR-1 1.4.1 "c"</p>
           <h1>{order.jobRole.name}</h1>
           <dl className="doc-meta">
             <div>
