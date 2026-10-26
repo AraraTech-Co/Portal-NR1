@@ -8,7 +8,7 @@ import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
 import { notify } from "../helper/notify";
 import { canManageModule } from "../helper/module-access";
-import { checkPayslip } from "../helper/payslip-check";
+import { checkPayslip, podeJustificar } from "../helper/payslip-check";
 import { extractPdfText } from "../helper/pdf-text";
 import {
   assertSize,
@@ -337,14 +337,34 @@ class PayslipController {
         recusou. Mandar um motivo num holerite que confere não pode marcar o
         documento como exceção.
       */
-      const motivoForaDoPadrao = conferencia.ok
-        ? null
-        : override_reason?.trim() || null;
+      /*
+        A exceção nasceu para holerite CERTO em layout que o portal não lê, e
+        passou a valer para qualquer recusa: com uma frase qualquer, o holerite
+        de um trabalhador ia para outro. A justificativa agora cobre só o que
+        não se conseguiu ler. [B3-3-A] [S5-G]
+      */
+      const aceitaMotivo = podeJustificar(conferencia);
+      if (conferencia.fatalBlockers.length > 0) {
+        res.status(422).json({
+          message:
+            "Este documento não é da pessoa ou da competência escolhida. Confira o arquivo e a competência — não há como publicar assim mesmo.",
+          code: "PAYSLIP_DOCUMENT_MISMATCH",
+          reasons: conferencia.blockers,
+          /** A tela não oferece justificativa quando ela não vale. */
+          can_override: false,
+        });
+        return;
+      }
+
+      const motivoForaDoPadrao = aceitaMotivo
+        ? override_reason?.trim() || null
+        : null;
       if (!conferencia.ok && !motivoForaDoPadrao) {
         res.status(422).json({
           message: "O documento não confere com a pessoa escolhida.",
           code: "PAYSLIP_CHECK_FAILED",
           reasons: conferencia.blockers,
+          can_override: true,
         });
         return;
       }

@@ -3,7 +3,7 @@ import request from "supertest";
 import type { Express } from "express";
 import { createApp } from "../../src/app";
 import prisma from "../../src/model/prisma";
-import { holerite } from "../helpers/pdf";
+import { holerite, holeriteSemPessoa } from "../helpers/pdf";
 
 /**
  * O holerite para de apagar a própria história.
@@ -187,7 +187,12 @@ describe("a recusa diz o que não confere [B2-3-B] [CB-28]", () => {
       holerite("MAT-DE-OUTRO", "Pessoa Que Nao E", `SETEMBRO/${ANO}`),
     );
     expect(res.status).toBe(422);
-    expect(res.body.code).toBe("PAYSLIP_CHECK_FAILED");
+    /*
+      O que este caso guarda é que a recusa diz o que não conferiu [B2-3-B].
+      Documento de outra pessoa passou a ter código próprio, porque não aceita
+      justificativa. [B3-3-A]
+    */
+    expect(res.body.code).toBe("PAYSLIP_DOCUMENT_MISMATCH");
     expect(Array.isArray(res.body.reasons)).toBe(true);
     expect(res.body.reasons.length, "a tela tem o que mostrar").toBeGreaterThan(0);
   });
@@ -197,8 +202,14 @@ describe("a recusa diz o que não confere [B2-3-B] [CB-28]", () => {
       where: { organizationId: ORG_ID, referenceYear: ANO, referenceMonth: MES },
     });
 
+    /*
+      Este caso usava um documento com a matrícula e o nome de OUTRA pessoa, e
+      esperava que a justificativa publicasse — era o defeito do B3-3-A escrito
+      como teste. A exceção é para layout que o portal não lê; o documento de
+      outra pessoa agora é recusado sem saída (`holerite-de-outra-pessoa`).
+    */
     const res = await publicar(
-      holerite("MAT-DE-OUTRO", "Pessoa Que Nao E", `SETEMBRO/${ANO}`),
+      holeriteSemPessoa(`SETEMBRO/${ANO}`),
       { override_reason: "Contabilidade nova, layout diferente." },
     );
     expect(res.status, JSON.stringify(res.body)).toBe(201);

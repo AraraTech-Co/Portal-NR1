@@ -27,9 +27,27 @@ export type PayslipCheck = {
   ok: boolean;
   /** Motivos de recusa, em português, prontos para a tela. */
   blockers: string[];
+  /**
+   * As recusas que nenhuma justificativa cobre.
+   *
+   * A exceção com justificativa nasceu para holerite CERTO em layout que o
+   * portal não lê (outra contabilidade, PDF digitalizado) [CB-28]. Ela passou
+   * a valer para qualquer recusa, inclusive documento com a matrícula e o
+   * nome de OUTRA pessoa — e uma frase qualquer entregava o holerite de um
+   * trabalhador a outro. [B3-3-A] [S5-G]
+   *
+   * A linha é esta: a justificativa cobre o que não se conseguiu ler; nunca o
+   * que o documento afirma e contradiz a escolha do RH.
+   */
+  fatalBlockers: string[];
   /** Divergências que não impedem a publicação. */
   warnings: string[];
 };
+
+/** Há recusa, e ela é só de leitura: dá para publicar com justificativa. */
+export function podeJustificar(check: PayslipCheck): boolean {
+  return !check.ok && check.fatalBlockers.length === 0;
+}
 
 const MONTHS = [
   "janeiro", "fevereiro", "março", "abril", "maio", "junho",
@@ -155,23 +173,40 @@ const MONTH_LABEL = (month: number, year: number) => `${MONTHS[month - 1]}/${yea
  */
 export function checkPayslip(text: string, expected: PayslipExpectation): PayslipCheck {
   const blockers: string[] = [];
+  /*
+    Recusa que o documento AFIRMA: outra pessoa, outra competência, mais de uma
+    pessoa no arquivo. Justificativa nenhuma cobre isso. [B3-3-A]
+  */
+  const fatalBlockers: string[] = [];
   const warnings: string[] = [];
+  const recusa = (message: string) => blockers.push(message);
+  const recusaSemExcecao = (message: string) => {
+    blockers.push(message);
+    fatalBlockers.push(message);
+  };
 
   if (text.trim().length < 40) {
+    // Nada para ler: é o caso da exceção com justificativa. [CB-28]
     return {
       ok: false,
       blockers: [
         "Não foi possível ler o texto deste PDF — provavelmente é digitalizado. Peça ao escritório o arquivo gerado pela folha.",
       ],
+      fatalBlockers: [],
       warnings,
     };
   }
 
   const entries = extractEmployeeEntries(text);
   if (entries.length === 0) {
-    blockers.push("Não encontrei matrícula e nome no documento.");
+    // Layout que o portal não lê: é o caso da exceção. [CB-28]
+    recusa("Não encontrei matrícula e nome no documento.");
   } else if (entries.length > 1) {
-    blockers.push(
+    /*
+      Publicar um arquivo com várias pessoas entrega a folha das outras a quem
+      recebe. Não é layout: é documento errado.
+    */
+    recusaSemExcecao(
       `Este arquivo tem mais de uma pessoa (matrículas ${entries
         .map((entry) => entry.registration)
         .join(", ")}). Envie um PDF por colaborador.`,
@@ -180,7 +215,7 @@ export function checkPayslip(text: string, expected: PayslipExpectation): Paysli
     const [entry] = entries;
 
     if (!sameRegistration(entry.registration, expected.registration)) {
-      blockers.push(
+      recusaSemExcecao(
         `A matrícula do documento é ${entry.registration} e a da pessoa escolhida é ${expected.registration}.`,
       );
     }
@@ -189,7 +224,9 @@ export function checkPayslip(text: string, expected: PayslipExpectation): Paysli
     const documentTokens = new Set(nameTokens(entry.name));
     const missing = expectedTokens.filter((token) => !documentTokens.has(token));
     if (expectedTokens.length === 0 || missing.length > 0) {
-      blockers.push(`O nome do documento é ${entry.name} e o do cadastro é ${expected.name}.`);
+      recusaSemExcecao(
+        `O nome do documento é ${entry.name} e o do cadastro é ${expected.name}.`,
+      );
     }
   }
 
@@ -199,9 +236,14 @@ export function checkPayslip(text: string, expected: PayslipExpectation): Paysli
       competence.month === expected.referenceMonth && competence.year === expected.referenceYear,
   );
   if (competences.length === 0) {
-    blockers.push("Não encontrei a competência (mês/ano) no documento.");
+    // Não se achou a competência: pode ser o layout. [CB-28]
+    recusa("Não encontrei a competência (mês/ano) no documento.");
   } else if (!matchesCompetence) {
-    blockers.push(
+    /*
+      O documento diz de que mês é, e não é o escolhido. O conserto é escolher
+      a competência certa, não justificar.
+    */
+    recusaSemExcecao(
       `O documento é da competência ${MONTH_LABEL(competences[0].month, competences[0].year)} e você está publicando ${MONTH_LABEL(expected.referenceMonth, expected.referenceYear)}.`,
     );
   }
@@ -216,5 +258,5 @@ export function checkPayslip(text: string, expected: PayslipExpectation): Paysli
     }
   }
 
-  return { ok: blockers.length === 0, blockers, warnings };
+  return { ok: blockers.length === 0, blockers, fatalBlockers, warnings };
 }

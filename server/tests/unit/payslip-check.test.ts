@@ -3,6 +3,7 @@ import {
   checkPayslip,
   extractCompetences,
   extractEmployeeEntries,
+  podeJustificar,
   type PayslipExpectation,
 } from "../../src/helper/payslip-check";
 
@@ -142,5 +143,72 @@ describe("admissão confirma, mas não trava", () => {
 
   it("silêncio quando a admissão bate", () => {
     expect(checkPayslip(HOLERITE, esperado()).warnings).toEqual([]);
+  });
+});
+
+/**
+ * A exceção com justificativa nasceu para holerite CERTO em layout que o
+ * portal não lê [CB-28]; passou a valer para qualquer recusa, e com uma frase
+ * qualquer o holerite de um trabalhador ia para outro. [B3-3-A] [S5-G]
+ */
+describe("o que a justificativa cobre [B3-3-A]", () => {
+  it("documento de outra pessoa: recusa sem exceção, pela matrícula e pelo nome", () => {
+    const outraPessoa = checkPayslip(HOLERITE, esperado({
+      registration: "19",
+      name: "Carlos Pereira",
+    }));
+    expect(outraPessoa.ok).toBe(false);
+    expect(podeJustificar(outraPessoa), "é o defeito do achado").toBe(false);
+    expect(outraPessoa.fatalBlockers.join(" ")).toContain("matrícula do documento");
+    expect(outraPessoa.fatalBlockers.join(" ")).toContain("nome do documento");
+  });
+
+  it("só a matrícula de outra pessoa já basta para não ter exceção", () => {
+    const check = checkPayslip(HOLERITE, esperado({ registration: "000075" }));
+    expect(podeJustificar(check)).toBe(false);
+  });
+
+  it("só o nome de outra pessoa já basta para não ter exceção", () => {
+    const check = checkPayslip(HOLERITE, esperado({ name: "João Pereira Silva" }));
+    expect(podeJustificar(check)).toBe(false);
+  });
+
+  it("competência que o documento afirma e não bate: sem exceção", () => {
+    const check = checkPayslip(HOLERITE, esperado({ referenceMonth: 8 }));
+    expect(podeJustificar(check)).toBe(false);
+    expect(check.fatalBlockers.join(" ")).toContain("competência");
+  });
+
+  it("arquivo com mais de uma pessoa: sem exceção, senão entrega a folha das outras", () => {
+    const juntao = `${HOLERITE}\n1\t000075 - JOAO PEREIRA SILVA 02/01/2020\n`;
+    expect(podeJustificar(checkPayslip(juntao, esperado()))).toBe(false);
+  });
+
+  it("PDF digitalizado continua publicável com justificativa [CB-28]", () => {
+    const check = checkPayslip("   ", esperado());
+    expect(check.ok).toBe(false);
+    expect(podeJustificar(check), "é o caso para o qual a exceção foi feita").toBe(true);
+    expect(check.fatalBlockers).toEqual([]);
+  });
+
+  it("layout que não traz matrícula e nome continua publicável com justificativa [CB-28]", () => {
+    const semPessoa = `Demonstrativo de pagamento
+EMPRESA DEMONSTRACAO LTDA
+SETEMBRO/2026
+Vencimentos 1.408,95
+Descontos 0,00
+Total liquido 1.408,95
+Assinatura do empregado`;
+    const check = checkPayslip(semPessoa, esperado());
+    expect(check.ok).toBe(false);
+    expect(check.blockers.join(" ")).toContain("Não encontrei matrícula e nome");
+    expect(podeJustificar(check)).toBe(true);
+  });
+
+  it("holerite que confere não tem recusa nenhuma", () => {
+    const check = checkPayslip(HOLERITE, esperado());
+    expect(check.ok).toBe(true);
+    expect(check.fatalBlockers).toEqual([]);
+    expect(podeJustificar(check), "sem recusa não há o que justificar").toBe(false);
   });
 });
