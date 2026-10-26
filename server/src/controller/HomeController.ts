@@ -331,11 +331,18 @@ class HomeController {
           prisma.risk.count({
             where: { organizationId: orgId, archivedAt: null, needsReassessment: true },
           }),
+          /*
+            O Início contava toda função sem ordem, inclusive as vazias; o
+            Painel e a tela de Ordens contam só as que têm gente, como pede o
+            B2-4-B. O dono via 15 pendências aqui e 4 lá. Mesma regra.
+            [B3-4-D]
+          */
           prisma.jobRole.count({
             where: {
               organizationId: orgId,
               archivedAt: null,
               serviceOrders: { none: {} },
+              employees: { some: { dismissedAt: null, user: { active: true } } },
             },
           }),
           prisma.establishment.findMany({

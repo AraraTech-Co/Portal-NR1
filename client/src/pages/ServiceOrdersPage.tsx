@@ -340,11 +340,23 @@ export function ServiceOrdersPage() {
                     <td>
                       {r.current ? (
                         <>
-                          <Chip tone="success">Emitida</Chip>
+                          {/* A ordem ficava "Emitida" mesmo depois de o
+                              inventário da função mudar. [CB-69] */}
+                          {r.current.changes_since > 0 ? (
+                            <Chip tone="warning">Desatualizada</Chip>
+                          ) : (
+                            <Chip tone="success">Emitida</Chip>
+                          )}
                           <div className="muted">
                             v{r.current.version}
                             {r.versions > 1 && ` de ${r.versions}`}
                           </div>
+                          {r.current.changes_since > 0 && (
+                            <div className="muted">
+                              {r.current.changes_since} mudança(s) no inventário
+                              depois da emissão — emita a próxima versão
+                            </div>
+                          )}
                         </>
                       ) : (
                         <Chip tone="warning">Sem ordem</Chip>

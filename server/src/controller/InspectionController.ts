@@ -3,6 +3,7 @@ import { Request, Response } from "express";
 import prisma from "../model/prisma";
 import { actorOrgId } from "../helper/org-scope";
 import { REQUIRED_PGR_DOCUMENTS } from "../helper/compliance";
+import { mudancasDesdeAEmissao } from "../helper/ordem-desatualizada";
 import { formatCalendarDay } from "../helper/calendar-day";
 import { canSeeAllInModule, isReadOnlyRole } from "../helper/module-access";
 import type { AuthRequest } from "../types/auth";
@@ -559,6 +560,20 @@ class InspectionController {
       );
 
       // 5. Ordem de serviço e a ciência (1.4.1 "b"). [S7-F]
+      /*
+        A ordem fica para trás quando o inventário da função muda depois da
+        emissão: o Painel a dava como em ordem enquanto o trabalhador tinha
+        dado ciência de uma ordem que não fala do risco de hoje. [CB-69]
+      */
+      const mudancasPorFuncao = new Map<string, number>();
+      for (const f of funcoes) {
+        const vigente = f.serviceOrders[0];
+        if (!vigente) continue;
+        mudancasPorFuncao.set(
+          f.id,
+          await mudancasDesdeAEmissao(orgId, f.id, vigente.issuedAt),
+        );
+      }
       const ordens: Item[] = funcoes.map((f) => {
         const vigente = f.serviceOrders[0];
         const pessoas = f._count.employees;
@@ -572,18 +587,23 @@ class InspectionController {
           importa. [B2-4-B]
         */
         const vazia = pessoas === 0;
+        const mudancas = mudancasPorFuncao.get(f.id) ?? 0;
+        const atrasada = Boolean(vigente) && mudancas > 0;
+        const desatualizada = atrasada
+          ? ` · desatualizada: ${mudancas} mudança(s) no inventário depois da emissão`
+          : "";
         return {
-          ok: vazia || (Boolean(vigente) && pendentes === 0),
+          ok: vazia || (Boolean(vigente) && pendentes === 0 && !atrasada),
           label: f.name,
           note: vazia ? "ninguém nesta função" : null,
           detail: vazia
             ? vigente
-              ? `v${vigente.version} · ninguém nesta função`
+              ? `v${vigente.version} · ninguém nesta função${desatualizada}`
               : "ninguém nesta função — a ordem entra quando houver gente"
             : vigente
               ? pendentes === 0
-                ? `v${vigente.version} · todos deram ciência`
-                : `v${vigente.version} · ${pendentes} sem ciência`
+                ? `v${vigente.version} · todos deram ciência${desatualizada}`
+                : `v${vigente.version} · ${pendentes} sem ciência${desatualizada}`
               : `${pessoas} pessoa(s) trabalhando sem ordem de serviço`,
           who: vigente ? vigente.issuedBy.name : null,
           when: quando(vigente?.issuedAt),
