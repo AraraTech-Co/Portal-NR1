@@ -33,5 +33,11 @@ router.post(
   write,
   (req, res) => emergency.addDrillEvidence(req, res),
 );
+/* A ata do simulado precisa sair, não só entrar. [B3-4-B] [S7-E] */
+router.get(
+  "/api/emergency-procedures/:id/drills/:drillId/evidences/:evidenceId/file",
+  read,
+  (req, res) => emergency.drillEvidenceFile(req, res),
+);
 
 export default router;

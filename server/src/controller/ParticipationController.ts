@@ -16,6 +16,7 @@ import {
   PARTICIPATION_TYPE_VALUES,
   isParticipationType,
 } from "../constants";
+import { sendPrivateFile } from "../helper/send-private-file";
 import type { AuthRequest } from "../types/auth";
 
 function fail(res: Response, err: unknown) {
@@ -69,6 +70,35 @@ class ParticipationController {
         return;
       }
       res.json({ participation });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
+  /**
+   * Baixar a evidência da participação (lista de presença, foto, ata).
+   *
+   * A tela pedia a evidência e não tinha como anexar; anexar pelo servidor
+   * também não bastava, porque a rota que serve arquivo de evidência só
+   * atende evidência de ação. Sem isto, a prova entra e não sai — e é o
+   * fiscal quem precisa vê-la. [B3-4-B] [S7-E]
+   */
+  async evidenceFile(req: Request, res: Response) {
+    try {
+      const orgId = actorOrgId(req as AuthRequest);
+      const evidence = await prisma.evidence.findFirst({
+        where: {
+          id: req.params.evidenceId,
+          organizationId: orgId,
+          participationId: req.params.id,
+        },
+        select: { storagePath: true, fileName: true, mimeType: true },
+      });
+      if (!evidence) {
+        res.status(404).json({ message: "Evidência não encontrada." });
+        return;
+      }
+      sendPrivateFile(res, evidence, "Esta evidência foi registrada sem arquivo.");
     } catch (err) {
       fail(res, err);
     }

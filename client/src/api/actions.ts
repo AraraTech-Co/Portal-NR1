@@ -94,6 +94,24 @@ export async function sendActionEvidence(input: {
 }
 
 /** Só o responsável conclui; exige ao menos uma evidência. [S3-C] [S3-M] */
+/**
+ * Ação sem risco ligado — por exemplo o achado de um simulado de emergência,
+ * que não nasce de um perigo do inventário. O servidor sempre aceitou ação
+ * sem risco; faltava o caminho na tela. [B3-4-B]
+ */
+export async function createActionFromFinding(input: {
+  title: string;
+  description?: string;
+  assignee_id: string;
+  due_date: string;
+  priority: string;
+}) {
+  return request<{ action: { id: string; title: string } }>("/api/actions", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
 export async function completeAction(id: string) {
   return request<{ action: ActionRow }>(`/api/actions/${id}/complete`, { method: "POST" });
 }
