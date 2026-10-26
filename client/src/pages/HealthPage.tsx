@@ -4,6 +4,7 @@ import {
   createOccupationalExam,
   fetchJobRoleRequirements,
   fetchOccupationalExams,
+  fetchTrainings,
   fetchWorkerCertificates,
 } from "@/api/modules";
 import { fetchJobRoles, type JobRole } from "@/api/operation";
@@ -50,6 +51,13 @@ export function HealthPage() {
   const [exigencia, setExigencia] = useState("");
   const [tipoExigencia, setTipoExigencia] = useState("CERTIFICATE");
   const [validade, setValidade] = useState("");
+  /*
+    A exigência podia apontar o curso do portal que a atende, e a tela não
+    oferecia o campo: o Painel contava só certificado enviado em Saúde, e
+    quem concluiu o curso aqui dentro aparecia sem certificado. [CB-70]
+  */
+  const [cursoDaExigencia, setCursoDaExigencia] = useState("");
+  const [cursos, setCursos] = useState<{ id: string; title: string }[]>([]);
   const [quem, setQuem] = useState("");
   const [tipoExame, setTipoExame] = useState("PERIODIC");
   const [feitoEm, setFeitoEm] = useState("");
@@ -61,6 +69,15 @@ export function HealthPage() {
     fetchJobRoles()
       .then((d) => setFuncoes(d.job_roles))
       .catch(() => setFuncoes([]));
+    fetchTrainings()
+      .then((rows) =>
+        setCursos(
+          rows
+            .filter((t) => !t.archivedAt)
+            .map((t) => ({ id: t.id, title: t.title })),
+        ),
+      )
+      .catch(() => setCursos([]));
   }, [canManage]);
   // Quem vê o registro de outras pessoas (RH, SST, fiscal) precisa saber de
   // quem é cada certificado e exame. [S5-K]
@@ -132,9 +149,11 @@ export function HealthPage() {
               name: exigencia.trim(),
               kind: tipoExigencia,
               validity_months: validade ? Number(validade) : undefined,
+              training_id: cursoDaExigencia || undefined,
             });
             setExigencia("");
             setValidade("");
+            setCursoDaExigencia("");
             setRecarregar((v) => v + 1);
             return "Exigência salva.";
           }}
@@ -174,6 +193,25 @@ export function HealthPage() {
               placeholder="Ex.: NR-35 trabalho em altura"
               required
             />
+          </label>
+          <label className="form-field">
+            Curso do portal que atende esta exigência (opcional)
+            <select
+              value={cursoDaExigencia}
+              onChange={(e) => setCursoDaExigencia(e.target.value)}
+            >
+              <option value="">Nenhum — só certificado enviado</option>
+              {cursos.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.title}
+                </option>
+              ))}
+            </select>
+            <span className="form-hint">
+              Ligando o curso, quem o concluir aqui dentro já conta como em
+              dia no Painel da fiscalização — sem precisar enviar o
+              certificado de novo.
+            </span>
           </label>
           <label className="form-field">
             Vale por quantos meses (opcional)
@@ -267,6 +305,8 @@ export function HealthPage() {
                   <th>Função</th>
                   <th>Tipo</th>
                   <th>Nome</th>
+                  {/* De onde o Painel aceita a prova desta exigência. [CB-70] */}
+                  <th>Curso do portal</th>
                 </tr>
               </thead>
               <tbody>
@@ -278,6 +318,9 @@ export function HealthPage() {
                     </td>
                     <td>
                       <strong>{r.name}</strong>
+                    </td>
+                    <td className="muted">
+                      {r.training?.title ?? "só certificado enviado"}
                     </td>
                   </tr>
                 ))}

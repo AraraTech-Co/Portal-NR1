@@ -317,6 +317,24 @@ class InspectionController {
             id: true,
             name: true,
             validityMonths: true,
+            /*
+              A exigência podia apontar o treinamento do portal que a atende,
+              e o painel não olhava para ele: contava só certificado enviado
+              e aceito em Saúde. Quem concluiu o curso no próprio portal
+              aparecia "sem certificado válido". [CB-70] [S7-G]
+            */
+            trainingId: true,
+            training: {
+              select: {
+                id: true,
+                title: true,
+                passingScore: true,
+                enrollments: {
+                  where: { status: "COMPLETED" },
+                  select: { userId: true, score: true, expiresAt: true },
+                },
+              },
+            },
             jobRole: {
               select: {
                 id: true,
@@ -673,6 +691,23 @@ class InspectionController {
             )
             .map((c) => c.userId),
         );
+        /*
+          O curso concluído no próprio portal vale pela exigência que ele
+          atende. Nota abaixo da mínima não vale: certificado assim está
+          marcado para refazer e não comprova capacitação. [CB-70] [CB-31]
+          Nota nula é o presencial, que não tem prova.
+        */
+        if (q.training) {
+          const minima = q.training.passingScore;
+          for (const i of q.training.enrollments) {
+            const noPrazo = !i.expiresAt || i.expiresAt > agora;
+            const passou = i.score === null || i.score >= minima;
+            if (noPrazo && passou) validos.add(i.userId);
+          }
+        }
+        const porCurso = q.training
+          ? ` · conta o curso "${q.training.title}" do portal`
+          : "";
         const pessoas = q.jobRole.employees;
         if (porPessoa) {
           for (const e of pessoas) {
@@ -680,8 +715,8 @@ class InspectionController {
               ok: validos.has(e.userId),
               label: `${e.user.name} — ${q.name}`,
               detail: validos.has(e.userId)
-                ? `${q.jobRole.name} · em dia`
-                : `${q.jobRole.name} · sem certificado válido`,
+                ? `${q.jobRole.name} · em dia${porCurso}`
+                : `${q.jobRole.name} · sem certificado válido${porCurso}`,
               link: "/saude",
             });
           }
@@ -695,7 +730,7 @@ class InspectionController {
           detail:
             pessoas.length === 0
               ? "nenhum trabalhador ativo na função"
-              : `${emDia} de ${pessoas.length} com certificado válido`,
+              : `${emDia} de ${pessoas.length} com certificado válido${porCurso}`,
           link: "/saude",
         });
       }
@@ -713,12 +748,17 @@ class InspectionController {
         }),
       ]);
       if (treinamentos.length === 0 && cursos > 0) {
+        /*
+          O cartão ficava verde, "Em ordem", e dizia na mesma linha que sem
+          exigência por função o portal não sabe quem precisa de qual
+          treinamento. Não há como estar em ordem sem saber do que se fala:
+          é pendência, e o que fecha é cadastrar a exigência. [CB-71]
+        */
         treinamentos.push({
-          ok: true,
-          label: `${cursos} treinamento(s) no portal · ${turmas} turma(s) presencial(is) · ${concluidos} conclusão(ões)`,
-          detail:
-            "Nenhuma exigência por função cadastrada: sem ela o portal não sabe quem precisa de qual treinamento.",
-          link: "/treinamentos",
+          ok: false,
+          label: "Nenhuma exigência de treinamento por função cadastrada",
+          detail: `Sem ela o portal não sabe quem precisa de qual treinamento. Hoje há ${cursos} treinamento(s) no portal · ${turmas} turma(s) presencial(is) · ${concluidos} conclusão(ões).`,
+          link: "/saude",
         });
       }
 
