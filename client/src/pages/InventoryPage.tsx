@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   fetchInventory,
   type InventoryItem,
@@ -113,6 +113,12 @@ export function InventoryPage() {
   const [error, setError] = useState<string | null>(null);
   const [openRiskId, setOpenRiskId] = useState<string | null>(null);
   const { canWrite } = useModuleAccess("inventario");
+  /*
+    Quem chega da ocorrência vem atrás de um risco certo: abre o histórico
+    dele já, em vez de procurar a linha na lista inteira. [B3-4-C]
+  */
+  const [searchParams] = useSearchParams();
+  const riscoPedido = searchParams.get("risco");
 
   useEffect(() => {
     fetchEstablishments()
@@ -124,7 +130,12 @@ export function InventoryPage() {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    setOpenRiskId(null);
+    /*
+      Carregar fechava o histórico aberto — inclusive o que veio pedido no
+      endereço, que é por ele que a pessoa chegou aqui. Trocar de unidade
+      continua fechando o que foi aberto à mão. [B3-4-C]
+    */
+    setOpenRiskId(riscoPedido ?? null);
     fetchInventory(estId || undefined)
       .then((data) => {
         if (!cancelled) setSnapshot(data.inventory);
@@ -140,7 +151,7 @@ export function InventoryPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [riscoPedido]);
 
   useEffect(() => load(establishmentId), [load, establishmentId]);
 
@@ -268,7 +279,15 @@ export function InventoryPage() {
                     </tr>
                     {open && row.riskId && (
                       <tr className="inventory-expand">
-                        <td colSpan={8}>
+                        <td
+                          colSpan={8}
+                          ref={(el) => {
+                            // Vindo da ocorrência, a linha pedida entra na vista.
+                            if (el && row.riskId === riscoPedido) {
+                              el.scrollIntoView({ block: "center" });
+                            }
+                          }}
+                        >
                           <RiskHistoryPanel riskId={row.riskId} />
                         </td>
                       </tr>
