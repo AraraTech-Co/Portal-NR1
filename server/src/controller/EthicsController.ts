@@ -4,8 +4,11 @@ import { NotificationKind } from "@prisma/client";
 import { Request, Response } from "express";
 import prisma from "../model/prisma";
 import {
-  citedReportIds,
+  ethicsReportScope,
+  podeTriarDenuncia,
+  reportIsHidden,
   usersInEthicsCommittee,
+  usersWhoTriageReports,
 } from "../helper/ethics-access";
 import { notify, notifyMany } from "../helper/notify";
 import { EthicsReport } from "../model/schema/EthicsReport/EthicsReport";
@@ -13,6 +16,8 @@ import { EthicsReportMessage } from "../model/schema/EthicsReportMessage/EthicsR
 import { Establishment } from "../model/schema/Establishment/Establishment";
 import { Hazard } from "../model/schema/Hazard/Hazard";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
+import { canReadModule } from "../helper/module-access";
+import { effectivePermission } from "../helper/auth";
 import { writeAudit } from "../helper/audit";
 import {
   ETHICS_ACCESS_CODE_BCRYPT_ROUNDS,
@@ -120,10 +125,15 @@ async function findByProtocolAndCode(
   return null;
 }
 
-/** A pessoa é citada nesta denúncia? Então está fora do caso. [CB-27] */
+/**
+ * A denúncia está fora do alcance de quem abriu?
+ *
+ * É o caso de quem a denúncia cita [CB-27] e, para quem não tria, do caso
+ * que ainda está na triagem [B3-3-H].
+ */
 async function estouImpedido(req: Request, reportId: string): Promise<boolean> {
-  const impedidas = await citedReportIds(actorUserId(req as AuthRequest));
-  return impedidas.includes(reportId);
+  const auth = req as AuthRequest;
+  return reportIsHidden(actorOrgId(auth), auth.actor!, reportId);
 }
 
 class EthicsController {
@@ -141,12 +151,15 @@ class EthicsController {
         description,
         is_anonymous,
         establishment_id,
+        committee_involved,
       } = req.body as {
         organization_id?: string;
         category?: string;
         description?: string;
         is_anonymous?: boolean;
         establishment_id?: string;
+        /** "Alguém do comitê de ética está envolvido?" [B3-3-H] */
+        committee_involved?: boolean;
       };
 
       const orgId =
@@ -219,6 +232,7 @@ class EthicsController {
         accessCodeHash,
         status: REPORT_STATUSES.RECEIVED,
         establishmentId: establishment_id ?? null,
+        committeeInvolved: committee_involved === true,
       });
 
       // Auditoria sem revelar identidade do denunciante anônimo.
@@ -240,16 +254,27 @@ class EthicsController {
         por conta própria. O aviso diz que entrou e qual é o protocolo — não
         diz quem relatou, nem no caso identificado: quem precisa saber abre
         o relato. [CB-29]
+
+        Quando quem relatou disse que alguém do comitê está envolvido, o
+        aviso não vai ao comitê: vai a quem faz a triagem. O comitê inteiro
+        saber que existe um caso contra um dos seus já é o aviso de alerta
+        que a decisão B3-3-H quis evitar. [B3-3-H]
       */
+      const naTriagem = report.committeeInvolved;
+      const quemRecebe = naTriagem
+        ? await usersWhoTriageReports(orgId)
+        : await usersInEthicsCommittee(orgId);
       await notifyMany(
-        (await usersInEthicsCommittee(orgId)).filter(
-          (quem) => quem !== reporterUserId,
-        ),
+        quemRecebe.filter((quem) => quem !== reporterUserId),
         {
           organizationId: orgId,
           kind: NotificationKind.ETHICS_REPORT_OPENED,
-          title: "Denúncia nova no canal",
-          body: `Protocolo ${report.protocol}.`,
+          title: naTriagem
+            ? "Denúncia nova esperando triagem"
+            : "Denúncia nova no canal",
+          body: naTriagem
+            ? `Protocolo ${report.protocol}. Quem relatou diz que alguém do comitê está envolvido.`
+            : `Protocolo ${report.protocol}.`,
           link: "/comite",
           entityType: "EthicsReport",
           entityId: report.id,
@@ -378,13 +403,15 @@ class EthicsController {
       /*
         Quem é citado numa denúncia sai do caso: nem na lista ela aparece.
         Era a denúncia contra alguém do RH indo parar na mesa dele. [CB-27]
+        E o caso que diz envolver o comitê só aparece depois da triagem, para
+        quem não a faz. [B3-3-H]
       */
-      const impedidas = await citedReportIds(actorUserId(req as AuthRequest));
+      const recorte = await ethicsReportScope(orgId, (req as AuthRequest).actor!);
 
       const rows = await prisma.ethicsReport.findMany({
         where: {
           organizationId: orgId,
-          ...(impedidas.length > 0 ? { id: { notIn: impedidas } } : {}),
+          ...recorte,
           ...(status && isReportStatus(status) ? { status } : {}),
         },
         orderBy: { createdAt: "desc" },
@@ -435,6 +462,9 @@ class EthicsController {
           linkedHazardId: r.linkedHazardId,
           resolutionNote: r.resolutionNote,
           resolvedAt: r.resolvedAt,
+          /** O caso que passou pela triagem, e quando voltou. [B3-3-H] */
+          committeeInvolved: r.committeeInvolved,
+          triagedAt: r.triagedAt,
           createdAt: r.createdAt,
           updatedAt: r.updatedAt,
           _count: r._count,
@@ -487,7 +517,17 @@ class EthicsController {
         select: {
           userId: true,
           addedAt: true,
-          user: { select: { id: true, name: true } },
+          user: {
+            select: {
+              id: true,
+              name: true,
+              memberships: {
+                where: { organizationId: orgId },
+                select: { role: true },
+                take: 1,
+              },
+            },
+          },
           addedBy: { select: { id: true, name: true } },
         },
       });
@@ -499,15 +539,35 @@ class EthicsController {
       const pessoas = await prisma.membership.findMany({
         where: { organizationId: orgId },
         orderBy: { user: { name: "asc" } },
-        select: { suspendedAt: true, user: { select: { id: true, name: true } } },
+        select: {
+          suspendedAt: true,
+          role: true,
+          user: { select: { id: true, name: true } },
+        },
       });
       res.json({
-        members: rows,
-        people: pessoas.map((m) => ({
-          id: m.user.id,
-          name: m.user.name,
-          active: m.suspendedAt === null,
+        /*
+          Designações antigas podem ter ficado com quem perdeu o módulo: a
+          tela precisa mostrar quem, de fato, não abre as denúncias. [CB-62]
+        */
+        members: rows.map((m) => ({
+          ...m,
+          can_open: canReadModule(
+            effectivePermission(m.user.memberships[0]?.role),
+            "comite",
+          ),
         })),
+        /*
+          Só quem tem o módulo do comitê: designar os outros os punha na
+          lista sem que abrissem denúncia nenhuma. [CB-62]
+        */
+        people: pessoas
+          .filter((m) => canReadModule(effectivePermission(m.role), "comite"))
+          .map((m) => ({
+            id: m.user.id,
+            name: m.user.name,
+            active: m.suspendedAt === null,
+          })),
         /*
           Sem ninguém designado, vale a regra antiga (quem lê o módulo
           comite). A tela precisa dizer isso, senão parece que ninguém vê as
@@ -536,11 +596,55 @@ class EthicsController {
       }
       const daEmpresa = await prisma.membership.findFirst({
         where: { organizationId: orgId, userId: user_id, suspendedAt: null },
-        select: { id: true },
+        select: { id: true, role: true },
       });
       if (!daEmpresa) {
         res.status(400).json({ message: "Pessoa não encontrada nesta empresa." });
         return;
+      }
+
+      /*
+        Designar quem não tem o módulo do comitê punha a pessoa na lista sem
+        que ela abrisse denúncia nenhuma — e a tela dizia "só quem está nesta
+        lista abre as denúncias", o que deixava de ser verdade. [CB-62]
+      */
+      if (
+        member !== false &&
+        !canReadModule(effectivePermission(daEmpresa.role), "comite")
+      ) {
+        res.status(400).json({
+          message:
+            "Essa pessoa não tem acesso ao módulo do comitê e não abriria " +
+            "as denúncias. Mude o papel dela antes de designá-la.",
+        });
+        return;
+      }
+
+      /*
+        E tirar o último que abre as denúncias deixaria os casos sem
+        ninguém, em silêncio. [CB-62]
+      */
+      if (member === false) {
+        const restantes = await prisma.ethicsCommitteeMember.findMany({
+          where: { organizationId: orgId, userId: { not: user_id } },
+          select: { user: { select: { memberships: { where: { organizationId: orgId }, select: { role: true } } } } },
+        });
+        const algumAbre = restantes.some((m) =>
+          m.user.memberships.some((v) =>
+            canReadModule(effectivePermission(v.role), "comite"),
+          ),
+        );
+        const designados = await prisma.ethicsCommitteeMember.count({
+          where: { organizationId: orgId },
+        });
+        if (designados > 1 && !algumAbre) {
+          res.status(400).json({
+            message:
+              "Tirar essa pessoa deixaria as denúncias sem ninguém que as " +
+              "abra. Designe outra pessoa com acesso ao comitê primeiro.",
+          });
+          return;
+        }
       }
 
       if (member === false) {
@@ -651,6 +755,92 @@ class EthicsController {
         entityId: report.id,
         after: { userId: user_id, cited: cited !== false },
       });
+
+      res.json({ ok: true });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
+  /**
+   * Devolver ao comitê a denúncia que dizia envolver alguém dele.
+   *
+   * Quem tria confere "Quem a denúncia envolve" e libera o caso: a partir
+   * daí o comitê o vê, menos quem ficou citado. Até aqui, o comitê não
+   * soube que ele existia. [B3-3-H]
+   */
+  async triar(req: Request, res: Response) {
+    try {
+      const auth = req as AuthRequest;
+      const orgId = actorOrgId(auth);
+      const actorId = actorUserId(auth);
+      /*
+        Fora do alcance de quem abriu: 404 antes de qualquer outra coisa,
+        para não confirmar que o caso existe a quem está fora dele. [CB-27]
+      */
+      if (await estouImpedido(req, req.params.id)) {
+        res.status(404).json({ message: "Relato não encontrado." });
+        return;
+      }
+      if (!podeTriarDenuncia(auth.actor!)) {
+        res.status(403).json({
+          message: "A triagem é de quem é dono da conta, ou do master.",
+        });
+        return;
+      }
+      const report = await prisma.ethicsReport.findFirst({
+        where: { id: req.params.id, organizationId: orgId },
+        select: { id: true, protocol: true, committeeInvolved: true, triagedAt: true },
+      });
+      if (!report) {
+        res.status(404).json({ message: "Relato não encontrado." });
+        return;
+      }
+      if (!report.committeeInvolved) {
+        res.status(400).json({
+          message: "Esta denúncia não passou pela triagem: o comitê já a vê.",
+        });
+        return;
+      }
+      if (report.triagedAt) {
+        res.status(409).json({ message: "Esta denúncia já foi devolvida ao comitê." });
+        return;
+      }
+
+      await prisma.ethicsReport.update({
+        where: { id: report.id },
+        data: { triagedAt: new Date(), triagedById: actorId },
+      });
+
+      await writeAudit({
+        organizationId: orgId,
+        actorId,
+        action: "ethics_report.triage",
+        entityType: "EthicsReport",
+        entityId: report.id,
+      });
+
+      /*
+        Agora sim o comitê precisa saber — menos quem a denúncia cita, que
+        já está fora do caso. [B3-3-H] [CB-27]
+      */
+      const citados = await prisma.ethicsReportCited.findMany({
+        where: { reportId: report.id },
+        select: { userId: true },
+      });
+      const fora = new Set(citados.map((c) => c.userId));
+      await notifyMany(
+        (await usersInEthicsCommittee(orgId)).filter((quem) => !fora.has(quem)),
+        {
+          organizationId: orgId,
+          kind: NotificationKind.ETHICS_REPORT_OPENED,
+          title: "Denúncia nova no canal",
+          body: `Protocolo ${report.protocol}.`,
+          link: "/comite",
+          entityType: "EthicsReport",
+          entityId: report.id,
+        },
+      );
 
       res.json({ ok: true });
     } catch (err) {

@@ -162,6 +162,7 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   "ergonomic_complaint.close": "Queixa ergonômica respondida",
   "ethics_committee.set": "Comitê de ética alterado",
   "ethics_report.cited": "Pessoa citada numa denúncia",
+  "ethics_report.triage": "Denúncia devolvida ao comitê depois da triagem",
   "training_session.attendance": "Presença em turma registrada",
   /*
     Escritos como ternário, escapavam da varredura dos rótulos até ela ser

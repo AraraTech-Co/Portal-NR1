@@ -58,6 +58,8 @@ model User {
   occurrencesReviewed Occurrence[]        @relation("OccurrenceAnalyst")
   drillsRecorded    EmergencyDrill[]      @relation("DrillRecorder")
   reportsFiled      EthicsReport[]        @relation("ReportReporter")
+  /// Denúncias que esta pessoa triou antes de devolver ao comitê. [B3-3-H]
+  reportsTriaged    EthicsReport[]        @relation("ReportTriage")
   ethicsCommittee   EthicsCommitteeMember[] @relation("EthicsCommitteeMember")
   ethicsCommitteeAdded EthicsCommitteeMember[] @relation("EthicsCommitteeAdder")
   ergonomicComplaints ErgonomicComplaint[] @relation("ErgonomicComplaintAuthor")
@@ -1424,12 +1426,20 @@ model EthicsReport {
   linkedHazardId String?
   resolutionNote String?
   resolvedAt     DateTime?
+  /// Quem relatou disse que alguém do comitê está envolvido. Até a triagem,
+  /// o caso não chega ao comitê: fica só com o dono e o master. [B3-3-H]
+  committeeInvolved Boolean     @default(false)
+  /// Quando o dono ou o master conferiu quem a denúncia envolve e devolveu o
+  /// caso ao comitê. [B3-3-H]
+  triagedAt      DateTime?
+  triagedById    String?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
   organization  Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   establishment Establishment?       @relation(fields: [establishmentId], references: [id])
   reporter      User?                @relation("ReportReporter", fields: [reporterUserId], references: [id])
+  triagedBy     User?                @relation("ReportTriage", fields: [triagedById], references: [id])
   messages      EthicsReportMessage[]
   cited         EthicsReportCited[]
 

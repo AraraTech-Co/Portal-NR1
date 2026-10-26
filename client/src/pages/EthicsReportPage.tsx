@@ -37,6 +37,13 @@ export function EthicsReportPage({
   const [description, setDescription] = useState("");
   // Fora do portal não há nome a vincular: a denúncia é sempre anônima.
   const [isAnonymous, setIsAnonymous] = useState(true);
+  /*
+    "Alguém do comitê de ética está envolvido?" A pergunta não mostra nomes:
+    divulgar quem é o comitê é decisão da empresa, e quem relata não precisa
+    saber para se proteger. Quando a resposta é sim, o caso vai ao dono ou ao
+    master e não passa pelo comitê. [B3-3-H]
+  */
+  const [envolveComite, setEnvolveComite] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{
@@ -91,6 +98,7 @@ export function EthicsReportPage({
         category,
         description,
         is_anonymous: publico ? true : isAnonymous,
+        committee_involved: envolveComite,
         ...(organizationId ? { organization_id: organizationId } : {}),
       });
       setResult({
@@ -102,6 +110,7 @@ export function EthicsReportPage({
       setCopyError(null);
       setDescription("");
       setIsAnonymous(true);
+      setEnvolveComite(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao enviar");
     } finally {
@@ -357,6 +366,29 @@ export function EthicsReportPage({
                 )}
               </>
             )}
+            {/*
+              Sem esta pergunta, a denúncia contra alguém do comitê chegava
+              a essa pessoa junto com todo o comitê, e só saía da vista dela
+              depois que outra pessoa a marcasse como envolvida. [B3-3-H]
+            */}
+            <label
+              className="form-field"
+              style={{ flexDirection: "row", alignItems: "flex-start", gap: "0.55rem" }}
+            >
+              <input
+                type="checkbox"
+                checked={envolveComite}
+                onChange={(e) => setEnvolveComite(e.target.checked)}
+              />
+              <span>
+                Alguém do comitê de ética está envolvido neste fato
+                <span className="form-hint" style={{ display: "block" }}>
+                  Se marcar, esta denúncia não vai ao comitê: vai a quem é
+                  dono da conta, que confere quem ela envolve antes de
+                  qualquer outra pessoa ver.
+                </span>
+              </span>
+            </label>
             {error && <p className="form-error">{error}</p>}
             <div className="form-actions">
               <Button type="submit" disabled={saving}>

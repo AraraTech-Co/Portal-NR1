@@ -5,6 +5,7 @@ import {
   fetchEthicsReport,
   sendCommitteeMessage,
   setEthicsReportCited,
+  triarDenuncia,
   updateEthicsStatus,
   type EthicsReportDetail,
 } from "@/api/ethics";
@@ -15,6 +16,7 @@ import { LoadingState } from "@/components/LoadingState";
 import { PageHeader } from "@/components/PageHeader";
 import { formatDay, REPORT_CATEGORY_LABEL, REPORT_STATUS_LABEL } from "@/lib/labels";
 import { useModuleAccess } from "@/lib/module-access";
+import { useAuth } from "@/auth/AuthContext";
 import "@/components/form.css";
 
 const CLOSED = new Set(["RESOLVED", "ARCHIVED"]);
@@ -30,6 +32,12 @@ function statusTone(status: string): "warning" | "info" | "success" | "neutral" 
 export function EthicsReportDetailPage() {
   const { id = "" } = useParams();
   const { canWrite } = useModuleAccess("comite");
+  /*
+    A triagem é de quem é dono da conta, ou do master: é a eles que vai a
+    denúncia que diz envolver alguém do comitê. [B3-3-H]
+  */
+  const { user } = useAuth();
+  const podeTriar = Boolean(user?.is_master) || user?.role === "OWNER";
   const [report, setReport] = useState<EthicsReportDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reply, setReply] = useState("");
@@ -61,6 +69,19 @@ export function EthicsReportDetailPage() {
       .then(setPeople)
       .catch(() => setPeople([]));
   }, [canWrite]);
+
+  async function devolverAoComite() {
+    setBusy(true);
+    setActionError(null);
+    try {
+      await triarDenuncia(id);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Falha ao devolver");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function marcarCitado(userId: string, cited: boolean) {
     setBusy(true);
@@ -152,6 +173,42 @@ export function EthicsReportDetailPage() {
           </p>
         )}
       </section>
+
+      {/*
+        O caso que veio marcado como "alguém do comitê está envolvido" não
+        chegou ao comitê: está aqui, e volta quando quem tria confere quem
+        ele envolve. A tela precisa dizer isso, senão o estado é invisível.
+        [B3-3-H]
+      */}
+      {report.committeeInvolved && !report.triagedAt && (
+        <section className="form-section" role="status">
+          <h2>Esperando a triagem</h2>
+          <p className="muted" style={{ maxWidth: "70ch" }}>
+            Quem relatou disse que alguém do comitê de ética está envolvido.
+            Enquanto esta denúncia não for devolvida, ela não aparece para o
+            comitê — nem na lista, nem pelo endereço, nem na contagem do
+            Início. Marque quem ela envolve abaixo e devolva o caso.
+          </p>
+          {podeTriar ? (
+            <div className="form-actions">
+              <Button type="button" disabled={busy} onClick={devolverAoComite}>
+                {busy ? "Devolvendo…" : "Devolver ao comitê"}
+              </Button>
+            </div>
+          ) : (
+            <p className="muted">
+              A devolução é de quem é dono da conta, ou do master.
+            </p>
+          )}
+        </section>
+      )}
+
+      {report.committeeInvolved && report.triagedAt && (
+        <p className="muted" style={{ maxWidth: "70ch" }}>
+          Esta denúncia passou pela triagem e foi devolvida ao comitê em{" "}
+          {formatDay(report.triagedAt)}.
+        </p>
+      )}
 
       {canWrite && (
         <section className="form-section">

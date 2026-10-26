@@ -65,5 +65,9 @@ router.post("/api/ethics-reports/:id/messages", ...committeeWrite, (req, res) =>
 router.post("/api/ethics-reports/:id/citados", ...committeeWrite, (req, res) =>
   ethics.setCited(req, res),
 );
+/** Devolver ao comitê o caso que dizia envolver alguém dele. [B3-3-H] */
+router.post("/api/ethics-reports/:id/triagem", ...committeeWrite, (req, res) =>
+  ethics.triar(req, res),
+);
 
 export default router;

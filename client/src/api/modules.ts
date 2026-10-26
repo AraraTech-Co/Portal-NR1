@@ -282,6 +282,12 @@ export const fetchEthicsReports = () =>
       unread_from_reporter: number;
       /** Zero = o comitê nunca falou nesta denúncia. [B2-3-D] */
       committee_messages: number;
+      /**
+       * Quem relatou disse que alguém do comitê está envolvido; enquanto
+       * `triagedAt` for nulo, o caso só chega a quem tria. [B3-3-H]
+       */
+      committeeInvolved: boolean;
+      triagedAt: string | null;
     }>;
   }>("/api/ethics-reports").then((d) => d.reports);
 
