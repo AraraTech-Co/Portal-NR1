@@ -69,6 +69,8 @@ model User {
   ideasAuthored     Idea[]                @relation("IdeaAuthor")
   ideasDecided      Idea[]                @relation("IdeaDecider")
   announcements     Announcement[]        @relation("AnnouncementAuthor")
+  /// Lançamentos de banco de horas que esta pessoa fez. [CB-66]
+  timeEntriesCreated TimeEntry[]          @relation("TimeEntryAuthor")
   /// Avisos que esta pessoa corrigiu ou retirou do mural. [S3-I]
   announcementsEdited    Announcement[]   @relation("AnnouncementEditor")
   announcementsWithdrawn Announcement[]   @relation("AnnouncementWithdrawer")
@@ -2271,15 +2273,25 @@ model TimeEntry {
   out1           String?
   in2            String?
   out2           String?
-  /// Saldo do dia em minutos (positivo = crédito).
+  /// Minutos deste movimento (positivo = crédito).
   balanceMinutes Int      @default(0)
   note           String?
+  /// Quem lançou. Numa reclamação trabalhista, saldo sem autor não prova nada.
+  /// Nulo nos lançamentos anteriores a esta coluna. [CB-66]
+  createdById    String?
   createdAt      DateTime @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user         User         @relation("TimeEntryOwner", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy    User?        @relation("TimeEntryAuthor", fields: [createdById], references: [id])
 
-  @@unique([organizationId, userId, day])
+  /*
+    Era único por pessoa e dia: lançar de novo no mesmo dia substituía as
+    horas e o motivo do anterior, sem aviso e sem guardar o que havia. Uma
+    hora extra de manhã e outra à tarde, ou uma correção, apagavam o
+    movimento anterior. A decisão S5-M fala em CADA MOVIMENTO com histórico.
+    [CB-66]
+  */
   @@index([userId, day])
 }
 

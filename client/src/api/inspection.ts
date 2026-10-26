@@ -122,6 +122,7 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   "people.import": "Pessoas cadastradas por planilha",
   "hr_document.create": "Documento de RH publicado",
   "announcement.create": "Aviso publicado",
+  "time_entry.create": "Horas lançadas no banco de horas",
   "leave.request": "Férias ou licença pedida",
   "medical_certificate.send": "Atestado enviado",
   "gamification.points": "Pontos lançados",

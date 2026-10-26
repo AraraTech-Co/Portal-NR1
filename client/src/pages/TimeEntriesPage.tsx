@@ -202,6 +202,8 @@ export function TimeEntriesPage() {
                   <th>Dia</th>
                   <th>Horas</th>
                   <th>De onde vieram</th>
+                  {/* Saldo sem autor não prova nada. [CB-66] */}
+                  <th>Lançado por</th>
                 </tr>
               </thead>
               <tbody>
@@ -210,6 +212,7 @@ export function TimeEntriesPage() {
                     <td>{formatDay(r.day)}</td>
                     <td>{emHoras(r.balanceMinutes)}</td>
                     <td className="muted">{r.note ?? "—"}</td>
+                    <td className="muted">{r.createdBy?.name ?? "—"}</td>
                   </tr>
                 ))}
               </tbody>

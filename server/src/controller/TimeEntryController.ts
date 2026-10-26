@@ -1,15 +1,11 @@
 import { Request, Response } from "express";
-import { Prisma } from "@prisma/client";
 import prisma from "../model/prisma";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { canManageModule } from "../helper/module-access";
+import { writeAudit } from "../helper/audit";
 import type { AuthRequest } from "../types/auth";
 
 function fail(res: Response, err: unknown) {
-  if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
-    res.status(409).json({ message: "Já existe apontamento neste dia." });
-    return;
-  }
   const e = err as { status?: number; message?: string };
   res.status(e.status || 500).json({ message: e.message || "Erro interno." });
 }
@@ -41,8 +37,13 @@ class TimeEntryController {
             ? { userId: String(req.query.user_id) }
             : {}),
         },
-        orderBy: { day: "desc" },
-        take: 90,
+        /*
+          Vários movimentos podem cair no mesmo dia: o mais recente primeiro,
+          para a tela contar a história na ordem em que aconteceu. [CB-66]
+        */
+        orderBy: [{ day: "desc" }, { createdAt: "desc" }],
+        take: 180,
+        include: { createdBy: { select: { id: true, name: true } } },
       });
       res.json({ entries: rows });
     } catch (err) {
@@ -50,10 +51,19 @@ class TimeEntryController {
     }
   }
 
-  async upsert(req: Request, res: Response) {
+  /**
+   * Lança UM movimento do banco de horas.
+   *
+   * Era `upsert` por pessoa e dia: lançar de novo no mesmo dia substituía as
+   * horas e o motivo do anterior, sem aviso e sem guardar o que havia — uma
+   * hora extra de manhã e outra à tarde apagavam uma à outra. A decisão S5-M
+   * fala em cada movimento com histórico. [CB-66] [S5-M]
+   */
+  async create(req: Request, res: Response) {
     try {
       const auth = req as AuthRequest;
       const orgId = actorOrgId(auth);
+      const lancadoPor = actorUserId(auth);
       const {
         user_id,
         day,
@@ -98,15 +108,8 @@ class TimeEntryController {
         return;
       }
 
-      const entry = await prisma.timeEntry.upsert({
-        where: {
-          organizationId_userId_day: {
-            organizationId: orgId,
-            userId: targetUserId,
-            day: dayDate,
-          },
-        },
-        create: {
+      const entry = await prisma.timeEntry.create({
+        data: {
           organizationId: orgId,
           userId: targetUserId,
           day: dayDate,
@@ -116,18 +119,30 @@ class TimeEntryController {
           out2: blank(out2 as string),
           balanceMinutes: (balance_minutes as number) ?? 0,
           note: blank(note as string),
+          createdById: lancadoPor,
         },
-        update: {
-          ...(in1 !== undefined ? { in1: blank(in1 as string) } : {}),
-          ...(out1 !== undefined ? { out1: blank(out1 as string) } : {}),
-          ...(in2 !== undefined ? { in2: blank(in2 as string) } : {}),
-          ...(out2 !== undefined ? { out2: blank(out2 as string) } : {}),
-          ...(balance_minutes !== undefined
-            ? { balanceMinutes: balance_minutes as number }
-            : {}),
-          ...(note !== undefined ? { note: blank(note as string) } : {}),
+        include: { createdBy: { select: { id: true, name: true } } },
+      });
+
+      /*
+        O lançamento não entrava no histórico de auditoria: numa reclamação
+        trabalhista não havia como mostrar quem lançou nem o que havia antes.
+        [CB-66] [CB-67]
+      */
+      await writeAudit({
+        organizationId: orgId,
+        actorId: lancadoPor,
+        action: "time_entry.create",
+        entityType: "TimeEntry",
+        entityId: entry.id,
+        after: {
+          userId: entry.userId,
+          day: entry.day,
+          balanceMinutes: entry.balanceMinutes,
+          note: entry.note,
         },
       });
+
       res.status(201).json({ entry });
     } catch (err) {
       fail(res, err);
