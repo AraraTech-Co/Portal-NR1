@@ -185,7 +185,7 @@ function IssueForm({
 }
 
 /**
- * Ordem de serviço de SST por função (NR-1 1.4.1 "b"): o documento e a
+ * Ordem de serviço de SST por função (NR-1 1.4.1 "c"): o documento e a
  * ciência de quem trabalha. Função sem ordem aparece como pendente. [S7-F]
  */
 export function ServiceOrdersPage() {

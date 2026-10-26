@@ -277,4 +277,63 @@
   .doc-table thead {
     display: table-header-group;
   }
+
+  /*
+    Na impressão, o documento deixa de ser grade e passa a ser fluxo de
+    blocos.
+
+    O PDF saía com a declaração de assinatura escrita POR CIMA da tabela do
+    último perigo, e um bloco cinza vazio embaixo: o navegador não fragmenta
+    um contêiner `display: grid` entre páginas, e o `break-inside:
+    avoid-page` de cada item piorava, empurrando o que vinha depois para um
+    lugar que já estava ocupado. Em fluxo de blocos, a paginação é a comum do
+    navegador, e `break-inside: avoid` passa a valer de verdade. [B3-2-C]
+  */
+  .doc-paper,
+  .doc-items,
+  .doc-item,
+  .doc-header,
+  .doc-signature,
+  .doc-signer {
+    display: block !important;
+  }
+
+  .doc-meta,
+  .doc-facts,
+  .doc-scales {
+    display: block !important;
+  }
+
+  /* O `gap` não existe fora da grade: a distância volta como margem. */
+  .doc-paper > * + * {
+    margin-top: 1.75rem;
+  }
+
+  .doc-items > .doc-item + .doc-item {
+    margin-top: 1.75rem;
+  }
+
+  .doc-item > * + *,
+  .doc-header > * + *,
+  .doc-signature > * + * {
+    margin-top: 0.75rem;
+  }
+
+  .doc-meta > * + *,
+  .doc-facts > * + *,
+  .doc-scales > * + *,
+  .doc-signer > * + * {
+    margin-top: 0.5rem;
+  }
+
+  /* Agora que é bloco, isto é respeitado. */
+  .doc-item,
+  .doc-signature {
+    break-inside: avoid;
+  }
+
+  /* A assinatura vem depois do último item, nunca em cima dele. */
+  .doc-signature {
+    break-before: auto;
+  }
 }
