@@ -17,12 +17,21 @@ export type OccurrenceRow = {
 };
 
 export type OccurrenceDetail = OccurrenceRow & {
+  /**
+   * As ações do risco ligado, de antes e de depois da ocorrência — não só o
+   * que nasceu dela, que deixava a lista sempre vazia. [B3-4-C]
+   */
   actions: {
     id: string;
     title: string;
     status: string;
     priority: string;
     dueDate: string | null;
+    completedAt: string | null;
+    validatedAt: string | null;
+    assignee: { id: string; name: string } | null;
+    validatedBy: { id: string; name: string } | null;
+    from_occurrence: boolean;
   }[];
   evidences: {
     id: string;
@@ -87,5 +96,22 @@ export async function analyzeOccurrence(
         prevention_review: input.preventionReview,
       }),
     },
+  );
+}
+
+/** Abrir ação a partir da ocorrência. O caminho existia só no servidor. [B3-4-C] */
+export async function addOccurrenceAction(
+  id: string,
+  input: {
+    title: string;
+    description?: string;
+    assignee_id: string;
+    due_date: string;
+    priority?: string;
+  },
+) {
+  return request<{ action: { id: string; title: string } }>(
+    `/api/occurrences/${id}/actions`,
+    { method: "POST", body: JSON.stringify(input) },
   );
 }

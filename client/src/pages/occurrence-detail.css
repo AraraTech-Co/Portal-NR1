@@ -43,3 +43,14 @@
   margin: 0.25rem 0 0;
   white-space: pre-wrap;
 }
+
+/* Ocorrência: o risco com caminho, e o que mudou depois. [B3-4-C] */
+.occ-risco {
+  margin: 0.4rem 0 0;
+  font-size: 0.9rem;
+}
+
+.occ-sub {
+  display: block;
+  font-size: 0.78rem;
+}

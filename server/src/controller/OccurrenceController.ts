@@ -124,7 +124,6 @@ class OccurrenceController {
           },
           reportedBy: { select: { id: true, name: true } },
           analyzedBy: { select: { id: true, name: true } },
-          actions: { orderBy: { createdAt: "desc" } },
           evidences: { orderBy: { uploadedAt: "desc" } },
         },
       });
@@ -132,7 +131,49 @@ class OccurrenceController {
         res.status(404).json({ message: "Ocorrência não encontrada." });
         return;
       }
-      res.json({ occurrence });
+
+      /*
+        "Ações vinculadas" mostrava só o que nasceu DA ocorrência, e nenhuma
+        tela criava ação a partir dela: ficava sempre vazia. A ação do mesmo
+        risco, aberta antes do quase-acidente, existia e não aparecia ali —
+        e a pergunta do fiscal é "o que mudou depois". Agora a lista é a do
+        risco ligado, de antes e de depois, dizendo o que veio da
+        ocorrência. [B3-4-C] [S7-D]
+      */
+      const acoes = await prisma.action.findMany({
+        where: {
+          organizationId: orgId,
+          OR: [
+            { occurrenceId: occurrence.id },
+            ...(occurrence.riskId ? [{ riskId: occurrence.riskId }] : []),
+          ],
+        },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          priority: true,
+          dueDate: true,
+          completedAt: true,
+          validatedAt: true,
+          occurrenceId: true,
+          createdAt: true,
+          assignee: { select: { id: true, name: true } },
+          validatedBy: { select: { id: true, name: true } },
+        },
+      });
+
+      res.json({
+        occurrence: {
+          ...occurrence,
+          actions: acoes.map((a) => ({
+            ...a,
+            /** Nasceu desta ocorrência, ou já era do risco. */
+            from_occurrence: a.occurrenceId === occurrence.id,
+          })),
+        },
+      });
     } catch (err) {
       fail(res, err);
     }
@@ -449,6 +490,19 @@ class OccurrenceController {
 
       if (!title?.trim()) {
         res.status(400).json({ message: "Informe o título da ação." });
+        return;
+      }
+      /*
+        Ação sem responsável e sem prazo é o S2-M, já decidido: aqui a rota
+        aceitava os dois vazios, e abrir ação pela ocorrência traria de volta
+        o que o portal já conserta no plano de ação. [S2-M]
+      */
+      if (!assignee_id) {
+        res.status(400).json({ message: "Informe quem é o responsável pela ação." });
+        return;
+      }
+      if (!due_date) {
+        res.status(400).json({ message: "Informe o prazo da ação." });
         return;
       }
 

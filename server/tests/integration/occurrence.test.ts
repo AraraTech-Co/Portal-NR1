@@ -18,10 +18,17 @@ describe("Occurrence module (NR-1 1.5.5.5)", () => {
   let app: Express;
   let token: string;
   let occurrenceId: string;
+  /* Responsável e prazo passaram a ser obrigatórios também aqui. [S2-M] */
+  let responsavel: string;
 
   beforeAll(async () => {
     app = createApp();
     token = await login(app, "admin");
+    const eu = await request(app)
+      .get("/api/auth")
+      .set("Authorization", `Bearer ${token}`);
+    expect(eu.status).toBe(200);
+    responsavel = eu.body.user.id as string;
   });
 
   it("rejects invalid type", async () => {
@@ -91,8 +98,15 @@ describe("Occurrence module (NR-1 1.5.5.5)", () => {
       .send({
         title: "Instalar guarda no torno",
         effectiveness_criteria: "Protetor instalado e inspecionado",
+        /*
+          Este caso mandava a ação sem responsável e sem prazo e esperava
+          201: era a rota da ocorrência passando por fora da decisão S2-M,
+          que o plano de ação já cumpria. [B3-4-C] [S2-M]
+        */
+        assignee_id: responsavel,
+        due_date: "2027-03-20",
       });
-    expect(action.status).toBe(201);
+    expect(action.status, JSON.stringify(action.body)).toBe(201);
     expect(action.body.action.sourceType).toBe("OCCURRENCE");
     expect(action.body.action.occurrenceId).toBe(occurrenceId);
     expect(action.body.action.riskId).toBe(RISK_ID);

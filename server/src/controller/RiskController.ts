@@ -455,6 +455,16 @@ class RiskController {
         ...risk.actions.map((a) => a.id),
         ...risk.controls.flatMap((c) => c.actions.map((a) => a.id)),
       ];
+      /*
+        E as ocorrências ligadas ao risco: o quase-acidente foi registrado e
+        analisado, a análise marcou o risco para reavaliar, e nada disso
+        aparecia no histórico do risco — que junta só o que foi gravado no
+        risco, no perigo e na atividade. [B3-4-C]
+      */
+      const ocorrencias = await prisma.occurrence.findMany({
+        where: { organizationId: orgId, riskId: risk.id },
+        select: { id: true },
+      });
       const changes = await prisma.auditEvent.findMany({
         where: {
           organizationId: orgId,
@@ -464,6 +474,7 @@ class RiskController {
               risk.hazardId,
               risk.hazard.activityId,
               ...new Set(idsDasAcoes),
+              ...ocorrencias.map((o) => o.id),
             ],
           },
         },

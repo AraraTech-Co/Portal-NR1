@@ -3,14 +3,17 @@ import { Link, useParams } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
 import { canCloseOccurrenceAnalysis } from "@/lib/module-access";
 import {
+  addOccurrenceAction,
   analyzeOccurrence,
   fetchOccurrence,
   type OccurrenceDetail,
 } from "@/api/occurrences";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
+import { Dialog } from "@/components/Dialog";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
+import { PeoplePicker } from "@/components/PeoplePicker";
 import {
   ACTION_PRIORITY_LABEL,
   ACTION_STATUS_LABEL,
@@ -35,6 +38,16 @@ export function OccurrenceDetailPage() {
   const [preventionReview, setPreventionReview] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  /*
+    Nenhuma tela abria ação a partir da ocorrência: o caminho existia só no
+    servidor, e "Ações vinculadas" ficava sempre vazia. [B3-4-C]
+  */
+  const [abrindoAcao, setAbrindoAcao] = useState(false);
+  const [tituloDaAcao, setTituloDaAcao] = useState("");
+  const [responsavel, setResponsavel] = useState("");
+  const [prazo, setPrazo] = useState("");
+  const [salvandoAcao, setSalvandoAcao] = useState(false);
+  const [erroDaAcao, setErroDaAcao] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -142,8 +155,20 @@ export function OccurrenceDetailPage() {
         <p className="muted">
           Registrado por {row.reportedBy.name}
           {row.establishment ? ` · ${row.establishment.name}` : ""}
-          {row.risk ? ` · Risco: ${row.risk.description}` : ""}
         </p>
+        {/*
+          O risco aparecia só como texto, sem caminho para ele, para a ação
+          nem para o histórico, onde se vê a reavaliação que esta análise
+          pediu. [B3-4-C]
+        */}
+        {row.risk && (
+          <p className="occ-risco">
+            <strong>Risco:</strong> {row.risk.description}{" "}
+            <Link to={`/inventario?risco=${row.risk.id}`}>
+              abrir no inventário, com o histórico
+            </Link>
+          </p>
+        )}
       </section>
 
       <section className="occ-block">
@@ -223,15 +248,39 @@ export function OccurrenceDetailPage() {
 
       <section className="occ-block">
         <h2>Ações vinculadas</h2>
+        <p className="muted">
+          {row.risk
+            ? "As ações do risco ligado, abertas antes ou depois desta ocorrência."
+            : "Esta ocorrência não está ligada a um risco do inventário."}
+        </p>
+        {podeAnalisar && (
+          <div className="form-actions">
+            <Button
+              type="button"
+              size="compact"
+              variant="secondary"
+              onClick={() => {
+                setErroDaAcao(null);
+                setTituloDaAcao("");
+                setResponsavel("");
+                setPrazo("");
+                setAbrindoAcao(true);
+              }}
+            >
+              Abrir ação a partir desta ocorrência
+            </Button>
+          </div>
+        )}
         {row.actions.length === 0 ? (
-          <p className="muted">Nenhuma ação gerada a partir desta ocorrência.</p>
+          <p className="muted">Nenhuma ação para este risco, nem desta ocorrência.</p>
         ) : (
           <div className="data-table-wrap">
             <table className="data-table">
               <thead>
                 <tr>
                   <th>Ação</th>
-                  <th>Prioridade</th>
+                  <th>De onde veio</th>
+                  <th>Responsável</th>
                   <th>Situação</th>
                   <th>Prazo</th>
                 </tr>
@@ -239,9 +288,26 @@ export function OccurrenceDetailPage() {
               <tbody>
                 {row.actions.map((a) => (
                   <tr key={a.id}>
-                    <td>{a.title}</td>
-                    <td>{ACTION_PRIORITY_LABEL[a.priority] ?? a.priority}</td>
-                    <td>{ACTION_STATUS_LABEL[a.status] ?? a.status}</td>
+                    <td>
+                      <Link to="/acoes">{a.title}</Link>
+                      <span className="muted occ-sub">
+                        {ACTION_PRIORITY_LABEL[a.priority] ?? a.priority}
+                      </span>
+                    </td>
+                    <td className="muted">
+                      {a.from_occurrence ? "desta ocorrência" : "do risco"}
+                    </td>
+                    <td className="muted">{a.assignee?.name ?? "—"}</td>
+                    <td>
+                      {ACTION_STATUS_LABEL[a.status] ?? a.status}
+                      {/* É a resposta a "o que mudou depois". [B3-4-C] */}
+                      {a.validatedAt && (
+                        <span className="muted occ-sub">
+                          validada em {formatDay(a.validatedAt)}
+                          {a.validatedBy ? ` por ${a.validatedBy.name}` : ""}
+                        </span>
+                      )}
+                    </td>
                     <td>{formatDay(a.dueDate)}</td>
                   </tr>
                 ))}
@@ -250,6 +316,85 @@ export function OccurrenceDetailPage() {
           </div>
         )}
       </section>
+
+      {abrindoAcao && (
+        <Dialog
+          title="Abrir ação a partir desta ocorrência"
+          description="A ação entra no Plano de ação ligada a esta ocorrência e ao risco dela. Responsável e prazo são obrigatórios."
+          onClose={() => setAbrindoAcao(false)}
+        >
+          <form
+            className="form-grid"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (!id) return;
+              setSalvandoAcao(true);
+              setErroDaAcao(null);
+              try {
+                await addOccurrenceAction(id, {
+                  title: tituloDaAcao.trim(),
+                  assignee_id: responsavel,
+                  due_date: prazo,
+                  priority: "HIGH",
+                });
+                setAbrindoAcao(false);
+                await load();
+              } catch (err) {
+                setErroDaAcao(
+                  err instanceof Error ? err.message : "Falha ao abrir a ação",
+                );
+              } finally {
+                setSalvandoAcao(false);
+              }
+            }}
+          >
+            <label className="form-field">
+              O que será feito
+              <input
+                value={tituloDaAcao}
+                onChange={(e) => setTituloDaAcao(e.target.value)}
+                placeholder="Ex.: Instalar proteção com intertravamento"
+                disabled={salvandoAcao}
+                required
+              />
+            </label>
+            <label className="form-field">
+              Responsável
+              <PeoplePicker
+                value={responsavel}
+                onChange={(quem) => setResponsavel(quem)}
+                disabled={salvandoAcao}
+                required
+              />
+            </label>
+            <label className="form-field">
+              Prazo
+              <input
+                type="date"
+                value={prazo}
+                onChange={(e) => setPrazo(e.target.value)}
+                disabled={salvandoAcao}
+                required
+              />
+            </label>
+            {erroDaAcao && (
+              <p className="form-error" role="alert">
+                {erroDaAcao}
+              </p>
+            )}
+            <div className="form-actions">
+              <Button
+                type="submit"
+                disabled={
+                  salvandoAcao || !tituloDaAcao.trim() || !responsavel || !prazo
+                }
+              >
+                {salvandoAcao ? "Abrindo…" : "Abrir ação"}
+              </Button>
+            </div>
+          </form>
+        </Dialog>
+      )}
     </div>
   );
 }
