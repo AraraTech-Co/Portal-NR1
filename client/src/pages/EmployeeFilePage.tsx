@@ -686,7 +686,27 @@ export function EmployeeFilePage() {
               {data.history.map((h) => (
                 <li key={h.id}>
                   <span className="muted">{formatDateTime(h.at)}</span>
-                  <span>{AUDIT_LABEL[h.action] ?? h.action}</span>
+                  <span>
+                    {AUDIT_LABEL[h.action] ?? h.action}
+                    {/* Era só "Ficha alterada": o que mudou ficava fora. [CB-54] */}
+                    {h.changes?.length > 0 && (
+                      <ul className="people-history-changes">
+                        {h.changes.map((c) => (
+                          <li key={c.field}>
+                            <strong>{c.label}</strong>
+                            {c.hidden ? (
+                              <span className="muted"> — alterado</span>
+                            ) : (
+                              <span className="muted">
+                                {" "}
+                                — de {c.from ?? "vazio"} para {c.to ?? "vazio"}
+                              </span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </span>
                   <span className="muted">{h.who}</span>
                 </li>
               ))}

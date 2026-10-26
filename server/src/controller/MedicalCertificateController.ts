@@ -141,6 +141,24 @@ class MedicalCertificateController {
         status: CERTIFICATE_STATUSES.PENDING,
       });
 
+      /*
+        A análise entrava na trilha e o envio não. O atestado é documento de
+        saúde: o CID e o motivo ficam fora do registro, que guarda só que
+        houve envio, de quantos dias e a partir de quando. [CB-67]
+      */
+      await writeAudit({
+        organizationId: orgId,
+        actorId: userId,
+        action: "medical_certificate.send",
+        entityType: "MedicalCertificate",
+        entityId: certificate.id,
+        after: {
+          startDate: certificate.startDate,
+          days: certificate.days,
+          hours: certificate.hours,
+        },
+      });
+
       res.status(201).json({ certificate: publicCertificate(certificate) });
     } catch (err) {
       fail(res, err);

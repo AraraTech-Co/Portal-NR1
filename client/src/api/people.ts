@@ -134,7 +134,20 @@ export type EmployeeFile = {
     acknowledged_at: string | null;
   } | null;
   actions: { id: string; title: string; status: string; dueDate: string | null }[];
-  history: { id: string; action: string; at: string; who: string }[];
+  history: {
+    id: string;
+    action: string;
+    at: string;
+    who: string;
+    /** O que mudou, de quê para quê. Escondido para quem não vê o campo. [CB-54] */
+    changes: {
+      field: string;
+      label: string;
+      from: string | null;
+      to: string | null;
+      hidden: boolean;
+    }[];
+  }[];
 };
 
 export function fetchEmployees(includeDismissed = false) {
