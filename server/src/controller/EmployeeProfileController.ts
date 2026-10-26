@@ -113,6 +113,46 @@ function forViewer<
   };
 }
 
+/**
+ * O que mudou na ficha, campo a campo, com o valor de antes e o de agora.
+ *
+ * O histórico registrava "Ficha alterada" e nada mais: função, vínculo,
+ * empresa contratada, CPF e matrícula ficavam gravados sem o antes nem o
+ * depois, e não dava para saber o que alguém tinha mudado. [CB-54]
+ */
+const CAMPOS_DA_FICHA: Record<string, string> = {
+  registration: "matrícula",
+  taxId: "CPF",
+  phone: "telefone",
+  jobRoleId: "função",
+  bond: "vínculo",
+  contractorId: "empresa contratada",
+  admittedAt: "admissão",
+  dismissedAt: "desligamento",
+};
+
+/** Campos que não se mostram a quem não pode vê-los na própria ficha. [CB-43] */
+const CAMPOS_RESERVADOS = new Set(["taxId", "phone"]);
+
+function comoTexto(valor: unknown): string | null {
+  if (valor === null || valor === undefined) return null;
+  if (valor instanceof Date) return valor.toISOString().slice(0, 10);
+  return String(valor);
+}
+
+export function diffDaFicha(
+  antes: Record<string, unknown>,
+  depois: Record<string, unknown>,
+): { field: string; label: string; from: string | null; to: string | null }[] {
+  const mudou: { field: string; label: string; from: string | null; to: string | null }[] = [];
+  for (const [campo, label] of Object.entries(CAMPOS_DA_FICHA)) {
+    const de = comoTexto(antes[campo]);
+    const para = comoTexto(depois[campo]);
+    if (de !== para) mudou.push({ field: campo, label, from: de, to: para });
+  }
+  return mudou;
+}
+
 class EmployeeProfileController {
   async list(req: Request, res: Response) {
     try {
@@ -301,6 +341,8 @@ class EmployeeProfileController {
               id: true,
               action: true,
               createdAt: true,
+              /** O que mudou, de quê para quê. [CB-54] */
+              context: true,
               actor: { select: { name: true } },
             },
           }),
@@ -314,6 +356,10 @@ class EmployeeProfileController {
         }
       }
 
+      /* Mesma regra do perfil: quem só consulta não vê CPF nem telefone. [CB-43] */
+      const escondeReservado = Boolean(
+        auth.actor && isReadOnlyRole(auth.actor.permission),
+      );
       res.json({
         profile: forViewer(auth, profile),
         membership: membership
@@ -374,6 +420,23 @@ class EmployeeProfileController {
           action: h.action,
           at: h.createdAt,
           who: h.actor?.name ?? "sistema",
+          /*
+            O que mudou, de quê para quê [CB-54] — com CPF e telefone fora
+            para quem não os vê na própria ficha, que é a mesma regra do
+            CB-43: o histórico não pode ser a porta dos fundos.
+          */
+          changes: (
+            ((h.context as { changes?: unknown } | null)?.changes ?? []) as {
+              field: string;
+              label: string;
+              from: string | null;
+              to: string | null;
+            }[]
+          ).map((m) =>
+            escondeReservado && CAMPOS_RESERVADOS.has(m.field)
+              ? { ...m, from: null, to: null, hidden: true }
+              : { ...m, hidden: false },
+          ),
         })),
       });
     } catch (err) {
@@ -617,12 +680,23 @@ class EmployeeProfileController {
         },
       );
 
+      /*
+        Antes ficava só "Ficha alterada". O que mudou, de quê para quê, é o
+        que a trilha existe para responder. [CB-54]
+      */
+      const mudancas = diffDaFicha(
+        current as unknown as Record<string, unknown>,
+        (profile ?? current) as unknown as Record<string, unknown>,
+      );
       await writeAudit({
         organizationId: orgId,
         actorId,
         action: "employee_profile.update",
         entityType: "EmployeeProfile",
         entityId: current.id,
+        before: Object.fromEntries(mudancas.map((m) => [m.field, m.from])),
+        after: Object.fromEntries(mudancas.map((m) => [m.field, m.to])),
+        context: { changes: mudancas },
       });
 
       res.json({ profile });

@@ -154,3 +154,13 @@
     font-size: 0.78rem;
   }
 }
+
+/* O que mudou na ficha, dentro da linha do histórico. [CB-54] */
+.people-history-changes {
+  list-style: none;
+  margin: 0.2rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.1rem;
+  font-size: 0.82rem;
+}

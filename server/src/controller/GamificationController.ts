@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import prisma from "../model/prisma";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { canManageModule } from "../helper/module-access";
+import { writeAudit } from "../helper/audit";
 import { notify } from "../helper/notify";
 import { NotificationKind } from "@prisma/client";
 import {
@@ -95,6 +96,24 @@ class GamificationController {
           grantedById: granterId,
         },
       });
+      /*
+        Ponto é valor: vira prêmio. Lançar pontos para alguém não entrava na
+        trilha, e numa contestação não havia como mostrar quem lançou nem
+        por quê. [CB-67]
+      */
+      await writeAudit({
+        organizationId: orgId,
+        actorId: granterId,
+        action: "gamification.points",
+        entityType: "PointEntry",
+        entityId: entry.id,
+        after: {
+          userId: entry.userId,
+          activity: entry.activity,
+          points: entry.points,
+        },
+      });
+
       res.status(201).json({ entry });
     } catch (err) {
       fail(res, err);
@@ -151,6 +170,16 @@ class GamificationController {
           stock: stock ?? null,
         },
       });
+      /* O prêmio e o custo dele em pontos entram na trilha. [CB-67] */
+      await writeAudit({
+        organizationId: orgId,
+        actorId: actorUserId(req as AuthRequest),
+        action: "gamification.reward",
+        entityType: "Reward",
+        entityId: reward.id,
+        after: { name: reward.name, cost: reward.cost, stock: reward.stock },
+      });
+
       res.status(201).json({ reward });
     } catch (err) {
       fail(res, err);
@@ -213,6 +242,16 @@ class GamificationController {
           });
         }
         return created;
+      });
+
+      /* O resgate pedido: é quando os pontos saem do saldo. [CB-67] */
+      await writeAudit({
+        organizationId: orgId,
+        actorId: actorUserId(req as AuthRequest),
+        action: "gamification.redeem",
+        entityType: "RewardRedemption",
+        entityId: redemption.id,
+        after: { rewardId: redemption.rewardId, cost: redemption.cost },
       });
 
       res.status(201).json({ redemption });
@@ -348,6 +387,16 @@ class GamificationController {
         link: "/gamificacao",
         entityType: "RewardRedemption",
         entityId: updated.id,
+      });
+
+      /* E o que foi decidido sobre ele. [CB-67] */
+      await writeAudit({
+        organizationId: orgId,
+        actorId: actorUserId(req as AuthRequest),
+        action: "gamification.redeem_decide",
+        entityType: "RewardRedemption",
+        entityId: updated.id,
+        after: { status: updated.status, reward: updated.reward.name },
       });
 
       res.json({ redemption: updated });

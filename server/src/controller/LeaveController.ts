@@ -163,6 +163,24 @@ class LeaveController {
         status: LEAVE_STATUSES.REQUESTED,
       });
 
+      /*
+        A decisão entrava na trilha e o pedido não: o histórico mostrava a
+        resposta sem a pergunta. [CB-67]
+      */
+      await writeAudit({
+        organizationId: orgId,
+        actorId: userId,
+        action: "leave.request",
+        entityType: "LeaveRequest",
+        entityId: leave.id,
+        after: {
+          kind: leave.kind,
+          startDate: leave.startDate,
+          endDate: leave.endDate,
+          days: leave.days,
+        },
+      });
+
       res.status(201).json({ leave });
     } catch (err) {
       fail(res, err);
