@@ -9,6 +9,12 @@ export type ServiceOrderSummary = {
   acknowledged: number;
   pending: number;
   my_ack_at: string | null;
+  /**
+   * Mudanças no inventário da função depois da emissão. Acima de zero, a
+   * ordem ficou para trás e o trabalhador deu ciência de uma que não fala do
+   * risco de hoje. [CB-69]
+   */
+  changes_since: number;
 };
 
 export type JobRoleServiceOrder = {

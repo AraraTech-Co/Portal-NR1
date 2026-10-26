@@ -5,6 +5,7 @@ import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
 import { notifyMany } from "../helper/notify";
 import { canSeeAllInModule } from "../helper/module-access";
+import { mudancasDesdeAEmissao } from "../helper/ordem-desatualizada";
 import type { AuthRequest } from "../types/auth";
 
 function fail(res: Response, err: unknown) {
@@ -182,6 +183,21 @@ class ServiceOrderController {
         select: { jobRoleId: true },
       });
 
+      /*
+        A ordem fica para trás quando o inventário da função muda depois da
+        emissão, e nada dizia: a lista seguia mostrando "Emitida · v1". É a
+        mesma comparação que os documentos do PGR já fazem. [CB-69]
+      */
+      const desatualizadas = new Map<string, number>();
+      for (const role of roles) {
+        const vigente = role.serviceOrders[0];
+        if (!vigente) continue;
+        desatualizadas.set(
+          role.id,
+          await mudancasDesdeAEmissao(orgId, role.id, vigente.issuedAt),
+        );
+      }
+
       res.json({
         my_job_role_id: meuPerfil?.jobRoleId ?? null,
         job_roles: roles.map((role) => {
@@ -203,6 +219,8 @@ class ServiceOrderController {
                   acknowledged: vigente._count.acks,
                   pending: Math.max(role._count.employees - vigente._count.acks, 0),
                   my_ack_at: vigente.acks[0]?.acknowledgedAt ?? null,
+                  /** Mudanças no inventário da função depois da emissão. [CB-69] */
+                  changes_since: desatualizadas.get(role.id) ?? 0,
                 }
               : null,
             versions: role.serviceOrders.length,
