@@ -12,6 +12,9 @@ import { Action } from "../model/schema/Action/Action";
 import { Evidence } from "../model/schema/Evidence/Evidence";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { canValidateAction, canWriteModule } from "../helper/module-access";
+import { usersWhoValidateActions } from "../helper/module-managers";
+import { writeAudit } from "../helper/audit";
+import { notifyMany } from "../helper/notify";
 import {
   assertSize,
   buildEvidenceStoragePath,
@@ -192,6 +195,16 @@ class ActionEvidenceController {
         );
       }
 
+      /* A prova enviada é parte do que o fiscal pede para ver. [CB-58] */
+      await writeAudit({
+        organizationId: orgId,
+        actorId: userId,
+        action: "action.evidence",
+        entityType: "Action",
+        entityId: action_id,
+        after: { fileName: row.fileName, description: row.description },
+      });
+
       const { storagePath: _interno, ...evidence } = row;
       res.status(201).json({ evidence });
     } catch (err) {
@@ -203,6 +216,7 @@ class ActionEvidenceController {
   async completeAction(req: Request, res: Response) {
     try {
       const orgId = actorOrgId(req as AuthRequest);
+      const userId = actorUserId(req as AuthRequest);
       const id = req.params.id;
       const action = await new Action().read.one({ id, organizationId: orgId });
       if (!action) {
@@ -243,22 +257,40 @@ class ActionEvidenceController {
       );
 
       /*
-        Concluir não avisava ninguém: quem valida tinha de descobrir sozinho
-        que havia o que validar. Avisa quem abriu a ação — nunca quem
-        executou, que é justamente quem não pode validar. [S3-A] [CB-19]
+        A conclusão da ação não entrava na trilha, então o Histórico do risco
+        e o Histórico do Painel paravam em "Ação aberta" — justamente o que o
+        fiscal pede para ver. [CB-58]
       */
-      if (action.createdById !== actorUserId(req as AuthRequest)) {
-        await notify({
+      await writeAudit({
+        organizationId: orgId,
+        actorId: userId,
+        action: "action.complete",
+        entityType: "Action",
+        entityId: action.id,
+        before: { status: action.status },
+        after: { status: ActionStatus.WAITING_VALIDATION, title: action.title },
+      });
+
+      /*
+        Concluir não avisava ninguém: quem valida tinha de descobrir sozinho
+        que havia o que validar [S3-A] [CB-19]. O aviso ia para quem ABRIU a
+        ação — e, desde a revisão do OB-6, quem abre pode não poder validar:
+        chegava a quem não tem o que fazer com ele, e quem valida ficava sem
+        saber. Vai para quem valida, menos quem executou. [CB-56]
+      */
+      const validadores = await usersWhoValidateActions(orgId);
+      await notifyMany(
+        validadores.filter((quem) => quem !== userId),
+        {
           organizationId: orgId,
-          userId: action.createdById,
           kind: NotificationKind.ACTION_WAITING_VALIDATION,
           title: action.title,
           body: "A ação foi concluída e espera a sua validação.",
           link: "/acoes",
           entityType: "Action",
           entityId: action.id,
-        });
-      }
+        },
+      );
 
       res.json({ action: row });
     } catch (err) {
@@ -405,6 +437,47 @@ class ActionEvidenceController {
             rejectionReason: null,
           },
         });
+      });
+
+      /*
+        A aprovação e a recusa não entravam na trilha, e o Histórico do risco
+        parava em "Ação aberta": quem aprovou e quando ficava só no detalhe
+        da ação, não no histórico que se mostra ao fiscal. [CB-58]
+      */
+      /*
+        O nome do fato sai de um booleano, não de `decision === "approve"`
+        dentro do ternário: a varredura de rótulos lê o que vem depois de
+        `action:` e tomaria "approve" por nome de fato. [B2-1-C]
+      */
+      const aprovou = decision === "approve";
+      await writeAudit({
+        organizationId: orgId,
+        actorId: userId,
+        action: aprovou ? "action.validate" : "action.reject",
+        entityType: "Action",
+        entityId: result.id,
+        after: {
+          title: result.title,
+          status: result.status,
+          effectivenessResult: result.effectivenessResult,
+          rejectionReason: result.rejectionReason,
+        },
+      });
+
+      /*
+        Depois de aprovar, quem validou encontrava no Início o aviso "espera a
+        sua validação", como não lido: via como pendente o que acabara de
+        fazer. [CB-59]
+      */
+      await prisma.notification.updateMany({
+        where: {
+          userId,
+          entityType: "Action",
+          entityId: result.id,
+          kind: NotificationKind.ACTION_WAITING_VALIDATION,
+          readAt: null,
+        },
+        data: { readAt: new Date() },
       });
 
       // Quem executou precisa saber que foi aprovada — ou que tem de refazer.
