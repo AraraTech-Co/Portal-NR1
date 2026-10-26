@@ -4,6 +4,9 @@ import { LeaveRequest } from "../model/schema/LeaveRequest/LeaveRequest";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
 import { canManageModule } from "../helper/module-access";
+import { notify } from "../helper/notify";
+import { NotificationKind } from "@prisma/client";
+import { LEAVE_KIND_LABEL } from "../helper/rotulos";
 import {
   LEAVE_KIND_DEFAULT,
   LEAVE_KIND_VALUES,
@@ -243,6 +246,27 @@ class LeaveController {
         entityId: current.id,
         after: { status },
       });
+
+      /*
+        A decisão só aparecia na tela de Férias e licenças: o atestado
+        avisava e as férias não, então o trabalhador podia supor que o pedido
+        continuava parado — e é por ela que ele marca a viagem. [B3-3-I]
+        [CB-29]
+      */
+      if (current.userId !== deciderId) {
+        const aprovado = status === LEAVE_STATUSES.APPROVED;
+        await notify({
+          organizationId: orgId,
+          userId: current.userId,
+          kind: NotificationKind.LEAVE_DECIDED,
+          title: LEAVE_KIND_LABEL[current.kind] ?? "Pedido de férias ou licença",
+          /* Recusar sem motivo já é 400 acima: aqui o motivo existe. */
+          body: aprovado ? "Aprovado." : `Recusado: ${decision_note!.trim()}`,
+          link: "/ferias",
+          entityType: "LeaveRequest",
+          entityId: current.id,
+        });
+      }
 
       res.json({ leave });
     } catch (err) {

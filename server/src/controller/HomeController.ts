@@ -8,6 +8,10 @@ import {
   canReadModule,
   canSeeAllInModule,
 } from "../helper/module-access";
+import {
+  canDecideJoinRequests,
+  canManageInviteLinks,
+} from "../helper/invite-access";
 import type { AuthRequest } from "../types/auth";
 
 function fail(res: Response, err: unknown) {
@@ -287,6 +291,50 @@ class HomeController {
             count: novas,
             link: "/ideias",
             tone: "info",
+          });
+        }
+      }
+
+      if (cuida("gamificacao")) {
+        const pedidos = await prisma.rewardRedemption.count({
+          where: { reward: { organizationId: orgId }, status: "REQUESTED" },
+        });
+        if (pedidos > 0) {
+          mesa.push({
+            id: "resgates",
+            label: "Resgates de prêmio esperando entrega",
+            count: pedidos,
+            link: "/gamificacao",
+            tone: "info",
+          });
+        }
+      }
+
+      /*
+        O pedido de entrada é a pessoa esperando do lado de fora: ficava
+        parado até alguém abrir Conta por acaso. O recorte é o mesmo da
+        tela que decide — quem não cuida de Conta só vê os da sua. [CB-53]
+      */
+      if (canDecideJoinRequests(actor)) {
+        const pedidos = await prisma.accountJoinRequest.count({
+          where: {
+            status: "PENDING",
+            account: {
+              organizationId: orgId,
+              active: true,
+              ...(actor.isMaster || canManageInviteLinks(actor)
+                ? {}
+                : { id: actor.accountId }),
+            },
+          },
+        });
+        if (pedidos > 0) {
+          mesa.push({
+            id: "pedidos_entrada",
+            label: "Pedidos de entrada esperando aprovação",
+            count: pedidos,
+            link: "/conta",
+            tone: "warning",
           });
         }
       }

@@ -3,6 +3,8 @@ import prisma from "../model/prisma";
 import { Summon } from "../model/schema/Summon/Summon";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
+import { notifyMany } from "../helper/notify";
+import { NotificationKind } from "@prisma/client";
 import { canManageModule, canSeeAllInModule } from "../helper/module-access";
 import {
   SUMMON_ATTENDANCE_STATUSES,
@@ -163,6 +165,21 @@ class SummonController {
         entityId: summon.id,
       });
 
+      /*
+        Ser convocado é obrigação com data: quem foi chamado precisa saber
+        sem depender de alguém avisar por fora do portal. [CB-29]
+      */
+      await notifyMany(invitees.filter((uid) => uid !== userId), {
+        organizationId: orgId,
+        kind: NotificationKind.SUMMON_OPENED,
+        title: "Você foi convocado",
+        body: `${summon.title} — ${summon.scheduledFor.toLocaleDateString("pt-BR")}.`,
+        link: "/convocacoes",
+        entityType: "Summon",
+        entityId: summon.id,
+      });
+
+
       res.status(201).json({ summon });
     } catch (err) {
       fail(res, err);
@@ -206,6 +223,21 @@ class SummonController {
         });
         created.push(row);
       }
+
+      /*
+        Ser convocado é obrigação com data: quem foi chamado precisa saber
+        sem depender de alguém avisar por fora do portal. [CB-29]
+      */
+      await notifyMany(created.map((row) => row.userId), {
+        organizationId: orgId,
+        kind: NotificationKind.SUMMON_OPENED,
+        title: "Você foi convocado",
+        body: `${summon.title} — ${summon.scheduledFor.toLocaleDateString("pt-BR")}.`,
+        link: "/convocacoes",
+        entityType: "Summon",
+        entityId: summon.id,
+      });
+
       res.status(201).json({ attendances: created });
     } catch (err) {
       fail(res, err);

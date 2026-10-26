@@ -3,7 +3,8 @@ import prisma from "../model/prisma";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { canManageModule } from "../helper/module-access";
 import { writeAudit } from "../helper/audit";
-import { notify } from "../helper/notify";
+import { notify, notifyMany } from "../helper/notify";
+import { usersWhoManageRewards } from "../helper/module-managers";
 import { NotificationKind } from "@prisma/client";
 import {
   REDEMPTION_STATUSES,
@@ -113,6 +114,24 @@ class GamificationController {
           points: entry.points,
         },
       });
+
+      /*
+        A gamificação só funciona se o trabalhador souber que ganhou: o saldo
+        aparecia sem nunca ter sido anunciado, e quem recebeu descobria por
+        acaso ao entrar na tela. [B3-3-F]
+      */
+      if (entry.userId !== granterId) {
+        await notify({
+          organizationId: orgId,
+          userId: entry.userId,
+          kind: NotificationKind.POINTS_GRANTED,
+          title: `+${entry.points} ponto(s)`,
+          body: entry.activity,
+          link: "/gamificacao",
+          entityType: "PointEntry",
+          entityId: entry.id,
+        });
+      }
 
       res.status(201).json({ entry });
     } catch (err) {
@@ -243,6 +262,24 @@ class GamificationController {
         }
         return created;
       });
+
+      /*
+        O resgate pedido ficava parado até alguém do RH entrar na tela por
+        acaso. [B3-3-F] [CB-29]
+      */
+      const quemEntrega = await usersWhoManageRewards(orgId);
+      await notifyMany(
+        quemEntrega.filter((quem) => quem !== userId),
+        {
+          organizationId: orgId,
+          kind: NotificationKind.REWARD_REQUESTED,
+          title: "Resgate de prêmio pedido",
+          body: `${reward.name} — esperando a entrega.`,
+          link: "/gamificacao",
+          entityType: "RewardRedemption",
+          entityId: redemption.id,
+        },
+      );
 
       /* O resgate pedido: é quando os pontos saem do saldo. [CB-67] */
       await writeAudit({

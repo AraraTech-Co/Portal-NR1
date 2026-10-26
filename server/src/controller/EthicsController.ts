@@ -3,8 +3,11 @@ import bcrypt from "bcryptjs";
 import { NotificationKind } from "@prisma/client";
 import { Request, Response } from "express";
 import prisma from "../model/prisma";
-import { citedReportIds } from "../helper/ethics-access";
-import { notify } from "../helper/notify";
+import {
+  citedReportIds,
+  usersInEthicsCommittee,
+} from "../helper/ethics-access";
+import { notify, notifyMany } from "../helper/notify";
 import { EthicsReport } from "../model/schema/EthicsReport/EthicsReport";
 import { EthicsReportMessage } from "../model/schema/EthicsReportMessage/EthicsReportMessage";
 import { Establishment } from "../model/schema/Establishment/Establishment";
@@ -231,6 +234,27 @@ class EthicsController {
           isAnonymous: report.isAnonymous,
         },
       });
+
+      /*
+        A denúncia chegava e ficava esperando alguém do comitê abrir a tela
+        por conta própria. O aviso diz que entrou e qual é o protocolo — não
+        diz quem relatou, nem no caso identificado: quem precisa saber abre
+        o relato. [CB-29]
+      */
+      await notifyMany(
+        (await usersInEthicsCommittee(orgId)).filter(
+          (quem) => quem !== reporterUserId,
+        ),
+        {
+          organizationId: orgId,
+          kind: NotificationKind.ETHICS_REPORT_OPENED,
+          title: "Denúncia nova no canal",
+          body: `Protocolo ${report.protocol}.`,
+          link: "/comite",
+          entityType: "EthicsReport",
+          entityId: report.id,
+        },
+      );
 
       res.status(201).json({
         report: publicReportView(report),

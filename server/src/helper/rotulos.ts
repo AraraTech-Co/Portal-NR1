@@ -25,3 +25,13 @@ export const PARTICIPATION_TYPE_LABEL: Record<ParticipationType, string> = {
   BASIC_TRAINING: "Treinamento básico",
   WORKSHOP: "Oficina",
 };
+
+/**
+ * Férias, licença e folga em palavra — o aviso da decisão é escrito pelo
+ * servidor e precisa dizer de que pedido se trata. [B3-3-I]
+ */
+export const LEAVE_KIND_LABEL: Record<string, string> = {
+  VACATION: "Férias",
+  LEAVE: "Licença",
+  DAY_OFF: "Folga",
+};
