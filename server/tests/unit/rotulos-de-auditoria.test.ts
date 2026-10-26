@@ -13,6 +13,10 @@ import { join } from "node:path";
  * Limite conhecido: só enxerga texto entre aspas logo depois de `action:`.
  * Pega o literal e o ternário (`action: x ? "a" : "b"`); ação montada em
  * variável passa despercebida.
+ *
+ * Comentário sai antes da busca: o comentário que explica uma correção cita
+ * o próprio trecho corrigido, e a varredura tomava a citação por fato
+ * gravado. Só código grava.
  */
 const RAIZ = join(__dirname, "..", "..", "src");
 const MAPA = join(
@@ -34,10 +38,17 @@ function arquivos(dir: string): string[] {
   });
 }
 
+/** Sem comentários de linha nem de bloco: só o que o código executa. */
+function semComentarios(texto: string): string {
+  return texto
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+}
+
 function acoesGravadas(): string[] {
   const achadas = new Set<string>();
   for (const arquivo of arquivos(RAIZ)) {
-    const texto = readFileSync(arquivo, "utf8");
+    const texto = semComentarios(readFileSync(arquivo, "utf8"));
     for (const m of texto.matchAll(/action:\s*([^,\n]+)/g)) {
       for (const lit of m[1]!.matchAll(/"([A-Za-z_.]+)"/g)) {
         achadas.add(lit[1]!);

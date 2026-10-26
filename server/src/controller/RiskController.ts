@@ -444,11 +444,28 @@ class RiskController {
         return;
       }
 
-      // Mudanças registradas na trilha para o risco, o perigo e a atividade.
+      /*
+        Mudanças registradas na trilha para o risco, o perigo, a atividade —
+        e para as ações do risco. Sem as ações, "Tudo o que aconteceu com
+        este risco" parava em "Ação aberta": a conclusão, a prova enviada e
+        a validação ficavam de fora, que é justamente o que o fiscal pede
+        para ver. [CB-58] [S7-D]
+      */
+      const idsDasAcoes = [
+        ...risk.actions.map((a) => a.id),
+        ...risk.controls.flatMap((c) => c.actions.map((a) => a.id)),
+      ];
       const changes = await prisma.auditEvent.findMany({
         where: {
           organizationId: orgId,
-          entityId: { in: [risk.id, risk.hazardId, risk.hazard.activityId] },
+          entityId: {
+            in: [
+              risk.id,
+              risk.hazardId,
+              risk.hazard.activityId,
+              ...new Set(idsDasAcoes),
+            ],
+          },
         },
         orderBy: { createdAt: "desc" },
         take: 100,
