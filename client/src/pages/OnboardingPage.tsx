@@ -1,21 +1,51 @@
 import { useState } from "react";
 import { useResourceList } from "@/hooks/useResourceList";
-import { createOnboardingStep, fetchOnboardingSteps } from "@/api/modules";
+import {
+  completeOnboardingStep,
+  createOnboardingStep,
+  fetchOnboardingSteps,
+} from "@/api/modules";
 import { ListShell } from "@/components/ListShell";
+import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
 import { NewRecordSection } from "@/components/NewRecordSection";
+import { formatDay } from "@/lib/labels";
 import { useModuleAccess } from "@/lib/module-access";
+import "./onboarding.css";
 
+/**
+ * Onboarding: o roteiro de quem chega.
+ *
+ * A tela criava passos e ninguém os marcava como feitos — a rota existia no
+ * servidor desde o começo e tela nenhuma a usava, então o roteiro ficava
+ * "Pendente" para sempre. O progresso é de quem marca: cada pessoa vê o
+ * próprio. [CB-64] [OB-4]
+ */
 export function OnboardingPage() {
   const { rows, loading, error, reload } = useResourceList(fetchOnboardingSteps);
   const { canWrite } = useModuleAccess("onboarding");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [marcando, setMarcando] = useState<string | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+
+  async function marcarFeito(id: string) {
+    setMarcando(id);
+    setErro(null);
+    try {
+      await completeOnboardingStep(id);
+      reload();
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : "Falha ao marcar o passo");
+    } finally {
+      setMarcando(null);
+    }
+  }
 
   return (
     <ListShell
       title="Onboarding"
-      description="Passos de integração do colaborador."
+      description="Passos de integração de quem chega. Cada pessoa marca os próprios passos."
       loading={loading}
       error={error}
       empty={rows.length === 0}
@@ -52,28 +82,69 @@ export function OnboardingPage() {
         </NewRecordSection>
       }
     >
-      <div className="data-table-wrap">
-        <table className="data-table">
-          <thead>
-            <tr>
-                <th>Ordem</th>
-                <th>Título</th>
-                <th>Descrição</th>
-                <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.id}>
-                  <td>{r.order}</td>
-                  <td><strong>{r.title}</strong></td>
-                  <td>{r.description ?? "—"}</td>
-                  <td>{r.done_at ? <Chip tone="success">Concluído</Chip> : <Chip tone="warning">Pendente</Chip>}</td>
+      <>
+        {erro && (
+          <p className="page-error" role="alert">
+            {erro}
+          </p>
+        )}
+        <div className="data-table-wrap">
+          <table className="data-table onboarding-table">
+            <thead>
+              <tr>
+                  <th className="onboarding-col-ordem">Ordem</th>
+                  <th>Título</th>
+                  <th className="onboarding-col-descricao">Descrição</th>
+                  {/* A situação é a de quem está olhando, não a da turma
+                      inteira: o servidor guarda o progresso por pessoa. */}
+                  <th>Meu passo</th>
+                  <th />
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id}>
+                    <td className="onboarding-col-ordem">{r.order}</td>
+                    <td>
+                      <strong>{r.title}</strong>
+                      {/* No celular a coluna da descrição sai: o texto entra
+                          aqui, para o botão caber na tela. */}
+                      {r.description && (
+                        <div className="muted onboarding-descricao-embaixo">
+                          {r.description}
+                        </div>
+                      )}
+                    </td>
+                    <td className="onboarding-col-descricao">
+                      {r.description ?? "—"}
+                    </td>
+                    <td>
+                      {r.done_at ? (
+                        <>
+                          <Chip tone="success">Feito</Chip>
+                          <div className="muted">{formatDay(r.done_at)}</div>
+                        </>
+                      ) : (
+                        <Chip tone="warning">A fazer</Chip>
+                      )}
+                    </td>
+                    <td>
+                      {!r.done_at && (
+                        <Button
+                          type="button"
+                          disabled={marcando === r.id}
+                          onClick={() => void marcarFeito(r.id)}
+                        >
+                          {marcando === r.id ? "Marcando…" : "Marquei como feito"}
+                        </Button>
+                      )}
+                    </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </>
     </ListShell>
   );
 }
