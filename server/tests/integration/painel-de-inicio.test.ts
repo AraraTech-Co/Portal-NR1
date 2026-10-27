@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import request from "supertest";
 import type { Express } from "express";
 import { createApp } from "../../src/app";
+import prisma from "../../src/model/prisma";
 
 /**
  * O painel de início responde, pelo papel de quem abre: o que é meu [S1-F],
@@ -107,16 +108,25 @@ describe("o que está na minha mesa [S5-A]", () => {
         effectiveness_criteria: "Critério do teste",
         title: `Trocar o piso ${SUFIXO}`,
         assignee_id: supervisor.user.id,
-        // Data fixa que virou passado; o prazo agora é recusado. [CB-21]
+        // Prazo no passado é recusado na abertura. [CB-21]
         due_date: "2027-01-10",
         priority: "HIGH",
       });
     expect(criada.status).toBe(201);
+    /*
+      O prazo passa: a ação do próprio teste vence. A asserção de "venceu"
+      só passava com ações vencidas de outras rodadas no nome do supervisor;
+      no banco limpo, não havia nenhuma.
+    */
+    await prisma.action.update({
+      where: { id: criada.body.action.id },
+      data: { dueDate: new Date(Date.now() - 2 * 86_400_000) },
+    });
 
     const doSupervisor = await painel(supervisor.token);
     const card = acha(doSupervisor.mine, "minhas_acoes");
     expect(card, "a ação é dele").toBeTruthy();
-    // Prazo de janeiro de 2026 já passou: o cartão avisa.
+    // O prazo já passou: o cartão avisa.
     expect(card!.tone).toBe("warning");
     expect(card!.detail).toMatch(/venceu/);
 
@@ -128,6 +138,9 @@ describe("o que está na minha mesa [S5-A]", () => {
     // E para quem cuida do plano ela entra como atrasada.
     const doOwner = await painel(owner.token);
     expect(acha(doOwner.desk, "acoes_atrasadas")?.count).toBeGreaterThanOrEqual(1);
+
+    /* A ação vencida não fica para a próxima rodada dar como certo. */
+    await prisma.action.delete({ where: { id: criada.body.action.id } });
   });
 });
 
