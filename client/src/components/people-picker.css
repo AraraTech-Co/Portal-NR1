@@ -37,3 +37,22 @@
 .people-picker-option input {
   margin: 0;
 }
+
+/* Busca e quantas pessoas estão marcadas, acima da lista. [B3-3-E] */
+.people-picker-search {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.75rem;
+}
+
+.people-picker-search input {
+  flex: 1 1 14rem;
+  min-width: 0;
+  border: 1px solid var(--input);
+  border-radius: var(--radius);
+  background: var(--card);
+  padding: 0.5rem 0.65rem;
+  font: inherit;
+  font-weight: 400;
+}
