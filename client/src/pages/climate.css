@@ -1,0 +1,14 @@
+/*
+  No celular, o botão de responder ficava fora da tela, numa coluna à parte
+  que só se via rolando a tabela de lado. Em tela estreita, a contagem e a
+  data saem da linha; os botões ficam junto da situação. [CB-64]
+*/
+@media (max-width: 640px) {
+  .climate-table .climate-col-extra {
+    display: none;
+  }
+}
+
+.climate-acoes {
+  margin-top: 0.5rem;
+}

@@ -303,9 +303,51 @@ export const fetchClimateSurveys = () =>
       title: string;
       status: string;
       createdAt: string;
-      _count?: { responses: number };
+      /* A pesquisa precisa dizer para que serve e se tem pergunta: abrir uma
+         sem pergunta nenhuma dá uma pesquisa que ninguém consegue responder.
+         [CB-64] */
+      description: string | null;
+      isAnonymous: boolean;
+      _count?: { responses: number; questions: number };
     }>;
   }>("/api/climate-surveys").then((d) => d.surveys);
+
+/** A pesquisa com as perguntas, para quem vai responder. [CB-64] */
+export const fetchClimateSurvey = (id: string) =>
+  request<{
+    survey: {
+      id: string;
+      title: string;
+      description: string | null;
+      status: string;
+      isAnonymous: boolean;
+      questions: Array<{ id: string; order: number; prompt: string }>;
+    };
+  }>(`/api/climate-surveys/${encodeURIComponent(id)}`).then((d) => d.survey);
+
+/** Abrir para respostas: até aqui a pesquisa era só rascunho. [CB-64] */
+export const openClimateSurvey = (id: string) =>
+  request<{ survey: { id: string; status: string } }>(
+    `/api/climate-surveys/${encodeURIComponent(id)}/open`,
+    { method: "POST" },
+  );
+
+/** Encerrar: para de receber resposta. [CB-64] */
+export const closeClimateSurvey = (id: string) =>
+  request<{ survey: { id: string; status: string } }>(
+    `/api/climate-surveys/${encodeURIComponent(id)}/close`,
+    { method: "POST" },
+  );
+
+/** Responder a pesquisa aberta. [CB-64] */
+export const respondClimateSurvey = (
+  id: string,
+  answers: Array<{ question_id: string; score?: number; text?: string }>,
+) =>
+  request<{ response: { id: string; anonymous: boolean } }>(
+    `/api/climate-surveys/${encodeURIComponent(id)}/respond`,
+    { method: "POST", body: JSON.stringify({ answers }) },
+  );
 
 export const fetchIdeas = () =>
   request<{
@@ -363,9 +405,20 @@ export const fetchSummons = () =>
       scheduledFor: string;
       createdBy: { name: string };
       _count: { attendances: number };
-      my_attendance: { status: string } | null;
+      my_attendance: { status: string; confirmedAt: string | null } | null;
+      /* Onde e para quê: a tela mostrava o assunto e o dia, e quem foi
+         chamado não sabia nem a hora nem o lugar. [CB-64] */
+      location: string | null;
+      description: string | null;
     }>;
   }>("/api/summons").then((d) => d.summons);
+
+/** "Vou comparecer" — de quem foi convocado, sobre a própria presença. [CB-64] */
+export const confirmSummonAttendance = (id: string) =>
+  request<{ attendance: { status: string; confirmedAt: string | null } }>(
+    `/api/summons/${encodeURIComponent(id)}/attendance`,
+    { method: "POST", body: JSON.stringify({ status: "CONFIRMED" }) },
+  );
 
 /*
   Conta ativa e troca de conta moram em `api/auth.ts` e na sessão: eram duas

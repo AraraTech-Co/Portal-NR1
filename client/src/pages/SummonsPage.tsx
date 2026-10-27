@@ -1,15 +1,52 @@
 import { useState } from "react";
 import { useResourceList } from "@/hooks/useResourceList";
-import { createSummon, fetchSummons } from "@/api/modules";
+import {
+  confirmSummonAttendance,
+  createSummon,
+  fetchSummons,
+} from "@/api/modules";
 import { ListShell } from "@/components/ListShell";
+import { Button } from "@/components/Button";
+import { Chip } from "@/components/Chip";
 import { NewRecordSection } from "@/components/NewRecordSection";
 import { PeoplePicker } from "@/components/PeoplePicker";
-import { formatDay } from "@/lib/labels";
+import { formatDayTime, SUMMON_ATTENDANCE_LABEL } from "@/lib/labels";
 import { useModuleAccess } from "@/lib/module-access";
+import "./summons.css";
 
+function tom(status: string): "success" | "warning" | "danger" | "neutral" {
+  if (status === "CONFIRMED" || status === "ATTENDED") return "success";
+  if (status === "INVITED") return "warning";
+  if (status === "ABSENT") return "danger";
+  return "neutral";
+}
+
+/**
+ * Convocações: convocar e confirmar presença.
+ *
+ * A tela dizia "Quem é convocado recebe aviso e confirma presença no
+ * portal", e confirmar não existia: a coluna "Minha presença" mostrava o
+ * código do banco ("INVITED") e nada mais. A rota de confirmar já existia no
+ * servidor. [CB-64] [OB-4]
+ */
 export function SummonsPage() {
   const { rows, loading, error, reload } = useResourceList(fetchSummons);
   const { canWrite } = useModuleAccess("convocacoes");
+  const [confirmando, setConfirmando] = useState<string | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+
+  async function confirmar(id: string) {
+    setConfirmando(id);
+    setErro(null);
+    try {
+      await confirmSummonAttendance(id);
+      reload();
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : "Falha ao confirmar");
+    } finally {
+      setConfirmando(null);
+    }
+  }
   const [title, setTitle] = useState("");
   const [quando, setQuando] = useState("");
   const [local, setLocal] = useState("");
@@ -87,30 +124,73 @@ export function SummonsPage() {
         </NewRecordSection>
       }
     >
-      <div className="data-table-wrap">
-        <table className="data-table">
-          <thead>
-            <tr>
-                <th>Título</th>
-                <th>Quando</th>
-                <th>Criado por</th>
-                <th>Convocados</th>
-                <th>Minha presença</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.id}>
-                  <td><strong>{r.title}</strong></td>
-                  <td>{formatDay(r.scheduledFor)}</td>
-                  <td>{r.createdBy.name}</td>
-                  <td>{r._count.attendances}</td>
-                  <td>{r.my_attendance?.status ?? "—"}</td>
+      <>
+        {erro && (
+          <p className="page-error" role="alert">
+            {erro}
+          </p>
+        )}
+        <div className="data-table-wrap">
+          <table className="data-table summons-table">
+            <thead>
+              <tr>
+                  <th>Assunto</th>
+                  <th>Quando e onde</th>
+                  <th className="summons-col-extra">Criado por</th>
+                  <th className="summons-col-extra">Convocados</th>
+                  <th>Minha presença</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id}>
+                    <td>
+                      <strong>{r.title}</strong>
+                      {/* A pauta estava guardada e não aparecia. */}
+                      {r.description && (
+                        <div className="muted">{r.description}</div>
+                      )}
+                    </td>
+                    <td>
+                      {formatDayTime(r.scheduledFor)}
+                      <div className="muted">{r.location ?? "Sem local"}</div>
+                    </td>
+                    <td className="summons-col-extra">{r.createdBy.name}</td>
+                    <td className="summons-col-extra">
+                      {r._count.attendances}
+                    </td>
+                    <td>
+                      {r.my_attendance ? (
+                        <Chip tone={tom(r.my_attendance.status)}>
+                          {SUMMON_ATTENDANCE_LABEL[r.my_attendance.status] ??
+                            r.my_attendance.status}
+                        </Chip>
+                      ) : (
+                        /* Quem não foi convocado não tem presença a dar. */
+                        <span className="muted">Não fui convocado</span>
+                      )}
+                      {/* O botão junto da situação: numa coluna à parte ele
+                          ficava fora da tela do celular. */}
+                      {r.my_attendance?.status === "INVITED" && (
+                        <div className="summons-confirmar">
+                          <Button
+                            type="button"
+                            disabled={confirmando === r.id}
+                            onClick={() => void confirmar(r.id)}
+                          >
+                            {confirmando === r.id
+                              ? "Confirmando…"
+                              : "Confirmar presença"}
+                          </Button>
+                        </div>
+                      )}
+                    </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </>
     </ListShell>
   );
 }
