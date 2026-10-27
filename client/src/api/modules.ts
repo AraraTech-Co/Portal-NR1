@@ -238,6 +238,8 @@ export const reviewMedicalCertificate = (
 export const markMedicalCertificateRead = (id: string) =>
   request(`/api/medical-certificates/${id}/read`, { method: "POST" });
 
+import type { MinhaInscricao } from "@/lib/situacao-do-curso";
+
 export const fetchTrainings = () =>
   request<{
     trainings: Array<{
@@ -254,6 +256,8 @@ export const fetchTrainings = () =>
       technicalResponsibleName: string | null;
       technicalResponsibleQualification: string | null;
       _count?: { enrollments: number };
+      /** A inscrição de quem abre a lista. [B3-3-B] */
+      my_enrollment: MinhaInscricao | null;
     }>;
   }>("/api/trainings").then((d) => d.trainings);
 

@@ -88,3 +88,16 @@
   margin: 0;
   overflow-wrap: anywhere;
 }
+
+/* A situação de quem abre a lista, junto do link. [B3-3-B] */
+.training-minha {
+  min-width: 10rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.6rem;
+}
+
+.training-minha .chip-quebra {
+  white-space: normal;
+}
