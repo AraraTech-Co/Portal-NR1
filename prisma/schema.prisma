@@ -1129,6 +1129,8 @@ enum ParticipationType {
   CONSULTATION
   CIPA_MANIFESTATION
   MEETING
+  /// DDS — Diálogo Diário de Segurança, a conversa curta no início do turno. [B3-4-G]
+  SAFETY_DIALOGUE
   RISK_COMMUNICATION
   BASIC_TRAINING
   WORKSHOP

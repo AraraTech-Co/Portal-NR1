@@ -180,6 +180,14 @@
 }
 
 /*
+  O nível de risco é uma palavra só: no papel, a quebra por qualquer letra
+  da folha o partia em "Substa" e "ncial". [B3-4-H]
+*/
+.so-nivel {
+  white-space: nowrap;
+}
+
+/*
   No papel, a ciência vai junto: a lista como anexo no fim e, se pedido, um
   comprovante por pessoa para assinar. Era escondida de propósito, e o
   fiscal que pedia a prova em PDF ficava sem ela. [B2-4-G] [CB-46]

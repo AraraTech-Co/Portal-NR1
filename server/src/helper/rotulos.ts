@@ -21,6 +21,7 @@ export const PARTICIPATION_TYPE_LABEL: Record<ParticipationType, string> = {
   CONSULTATION: "Consulta aos trabalhadores",
   CIPA_MANIFESTATION: "Manifestação da CIPA",
   MEETING: "Reunião",
+  SAFETY_DIALOGUE: "DDS (Diálogo Diário de Segurança)",
   RISK_COMMUNICATION: "Comunicação de risco",
   BASIC_TRAINING: "Treinamento básico",
   WORKSHOP: "Oficina",
