@@ -599,27 +599,34 @@ async function main() {
 
   const day = new Date();
   day.setUTCHours(0, 0, 0, 0);
-  await prisma.timeEntry.upsert({
+  /*
+    Cada movimento do banco de horas é um lançamento próprio, sem chave única
+    por pessoa e dia [CB-66]: o seed procura o seu e só cria se não achar,
+    para rodar de novo sem duplicar.
+  */
+  const lancamentoMock = await prisma.timeEntry.findFirst({
     where: {
-      organizationId_userId_day: {
-        organizationId: org.id,
-        userId: colabId,
-        day,
-      },
-    },
-    update: { balanceMinutes: 0, in1: "08:00", out1: "12:00", in2: "13:00", out2: "17:00" },
-    create: {
       organizationId: org.id,
       userId: colabId,
       day,
-      in1: "08:00",
-      out1: "12:00",
-      in2: "13:00",
-      out2: "17:00",
-      balanceMinutes: 0,
       note: "Lançamento mock",
     },
   });
+  if (!lancamentoMock) {
+    await prisma.timeEntry.create({
+      data: {
+        organizationId: org.id,
+        userId: colabId,
+        day,
+        in1: "08:00",
+        out1: "12:00",
+        in2: "13:00",
+        out2: "17:00",
+        balanceMinutes: 0,
+        note: "Lançamento mock",
+      },
+    });
+  }
 
   const step = await prisma.onboardingStep.upsert({
     where: { id: "aaaaaaaa-0001-4000-8000-000000000043" },
