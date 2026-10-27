@@ -66,6 +66,15 @@ export function EthicsCommitteeSection() {
         Só quem está nesta lista abre as denúncias e responde a quem denunciou.
         Quem a denúncia envolve sai daquele caso, mesmo sendo do comitê.
       </p>
+      {/*
+        A lista oferecia todo mundo, inclusive quem não tem o módulo do
+        comitê: designada, a pessoa ficava na lista sem abrir denúncia
+        nenhuma — e a frase acima deixava de ser verdade. [CB-62]
+      */}
+      <p className="muted" style={{ maxWidth: "70ch" }}>
+        Só aparecem aqui as pessoas com acesso ao módulo do comitê. Para
+        designar outra, mude antes o papel dela em Pessoas desta conta.
+      </p>
 
       {carregando && <p className="muted">Carregando…</p>}
 
@@ -104,6 +113,13 @@ export function EthicsCommitteeSection() {
                   desde {formatDay(m.addedAt)}
                   {m.addedBy ? ` · por ${m.addedBy.name}` : ""}
                 </span>
+                {/* Designação antiga, de quem depois perdeu o módulo. [CB-62] */}
+                {!m.can_open && (
+                  <>
+                    {" "}
+                    <Chip tone="danger">Não abre as denúncias</Chip>
+                  </>
+                )}
               </span>
               <Button
                 type="button"
@@ -145,7 +161,7 @@ export function EthicsCommitteeSection() {
       </div>
       {disponiveis.length === 0 && !carregando && (
         <p className="muted">
-          <Chip>Todos já estão no comitê</Chip>
+          <Chip>Todas as pessoas com acesso ao comitê já estão nele</Chip>
         </p>
       )}
 

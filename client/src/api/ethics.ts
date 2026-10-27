@@ -21,6 +21,11 @@ export function createEthicsReport(input: {
   establishment_id?: string;
   /** Fora do portal não há sessão: a empresa vem do link. [S4-L] */
   organization_id?: string;
+  /**
+   * "Alguém do comitê de ética está envolvido?" Quando sim, o caso não vai
+   * ao comitê: fica com o dono ou o master até a triagem. [B3-3-H]
+   */
+  committee_involved?: boolean;
 }) {
   return request<{
     report: {
@@ -93,6 +98,9 @@ export type EthicsReportDetail = {
   resolvedAt: string | null;
   createdAt: string;
   establishment: { id: string; name: string } | null;
+  /** O caso que passou pela triagem, e quando voltou ao comitê. [B3-3-H] */
+  committeeInvolved: boolean;
+  triagedAt: string | null;
   messages: EthicsMessage[];
   /** Quem a denúncia envolve — e por isso está fora do caso. [CB-27] */
   cited: Array<{
@@ -127,6 +135,8 @@ export type CommitteeMember = {
   addedAt: string;
   user: { id: string; name: string };
   addedBy: { id: string; name: string } | null;
+  /** Designação antiga pode ter ficado com quem perdeu o módulo. [CB-62] */
+  can_open: boolean;
 };
 
 /** Quem é o comitê de ética desta empresa. [CB-27] */
@@ -154,6 +164,14 @@ export function setEthicsReportCited(
   return request<{ ok: true }>(
     `/api/ethics-reports/${encodeURIComponent(reportId)}/citados`,
     { method: "POST", body: JSON.stringify({ user_id: userId, cited }) },
+  );
+}
+
+/** Devolver ao comitê o caso que dizia envolver alguém dele. [B3-3-H] */
+export function triarDenuncia(reportId: string) {
+  return request<{ ok: true }>(
+    `/api/ethics-reports/${encodeURIComponent(reportId)}/triagem`,
+    { method: "POST" },
   );
 }
 

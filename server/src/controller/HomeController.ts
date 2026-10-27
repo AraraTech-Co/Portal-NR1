@@ -12,6 +12,11 @@ import {
   canDecideJoinRequests,
   canManageInviteLinks,
 } from "../helper/invite-access";
+import {
+  ethicsReportScope,
+  isEthicsCommittee,
+  podeTriarDenuncia,
+} from "../helper/ethics-access";
 import type { AuthRequest } from "../types/auth";
 
 function fail(res: Response, err: unknown) {
@@ -262,11 +267,22 @@ class HomeController {
         }
       }
 
-      if (cuida("comite")) {
+      /*
+        A conta era de todas as denúncias em aberto da empresa, para quem
+        tem o módulo. Quem foi tirado do caso via "2 em aberto" e encontrava
+        uma só na lista: o número revelava a existência de um caso que ela
+        não pode ver. A conta passa a ser a mesma lista. [CB-68] [CB-27]
+        [B3-3-H]
+      */
+      if (
+        (await isEthicsCommittee(orgId, userId, actor.permission)) ||
+        podeTriarDenuncia(actor)
+      ) {
         const abertas = await prisma.ethicsReport.count({
           where: {
             organizationId: orgId,
             status: { in: ["RECEIVED", "IN_ANALYSIS"] },
+            ...(await ethicsReportScope(orgId, actor)),
           },
         });
         if (abertas > 0) {

@@ -74,6 +74,12 @@ export function EthicsPage() {
                   <td>{REPORT_CATEGORY_LABEL[r.category] ?? r.category}</td>
                   <td>
                     <Chip tone={statusTone(r.status)}>{REPORT_STATUS_LABEL[r.status] ?? r.status}</Chip>
+                    {/* Quem tria vê o caso que ainda não foi ao comitê. [B3-3-H] */}
+                    {r.committeeInvolved && !r.triagedAt && (
+                      <Chip tone="danger" className="ethics-unread">
+                        Esperando triagem
+                      </Chip>
+                    )}
                   </td>
                   <td>{r.isAnonymous ? "Anônimo" : "Identificado"}</td>
                   <td>{r.establishment?.name ?? "—"}</td>
