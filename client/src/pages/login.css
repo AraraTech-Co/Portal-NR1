@@ -353,3 +353,15 @@
   font-size: 0.9rem;
   color: var(--muted-foreground);
 }
+
+/* O canal de denúncia na entrada: quem vai denunciar não tem conta. [CB-63] */
+.login-canal {
+  margin: 1.5rem 0 0;
+  max-width: 22rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.login-canal a {
+  font-weight: 600;
+}

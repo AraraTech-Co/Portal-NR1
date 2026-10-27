@@ -26,12 +26,19 @@ type Mode = "new" | "track";
 export function EthicsReportPage({
   organizationId,
   publico = false,
+  semEmpresa = false,
 }: {
   organizationId?: string;
   publico?: boolean;
+  /**
+   * O endereço não trouxe a empresa: dá para acompanhar um relato, que
+   * protocolo e código bastam, mas não dá para enviar um novo — o relato
+   * novo precisa saber de qual empresa é. [CB-63]
+   */
+  semEmpresa?: boolean;
 } = {}) {
   const { user } = useAuth();
-  const [mode, setMode] = useState<Mode>("new");
+  const [mode, setMode] = useState<Mode>(semEmpresa ? "track" : "new");
   const [categories, setCategories] = useState<string[]>([]);
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
@@ -198,37 +205,42 @@ export function EthicsReportPage({
   return (
     <div>
       <PageHeader
-        title="Fazer denúncia"
+        title={semEmpresa ? "Acompanhar denúncia" : "Fazer denúncia"}
         description={
-          publico
-            ? "Canal confidencial e anônimo. O portal não guarda quem enviou."
-            : "Canal confidencial. Por padrão o relato é anônimo."
+          semEmpresa
+            ? "Com o protocolo e o código você acompanha um relato deste portal, sem entrar e sem dizer de qual empresa é."
+            : publico
+              ? "Canal confidencial e anônimo. O portal não guarda quem enviou."
+              : "Canal confidencial. Por padrão o relato é anônimo."
         }
         actions={
-          <div className="form-actions">
-            <Button
-              variant={mode === "new" ? "primary" : "secondary"}
-              onClick={() => {
-                setMode("new");
-                setError(null);
-              }}
-            >
-              Nova denúncia
-            </Button>
-            <Button
-              variant={mode === "track" ? "primary" : "secondary"}
-              onClick={() => {
-                setMode("track");
-                setError(null);
-              }}
-            >
-              Acompanhar
-            </Button>
-          </div>
+          /* Sem a empresa, "Nova denúncia" não teria para onde ir. [CB-63] */
+          semEmpresa ? undefined : (
+            <div className="form-actions">
+              <Button
+                variant={mode === "new" ? "primary" : "secondary"}
+                onClick={() => {
+                  setMode("new");
+                  setError(null);
+                }}
+              >
+                Nova denúncia
+              </Button>
+              <Button
+                variant={mode === "track" ? "primary" : "secondary"}
+                onClick={() => {
+                  setMode("track");
+                  setError(null);
+                }}
+              >
+                Acompanhar
+              </Button>
+            </div>
+          )
         }
       />
 
-      {mode === "new" && result && (
+      {!semEmpresa && mode === "new" && result && (
         <section className="form-section" role="status">
           <h2>Denúncia registrada</h2>
           {result.is_anonymous ? (
@@ -304,7 +316,7 @@ export function EthicsReportPage({
         </section>
       )}
 
-      {mode === "new" && !result && (
+      {!semEmpresa && mode === "new" && !result && (
         <section className="form-section">
           <h2>Novo relato</h2>
           {/* Fora do portal não existe a escolha: prometer que existe
@@ -407,10 +419,27 @@ export function EthicsReportPage({
 
       {mode === "track" && (
         <section className="form-section">
-          <h2>Acompanhar denúncia</h2>
+          {/* Sem empresa a tela inteira é esta, e o título já o diz: dois
+              "Acompanhar denúncia" seguidos só ocupavam espaço. [CB-63] */}
+          {!semEmpresa && <h2>Acompanhar denúncia</h2>}
           <p className="muted">
             Use o protocolo e o código de acesso gerados no envio.
           </p>
+          {/*
+            Aqui o endereço não trouxe a empresa: quem chegou pela tela de
+            entrada consegue acompanhar, mas para um relato novo é preciso o
+            endereço que a empresa divulga — é ele que diz de quem é o canal.
+            [CB-63]
+          */}
+          {semEmpresa && (
+            <p className="form-hint">
+              Para enviar um relato novo, use o endereço do canal que a sua
+              empresa divulgou — no quadro de avisos, no contracheque, na
+              intranet ou no contrato. É esse endereço que diz de qual empresa
+              é o relato. Quem administra o portal da empresa encontra o
+              endereço em Conta e usuários.
+            </p>
+          )}
           <form className="form-grid cols-2" onSubmit={onTrack}>
             <label className="form-field">
               Protocolo
