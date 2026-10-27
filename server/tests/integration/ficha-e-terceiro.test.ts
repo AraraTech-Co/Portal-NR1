@@ -61,6 +61,27 @@ beforeAll(async () => {
   colaborador = (await entrar("teste.colaborador")).body;
 });
 
+/*
+  CPF válido próprio desta rodada. O 529.982.247-25 é o CPF que o seed dá ao
+  teste.colaborador: com o seed recém-rodado, a ficha recusava como
+  duplicado. [OB-11]
+*/
+const CPF_DO_TESTE = (() => {
+  const base = (Date.now() % 1_000_000_000).toString().padStart(9, "1").split("").map(Number);
+  const digito = (n: number[]) => {
+    const soma = n.reduce((t, d, i) => t + d * (n.length + 1 - i), 0);
+    const r = (soma * 10) % 11;
+    return r === 10 ? 0 : r;
+  };
+  const d1 = digito(base);
+  const d2 = digito([...base, d1]);
+  const digitos = [...base, d1, d2].join("");
+  return {
+    digitos,
+    formatado: `${digitos.slice(0, 3)}.${digitos.slice(3, 6)}.${digitos.slice(6, 9)}-${digitos.slice(9)}`,
+  };
+})();
+
 afterAll(async () => {
   await prisma.user.deleteMany({ where: { id: { in: criados } } });
   await prisma.contractor.deleteMany({ where: { id: { in: contratadas } } });
@@ -81,7 +102,7 @@ describe("a ficha deixa de ser só leitura [S1-A] [CB-1] [CB-3]", () => {
       .set(as(rh.token))
       .send({
         registration: `FIC-${SUFIXO}`.slice(0, 20),
-        tax_id: "529.982.247-25",
+        tax_id: CPF_DO_TESTE.formatado,
         phone: "19999998888",
         job_role_id: JOB_ID,
         admitted_at: "2025-08-04",
@@ -93,7 +114,7 @@ describe("a ficha deixa de ser só leitura [S1-A] [CB-1] [CB-3]", () => {
       .set(as(rh.token));
     expect(depois.body.profile.registration).toBe(`FIC-${SUFIXO}`.slice(0, 20));
     // O CPF é guardado só com os dígitos.
-    expect(depois.body.profile.taxId).toBe("52998224725");
+    expect(depois.body.profile.taxId).toBe(CPF_DO_TESTE.digitos);
     expect(depois.body.profile.phone).toBe("19999998888");
     expect(depois.body.profile.jobRole.id).toBe(JOB_ID);
     expect(String(depois.body.profile.admittedAt).slice(0, 10)).toBe("2025-08-04");
