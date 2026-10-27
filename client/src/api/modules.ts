@@ -410,6 +410,8 @@ export const fetchSummons = () =>
          chamado não sabia nem a hora nem o lugar. [CB-64] */
       location: string | null;
       description: string | null;
+      /** Convocação de turma presencial: leva ao treinamento. [B3-3-C] */
+      trainingSession: { trainingId: string } | null;
     }>;
   }>("/api/summons").then((d) => d.summons);
 

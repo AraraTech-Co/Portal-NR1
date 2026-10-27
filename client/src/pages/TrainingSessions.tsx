@@ -8,7 +8,7 @@ import {
 import { fetchOrgMembers, type OrgMember } from "@/api/org-members";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
-import { formatDay } from "@/lib/labels";
+import { formatDayTime, jaChegou } from "@/lib/labels";
 import "@/components/form.css";
 import "./training-page.css";
 
@@ -170,6 +170,8 @@ function RecordForm({
   */
   const [modo, setModo] = useState<"registrar" | "agendar">("registrar");
   const [data, setData] = useState(hojeIso());
+  /* A turma tinha só o dia: o convocado não sabia a hora da aula. [B3-3-C] */
+  const [hora, setHora] = useState("");
   const [instrutor, setInstrutor] = useState("");
   const [registro, setRegistro] = useState("");
   const [local, setLocal] = useState("");
@@ -221,7 +223,9 @@ function RecordForm({
     setSalvando(true);
     try {
       await recordTrainingSession(trainingId, {
-        held_at: data,
+        /* Com hora, é o instante no relógio de quem marca; sem, só o dia. */
+        held_at:
+          agendando && hora ? new Date(`${data}T${hora}`).toISOString() : data,
         instructor_name: instrutor.trim(),
         instructor_registration: registro.trim() || undefined,
         location: local.trim() || undefined,
@@ -237,6 +241,7 @@ function RecordForm({
             }),
       });
       setAberto(false);
+      setHora("");
       setInstrutor("");
       setRegistro("");
       setLocal("");
@@ -299,6 +304,17 @@ function RecordForm({
               : "Só data que já passou: a presença é do que aconteceu."}
           </span>
         </label>
+        {agendando && (
+          <label className="form-field">
+            Horário (opcional)
+            <input
+              type="time"
+              value={hora}
+              onChange={(e) => setHora(e.target.value)}
+            />
+            <span className="form-hint">Aparece para quem for convocado.</span>
+          </label>
+        )}
         <label className="form-field">
           Carga horária (minutos)
           <input
@@ -458,7 +474,7 @@ export function TrainingSessions({
               {/* Turma marcada e turma dada não são a mesma coisa: sem
                   lista de presença, ela ainda vai acontecer. [CB-34] */}
               <div className="tr-session-head">
-                <strong>{formatDay(s.held_at)}</strong>
+                <strong>{formatDayTime(s.held_at)}</strong>
                 {s.present + s.absent === 0 ? (
                   <Chip tone="info">Marcada</Chip>
                 ) : (
@@ -493,7 +509,7 @@ export function TrainingSessions({
                   certificado nasce. [CB-34] */}
               {canRecord &&
                 s.present + s.absent === 0 &&
-                s.held_at.slice(0, 10) <= hojeIso() && (
+                jaChegou(s.held_at) && (
                   <AttendanceForm
                     trainingId={trainingId}
                     sessionId={s.id}

@@ -1932,8 +1932,13 @@ model Summon {
   organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdBy    User               @relation("SummonAuthor", fields: [createdById], references: [id])
   attendances  SummonAttendance[]
+  /// A turma presencial para a qual esta convocação chama. Sem a ligação, o
+  /// convocado abria o treinamento e não via a turma. [B3-3-C]
+  trainingSessionId String?
+  trainingSession   TrainingSession? @relation(fields: [trainingSessionId], references: [id], onDelete: SetNull)
 
   @@index([organizationId, scheduledFor])
+  @@index([trainingSessionId])
 }
 
 model SummonAttendance {
@@ -2063,6 +2068,7 @@ model TrainingSession {
   training     Training     @relation(fields: [trainingId], references: [id], onDelete: Cascade)
   recordedBy   User         @relation("SessionRecorder", fields: [recordedById], references: [id])
   attendances  TrainingAttendance[]
+  summons      Summon[]
 
   @@index([organizationId, heldAt])
   @@index([trainingId])
