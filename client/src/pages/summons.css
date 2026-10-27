@@ -1,0 +1,15 @@
+/*
+  No celular, o botão de confirmar presença ficava fora da tela: a tabela
+  rolava de lado sem nada dizer isso, e é pelo celular que chega o aviso da
+  convocação. Em tela estreita, quem criou e quantos foram convocados saem
+  da linha; o botão fica junto da situação. [CB-64]
+*/
+@media (max-width: 640px) {
+  .summons-table .summons-col-extra {
+    display: none;
+  }
+}
+
+.summons-confirmar {
+  margin-top: 0.5rem;
+}

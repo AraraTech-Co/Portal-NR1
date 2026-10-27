@@ -209,6 +209,21 @@ export const SURVEY_STATUS_LABEL: Record<string, string> = {
   CLOSED: "Encerrada",
 };
 
+/**
+ * Em que pé está a presença de quem foi convocado.
+ *
+ * A coluna "Minha presença" mostrava o código do banco ("INVITED") a quem
+ * tinha sido chamado para a reunião. [CB-64]
+ */
+export const SUMMON_ATTENDANCE_LABEL: Record<string, string> = {
+  INVITED: "Convocado",
+  /* Curto: a coluna já se chama "Minha presença", e no celular o rótulo
+     longo empurrava a tabela para fora da tela. */
+  CONFIRMED: "Confirmada",
+  ATTENDED: "Presente",
+  ABSENT: "Faltou",
+};
+
 /** Tipo do registro de participação. Saía "MEETING" na tela. [B2-1-C] */
 export const PARTICIPATION_TYPE_LABEL: Record<string, string> = {
   CONSULTATION: "Consulta aos trabalhadores",
@@ -254,6 +269,29 @@ export function formatDay(value: string | Date | null | undefined): string {
   const dd = String(c.day).padStart(2, "0");
   const mm = String(c.month + 1).padStart(2, "0");
   return `${dd}/${mm}/${c.year}`;
+}
+
+/**
+ * Dia e hora, para o que é marcado numa hora — a reunião, a turma.
+ *
+ * A convocação é marcada em hora cheia e a tela mostrava só o dia: quem foi
+ * chamado não sabia a que horas comparecer. Data sem hora (gravada como
+ * meia-noite UTC) continua saindo só com o dia — pôr "às 00:00" nela seria
+ * inventar uma hora que ninguém marcou. [CB-64]
+ */
+export function formatDayTime(value: string | Date | null | undefined): string {
+  if (!value) return "—";
+  const d = typeof value === "string" ? new Date(value) : value;
+  if (Number.isNaN(d.getTime())) return "—";
+  const semHora =
+    d.getUTCHours() === 0 &&
+    d.getUTCMinutes() === 0 &&
+    d.getUTCSeconds() === 0 &&
+    d.getUTCMilliseconds() === 0;
+  if (semHora) return formatDay(d);
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${formatDay(d)} às ${hh}:${mm}`;
 }
 
 export function isOverdue(
