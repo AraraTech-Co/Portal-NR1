@@ -156,7 +156,8 @@ function RiskList({
                     aria-expanded={avaliando === r.id}
                     onClick={() => setAvaliando(avaliando === r.id ? null : r.id)}
                   >
-                    {avaliando === r.id ? "Fechar" : level ? "Reavaliar" : "Avaliar"}
+                    {/* O botão abre a avaliação e as medidas; reavaliar é lá dentro. [B3-2-E] */}
+                    {avaliando === r.id ? "Fechar" : level ? "Avaliação e medidas" : "Avaliar"}
                   </Button>
                   {canEdit && (
                     <>
