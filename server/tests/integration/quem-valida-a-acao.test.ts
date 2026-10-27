@@ -45,6 +45,7 @@ async function acaoEsperandoValidacao(assignee: { token: string; user: { id: str
     .post("/api/actions")
     .set(as(sst.token))
     .send({
+      effectiveness_criteria: "Critério do teste",
       title: `${titulo} ${SUFIXO}`,
       assignee_id: assignee.user.id,
       due_date: PRAZO,

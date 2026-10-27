@@ -213,6 +213,133 @@ class ActionEvidenceController {
   }
 
   /** BR-6: concluir exige ≥1 evidência → WAITING_VALIDATION */
+  /**
+   * O critério de eficácia depois de aberta a ação.
+   *
+   * Não havia tela para mexer na ação depois de aberta: a ação sem critério
+   * era validada assim e ficava para sempre como pendência no Painel. Até a
+   * validação, quem cuida do plano completa ou corrige o critério. Depois,
+   * só a ação validada SEM critério o recebe, uma vez, e fica gravado quem
+   * registrou e quando — a validação não é reescrita. [B3-4-A]
+   */
+  async updateCriteria(req: Request, res: Response) {
+    try {
+      const auth = req as AuthRequest;
+      const orgId = actorOrgId(auth);
+      const userId = actorUserId(auth);
+      const criterio = String(
+        (req.body as { effectiveness_criteria?: unknown }).effectiveness_criteria ?? "",
+      ).trim();
+      if (!criterio) {
+        res.status(400).json({
+          message: "Informe o critério de eficácia: como saber se a ação deu certo.",
+          code: "CRITERIA_REQUIRED",
+        });
+        return;
+      }
+
+      const action = await prisma.action.findFirst({
+        where: { id: req.params.id, organizationId: orgId },
+        select: { id: true, status: true, effectivenessCriteria: true },
+      });
+      if (!action) {
+        res.status(404).json({ message: "Ação não encontrada." });
+        return;
+      }
+      if (action.status === ActionStatus.CANCELLED) {
+        res.status(409).json({
+          message: "Ação cancelada não recebe critério.",
+          code: "ACTION_CANCELLED",
+        });
+        return;
+      }
+
+      const validada =
+        action.status === ActionStatus.VALIDATED ||
+        action.status === ActionStatus.CLOSED;
+      if (validada) {
+        /* Registrar depois completa a validação: é de quem valida. */
+        if (!canValidateAction(auth.actor?.permission ?? "")) {
+          res.status(403).json({
+            message:
+              "Registrar o critério de uma ação já validada é do técnico de SST, do dono da conta ou do master da empresa.",
+            code: "NOT_A_VALIDATOR",
+          });
+          return;
+        }
+        if (action.effectivenessCriteria) {
+          res.status(409).json({
+            message: "A ação já foi validada com este critério; ele não muda mais.",
+            code: "CRITERIA_LOCKED",
+          });
+          return;
+        }
+      }
+
+      /*
+        A condição vai no próprio UPDATE: entre a leitura e a escrita, a ação
+        pode ter sido validada (ou o critério, registrado) por outra pessoa.
+      */
+      const agora = new Date();
+      const mudou = await prisma.action.updateMany({
+        where: validada
+          ? {
+              id: action.id,
+              organizationId: orgId,
+              status: { in: [ActionStatus.VALIDATED, ActionStatus.CLOSED] },
+              effectivenessCriteria: null,
+            }
+          : {
+              id: action.id,
+              organizationId: orgId,
+              status: {
+                in: [
+                  ActionStatus.OPEN,
+                  ActionStatus.IN_PROGRESS,
+                  ActionStatus.WAITING_VALIDATION,
+                ],
+              },
+            },
+        data: validada
+          ? {
+              effectivenessCriteria: criterio,
+              effectivenessCriteriaLateById: userId,
+              effectivenessCriteriaLateAt: agora,
+            }
+          : { effectivenessCriteria: criterio },
+      });
+      if (mudou.count === 0) {
+        res.status(409).json({
+          message: "A ação mudou enquanto você escrevia. Recarregue e tente de novo.",
+          code: "ACTION_CHANGED",
+        });
+        return;
+      }
+
+      await writeAudit({
+        organizationId: orgId,
+        actorId: userId,
+        action: "action.criteria",
+        entityType: "Action",
+        entityId: action.id,
+        before: { effectivenessCriteria: action.effectivenessCriteria },
+        after: { effectivenessCriteria: criterio, afterValidation: validada },
+      });
+
+      const atualizada = await prisma.action.findFirstOrThrow({
+        where: { id: action.id, organizationId: orgId },
+        include: {
+          assignee: { select: { id: true, name: true } },
+          validatedBy: { select: { id: true, name: true } },
+          effectivenessCriteriaLateBy: { select: { id: true, name: true } },
+        },
+      });
+      res.json({ action: atualizada });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
   async completeAction(req: Request, res: Response) {
     try {
       const orgId = actorOrgId(req as AuthRequest);

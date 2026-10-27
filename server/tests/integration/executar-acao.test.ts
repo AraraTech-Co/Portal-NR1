@@ -37,7 +37,7 @@ async function novaAcao(assigneeId: string, title: string) {
   const res = await request(app)
     .post("/api/actions")
     .set(as(sst.token))
-    .send({ title: `${title} ${SUFIXO}`, assignee_id: assigneeId, due_date: PRAZO, priority: "HIGH" });
+    .send({ effectiveness_criteria: "Critério do teste", title: `${title} ${SUFIXO}`, assignee_id: assigneeId, due_date: PRAZO, priority: "HIGH" });
   expect(res.status).toBe(201);
   return res.body.action.id as string;
 }

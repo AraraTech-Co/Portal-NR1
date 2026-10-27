@@ -22,7 +22,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
 import { PageHeader } from "@/components/PageHeader";
 import { PeoplePicker } from "@/components/PeoplePicker";
-import { formatDay } from "@/lib/labels";
+import { CRITERIO_HINT, CRITERIO_LABEL, formatDay } from "@/lib/labels";
 import { useModuleAccess } from "@/lib/module-access";
 import "@/components/data-table.css";
 import "@/components/form.css";
@@ -85,6 +85,8 @@ export function EmergenciesPage() {
   >(null);
   const [responsavel, setResponsavel] = useState("");
   const [prazoDaAcao, setPrazoDaAcao] = useState("");
+  /* Sem critério de eficácia, a ação não abre. [B3-4-A] */
+  const [criterioDaAcao, setCriterioDaAcao] = useState("");
   const [abrindoAcao, setAbrindoAcao] = useState(false);
   const [erroDaAcao, setErroDaAcao] = useState<string | null>(null);
   const [acaoFeita, setAcaoFeita] = useState<string | null>(null);
@@ -205,7 +207,7 @@ export function EmergenciesPage() {
   /* O achado do simulado vira ação do plano, com responsável e prazo. */
   async function abrirAcaoDoAchado(e: FormEvent) {
     e.preventDefault();
-    if (!acaoDoAchado || !responsavel || !prazoDaAcao) return;
+    if (!acaoDoAchado || !responsavel || !prazoDaAcao || !criterioDaAcao.trim()) return;
     setAbrindoAcao(true);
     setErroDaAcao(null);
     try {
@@ -215,10 +217,12 @@ export function EmergenciesPage() {
         assignee_id: responsavel,
         due_date: prazoDaAcao,
         priority: "HIGH",
+        effectiveness_criteria: criterioDaAcao.trim(),
       });
       setAcaoDoAchado(null);
       setResponsavel("");
       setPrazoDaAcao("");
+      setCriterioDaAcao("");
       setAcaoFeita(`Ação aberta no plano: "${action.title}".`);
     } catch (err) {
       setErroDaAcao(err instanceof Error ? err.message : "Falha ao abrir a ação");
@@ -564,7 +568,7 @@ export function EmergenciesPage() {
         </div>
       )}
 
-      {/* O achado vira ação do plano: responsável e prazo são obrigatórios. */}
+      {/* O achado vira ação do plano: responsável, prazo e critério são obrigatórios. */}
       {acaoDoAchado && (
         <Dialog
           title="Abrir ação para o achado do simulado"
@@ -592,6 +596,17 @@ export function EmergenciesPage() {
                 required
               />
             </label>
+            <label className="form-field">
+              {CRITERIO_LABEL}
+              <input
+                value={criterioDaAcao}
+                onChange={(e) => setCriterioDaAcao(e.target.value)}
+                placeholder="Ex.: a porta lateral abre no próximo simulado"
+                disabled={abrindoAcao}
+                required
+              />
+              <span className="form-hint">{CRITERIO_HINT}</span>
+            </label>
             {erroDaAcao && (
               <p className="form-error" role="alert">
                 {erroDaAcao}
@@ -600,7 +615,9 @@ export function EmergenciesPage() {
             <div className="form-actions">
               <Button
                 type="submit"
-                disabled={abrindoAcao || !responsavel || !prazoDaAcao}
+                disabled={
+                  abrindoAcao || !responsavel || !prazoDaAcao || !criterioDaAcao.trim()
+                }
               >
                 {abrindoAcao ? "Abrindo…" : "Abrir ação"}
               </Button>

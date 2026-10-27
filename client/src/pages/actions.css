@@ -179,3 +179,26 @@ button.evidence-thumb:focus-visible {
   gap: 0.5rem;
   max-width: 34rem;
 }
+
+/*
+  O critério de eficácia à vista de todos, com o caminho para completá-lo.
+  Registrado depois da validação, diz quem e quando. [B3-4-A]
+*/
+.action-criterio {
+  display: grid;
+  gap: 0.5rem;
+  justify-items: start;
+}
+
+.action-criterio-tarde {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.85em;
+}
+
+.action-criterio-form {
+  display: grid;
+  gap: 0.6rem;
+  width: 100%;
+  max-width: 70ch;
+}

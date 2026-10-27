@@ -65,6 +65,7 @@ beforeAll(async () => {
     .post("/api/actions")
     .set(as(sst.token))
     .send({
+      effectiveness_criteria: "Critério do teste",
       title: `Proteção planejada antes ${SUFIXO}`,
       risk_id: risco,
       assignee_id: supervisor.user.id,
@@ -114,6 +115,7 @@ describe("ações vinculadas deixam de ficar vazias [B3-4-C]", () => {
       .post(`/api/occurrences/${ocorrencia}/actions`)
       .set(as(sst.token))
       .send({
+        effectiveness_criteria: "Critério do teste",
         title: `Trocar a placa ${SUFIXO}`,
         assignee_id: supervisor.user.id,
         due_date: PRAZO,
@@ -135,14 +137,14 @@ describe("ações vinculadas deixam de ficar vazias [B3-4-C]", () => {
     const semResponsavel = await request(app)
       .post(`/api/occurrences/${ocorrencia}/actions`)
       .set(as(sst.token))
-      .send({ title: `Sem responsável ${SUFIXO}`, due_date: PRAZO });
+      .send({ effectiveness_criteria: "Critério do teste", title: `Sem responsável ${SUFIXO}`, due_date: PRAZO });
     expect(semResponsavel.status, JSON.stringify(semResponsavel.body)).toBe(400);
     expect(semResponsavel.body.message).toMatch(/respons/i);
 
     const semPrazo = await request(app)
       .post(`/api/occurrences/${ocorrencia}/actions`)
       .set(as(sst.token))
-      .send({ title: `Sem prazo ${SUFIXO}`, assignee_id: supervisor.user.id });
+      .send({ effectiveness_criteria: "Critério do teste", title: `Sem prazo ${SUFIXO}`, assignee_id: supervisor.user.id });
     expect(semPrazo.status, JSON.stringify(semPrazo.body)).toBe(400);
     expect(semPrazo.body.message).toMatch(/prazo/i);
   });

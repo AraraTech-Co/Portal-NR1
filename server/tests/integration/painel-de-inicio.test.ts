@@ -104,6 +104,7 @@ describe("o que está na minha mesa [S5-A]", () => {
       .post("/api/actions")
       .set(as(sst.token))
       .send({
+        effectiveness_criteria: "Critério do teste",
         title: `Trocar o piso ${SUFIXO}`,
         assignee_id: supervisor.user.id,
         // Data fixa que virou passado; o prazo agora é recusado. [CB-21]

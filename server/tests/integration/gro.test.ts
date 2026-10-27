@@ -132,6 +132,7 @@ describe("GRO API", () => {
       .post("/api/actions")
       .set("Authorization", `Bearer ${ownerToken}`)
       .send({
+        effectiveness_criteria: "Critério do teste",
         title: "Disponibilizar EPIs",
         risk_id: RISK_ID,
         control_id: control.body.control.id,

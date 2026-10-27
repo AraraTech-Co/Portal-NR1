@@ -14,6 +14,9 @@ export type ActionRow = {
   assigneeId: string | null;
   dueDate: string | null;
   effectivenessCriteria: string | null;
+  /** Critério registrado depois da validação: quem e quando. [B3-4-A] */
+  effectivenessCriteriaLateAt?: string | null;
+  effectivenessCriteriaLateBy?: { id: string; name: string } | null;
   createdById: string;
   completedAt: string | null;
   effectivenessResult?: string | null;
@@ -105,11 +108,24 @@ export async function createActionFromFinding(input: {
   assignee_id: string;
   due_date: string;
   priority: string;
+  /** Obrigatório: a ação não abre sem ele. [B3-4-A] */
+  effectiveness_criteria: string;
 }) {
   return request<{ action: { id: string; title: string } }>("/api/actions", {
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+/**
+ * Completar o critério de eficácia: até a validação, edita; depois, só se a
+ * ação foi validada sem ele, e fica registrado quem e quando. [B3-4-A]
+ */
+export function updateActionCriteria(id: string, criterio: string) {
+  return request<{ action: ActionRow }>(
+    `/api/actions/${encodeURIComponent(id)}/criterio`,
+    { method: "PATCH", body: JSON.stringify({ effectiveness_criteria: criterio }) },
+  );
 }
 
 export async function completeAction(id: string) {

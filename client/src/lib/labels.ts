@@ -296,6 +296,31 @@ export function formatDayTime(value: string | Date | null | undefined): string {
   return `${formatDay(d)} às ${hh}:${mm}`;
 }
 
+/**
+ * O critério de eficácia tem um nome só em todas as telas. Era "Como saber
+ * se deu certo" no formulário e "Critério de eficácia" na validação e no
+ * Painel: com dois nomes, ninguém o preencheu. [B3-4-A]
+ */
+export const CRITERIO_LABEL = "Critério de eficácia";
+export const CRITERIO_HINT =
+  "Como saber se a ação deu certo. Ex.: zero registros de projeção fora da máquina em 60 dias.";
+
+/**
+ * Quem pode mexer no critério, e quando — a mesma regra do servidor. Até a
+ * validação, quem cuida do plano; depois, só na ação validada SEM critério,
+ * e só quem valida. Cancelada, ninguém. [B3-4-A]
+ */
+export function podeEditarCriterio(
+  status: string,
+  temCriterio: boolean,
+  cuidaDoPlano: boolean,
+  valida: boolean,
+): boolean {
+  if (status === "CANCELLED") return false;
+  if (status === "VALIDATED" || status === "CLOSED") return valida && !temCriterio;
+  return cuidaDoPlano;
+}
+
 /** A cor da situação da convocação: a mesma em Convocações e no treinamento. */
 export function summonAttendanceTone(
   status: string,

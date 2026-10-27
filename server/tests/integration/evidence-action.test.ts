@@ -53,6 +53,7 @@ describe("Evidence + Action workflow", () => {
       .post("/api/actions")
       .set("Authorization", `Bearer ${ownerToken}`)
       .send({
+        effectiveness_criteria: "Critério do teste",
         title: "Instalar protetor",
         risk_id: RISK_ID,
         priority: "HIGH",
@@ -113,6 +114,7 @@ describe("Evidence + Action workflow", () => {
       .post("/api/actions")
       .set("Authorization", `Bearer ${ownerToken}`)
       .send({
+        effectiveness_criteria: "Critério do teste",
         title: "Validar protetor",
         risk_id: RISK_ID,
         control_id: control.body.control.id,
@@ -164,7 +166,7 @@ describe("Evidence + Action workflow", () => {
     const action = await request(app)
       .post("/api/actions")
       .set("Authorization", `Bearer ${ownerToken}`)
-      .send({ title: "Rejeitar depois", risk_id: RISK_ID, assignee_id: ownerId, due_date: PRAZO });
+      .send({ effectiveness_criteria: "Critério do teste", title: "Rejeitar depois", risk_id: RISK_ID, assignee_id: ownerId, due_date: PRAZO });
     const id = action.body.action.id as string;
     await request(app)
       .post("/api/evidences")

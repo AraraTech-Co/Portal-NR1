@@ -14,7 +14,7 @@ import {
 } from "@/lib/labels";
 import "@/components/data-table.css";
 import { LoadingState } from "@/components/LoadingState";
-import { canValidateAction } from "@/lib/module-access";
+import { canValidateAction, useModuleAccess } from "@/lib/module-access";
 import { ActionEvidencePanel } from "./ActionEvidencePanel";
 import "./actions.css";
 
@@ -73,6 +73,8 @@ export function ActionsPage() {
     [OB-6]
   */
   const canReview = canValidateAction(user?.permission);
+  /* Quem cuida do plano completa o critério até a validação. [B3-4-A] */
+  const { canWrite: canEditCriteria } = useModuleAccess("acoes");
 
   useEffect(() => {
     fetchEstablishments()
@@ -327,6 +329,7 @@ export function ActionsPage() {
                           action={a}
                           userId={user?.id}
                           canReview={canReview}
+                          canEditCriteria={canEditCriteria}
                           onReviewed={(updated) =>
                             setActions((prev) =>
                               prev.map((x) => (x.id === updated.id ? { ...x, ...updated } : x)),

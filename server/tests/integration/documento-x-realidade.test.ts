@@ -218,6 +218,7 @@ describe("quem validou a ação aparece [B2-4-D]", () => {
       .post("/api/actions")
       .set(as(sst.token))
       .send({
+        effectiveness_criteria: "Critério do teste",
         title: `Instalar proteção ${SUFIXO}`,
         assignee_id: supervisor.user.id,
         due_date: "2027-06-30",

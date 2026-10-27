@@ -97,7 +97,11 @@ async function riscoNoNivel(nivel: string, nome: string) {
 }
 
 const abrirAcao = (body: Record<string, unknown>) =>
-  request(app).post("/api/actions").set(as(sst.token)).send(body);
+  request(app)
+    .post("/api/actions")
+    .set(as(sst.token))
+    /* O critério é exigido desde o B3-4-A; aqui o assunto é o prazo. */
+    .send({ effectiveness_criteria: "Critério do teste", ...body });
 
 beforeAll(async () => {
   app = createApp();

@@ -251,6 +251,7 @@ describe("o achado do simulado vira ação do plano [B3-4-B]", () => {
       .post("/api/actions")
       .set(as(sst))
       .send({
+        effectiveness_criteria: "Critério do teste",
         title: `Trocar a fechadura da porta lateral ${SUFIXO}`,
         description: `Achado do simulado de emergência: Porta lateral estava travada ${SUFIXO}`,
         assignee_id: pessoa.userId,

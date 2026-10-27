@@ -44,6 +44,7 @@ describe("a ação avisa quem vai executar [S3-A]", () => {
       .post("/api/actions")
       .set(as(sst.token))
       .send({
+        effectiveness_criteria: "Critério do teste",
         title: titulo,
         assignee_id: supervisor.user.id,
         due_date: "2026-12-20",
