@@ -1100,10 +1100,27 @@ class EthicsController {
         })
       : null;
 
+    /*
+      Sem empresa no endereço, a entrada do canal tem uma pergunta a fazer:
+      há escolha de empresa? Quando a instalação atende uma só, ela leva
+      direto ao formulário; quando atende mais de uma, não há como adivinhar
+      de quem é quem está olhando, e a tela pede o endereço que a empresa
+      divulgou. Duas bastam para responder "mais de uma" — e nesse caso
+      nenhum nome sai daqui, que esta rota responde sem sessão. [CB-63]
+    */
+    const ativas = orgId
+      ? []
+      : await prisma.organization.findMany({
+          where: { active: true },
+          select: { id: true, name: true },
+          take: 2,
+        });
+
     res.json({
       categories: REPORT_CATEGORY_VALUES.map((id) => ({ id })),
       statuses: REPORT_STATUS_VALUES.map((id) => ({ id })),
       organization,
+      single_organization: ativas.length === 1 ? ativas[0] : null,
     });
   }
 }

@@ -47,6 +47,7 @@ import { SummonsPage } from "@/pages/SummonsPage";
 import { TimeEntriesPage } from "@/pages/TimeEntriesPage";
 import { TrainingPage } from "@/pages/TrainingPage";
 import { CertificatePage } from "@/pages/CertificatePage";
+import { PublicEthicsHomePage } from "@/pages/PublicEthicsHomePage";
 import { PublicEthicsPage } from "@/pages/PublicEthicsPage";
 import { TrainingsPage } from "@/pages/TrainingsPage";
 import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
@@ -100,6 +101,9 @@ function AppRoutes() {
         path={`${CANAL_BASE}/:organizationId`}
         element={<PublicEthicsPage />}
       />
+      {/* Sem a empresa no endereço: é para onde a tela de entrada aponta,
+          porque ela não sabe de qual empresa é quem está olhando. [CB-63] */}
+      <Route path={CANAL_BASE} element={<PublicEthicsHomePage />} />
       <Route element={<RequireAuth />}>
         <Route path="/trocar-senha" element={<ChangePasswordPage />} />
         <Route element={<RequirePasswordOk />}>

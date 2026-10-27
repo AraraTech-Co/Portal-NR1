@@ -1,7 +1,8 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
 import { Button } from "@/components/Button";
+import { CANAL_BASE } from "@/lib/canal";
 import "./login.css";
 
 const MIN_SPEED = 18;
@@ -221,6 +222,19 @@ export function LoginPage() {
             {loading ? "Entrando…" : "Entrar"}
           </Button>
         </form>
+        {/*
+          Quem vai denunciar é muitas vezes quem não tem conta aqui —
+          terceiro, candidato, quem já saiu — e a entrada não dizia que o
+          canal existe. O endereço não leva a empresa: é a tela de lá que
+          resolve, porque esta não sabe de quem é quem está olhando. [CB-63]
+        */}
+        <p className="login-canal">
+          <Link to={CANAL_BASE}>Canal de denúncia</Link>
+          <span className="muted">
+            {" "}
+            — enviar ou acompanhar um relato sem entrar.
+          </span>
+        </p>
       </div>
       <div className="login-aside login-aside-scene" aria-hidden ref={asideRef}>
         <svg className="login-aside-filters" aria-hidden>

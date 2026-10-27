@@ -11,6 +11,12 @@ export function fetchEthicsMeta(organizationId?: string) {
     categories: EthicsCategory[];
     statuses: EthicsCategory[];
     organization: { id: string; name: string } | null;
+    /**
+     * A empresa quando esta instalação atende uma só — e nulo quando atende
+     * mais de uma, caso em que nenhum nome vem. É o que a entrada do canal
+     * precisa para saber se há escolha a fazer. [CB-63]
+     */
+    single_organization: { id: string; name: string } | null;
   }>(`/api/ethics-reports/meta${qs}`);
 }
 
