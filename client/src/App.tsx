@@ -2,6 +2,7 @@ import { LoadingState } from "@/components/LoadingState";
 import { AuthProvider, useAuth } from "@/auth/AuthContext";
 import { AppShell } from "@/layout/AppShell";
 import { NAV_GROUPS } from "@/layout/nav";
+import { CANAL_BASE } from "@/lib/canal";
 import { canReadModule } from "@/lib/module-access";
 import { AccountPage } from "@/pages/AccountPage";
 import { ActionsPage } from "@/pages/ActionsPage";
@@ -95,7 +96,10 @@ function AppRoutes() {
       <Route path="/convite/:token" element={<ConvitePage />} />
       {/* O canal de denúncia fora do portal, sem login: é o que torna o
           anonimato verificável por quem denuncia. [S4-L] */}
-      <Route path="/canal/:organizationId" element={<PublicEthicsPage />} />
+      <Route
+        path={`${CANAL_BASE}/:organizationId`}
+        element={<PublicEthicsPage />}
+      />
       <Route element={<RequireAuth />}>
         <Route path="/trocar-senha" element={<ChangePasswordPage />} />
         <Route element={<RequirePasswordOk />}>
