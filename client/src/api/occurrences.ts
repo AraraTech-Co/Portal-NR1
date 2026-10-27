@@ -108,6 +108,8 @@ export async function addOccurrenceAction(
     assignee_id: string;
     due_date: string;
     priority?: string;
+    /** Obrigatório: a ação não abre sem ele. [B3-4-A] */
+    effectiveness_criteria: string;
   },
 ) {
   return request<{ action: { id: string; title: string } }>(

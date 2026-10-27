@@ -173,6 +173,7 @@ describe("o plano de ação separa unidades [S6-D] [CB-24]", () => {
       .post("/api/actions")
       .set(as(sst.token))
       .send({
+        effectiveness_criteria: "Critério do teste",
         title: `Instalar proteção ${SUFIXO}`,
         risk_id: a.riskId,
         assignee_id: supervisor.user.id,
@@ -198,6 +199,7 @@ describe("o plano de ação separa unidades [S6-D] [CB-24]", () => {
       .post("/api/actions")
       .set(as(sst.token))
       .send({
+        effectiveness_criteria: "Critério do teste",
         title: `Só desta unidade ${SUFIXO}`,
         risk_id: a.riskId,
         assignee_id: supervisor.user.id,
@@ -208,6 +210,7 @@ describe("o plano de ação separa unidades [S6-D] [CB-24]", () => {
       .post("/api/actions")
       .set(as(sst.token))
       .send({
+        effectiveness_criteria: "Critério do teste",
         title: `Sem risco ${SUFIXO}`,
         assignee_id: supervisor.user.id,
         due_date: "2027-03-01",

@@ -15,6 +15,7 @@ import {
   ACTION_STATUS_LABEL,
   CONTROL_STATUS_LABEL,
   CONTROL_TYPE_LABEL,
+  CRITERIO_LABEL,
   formatDay,
   HAZARD_CATEGORY_LABEL,
   RISK_LEVEL_LABEL,
@@ -186,7 +187,8 @@ function ActionPlan({ content }: { content: ActionPlanContent }) {
             <td>
               {a.effectiveness_criteria ? (
                 <>
-                  <span className="doc-sub-label">Critério:</span> {a.effectiveness_criteria}
+                  <span className="doc-sub-label">{CRITERIO_LABEL}:</span>{" "}
+                  {a.effectiveness_criteria}
                 </>
               ) : (
                 "—"

@@ -17,6 +17,10 @@ router.post("/api/actions/:id/complete", read, (req, res) =>
 router.post("/api/actions/:id/review", write, (req, res) =>
   actionEvidence.reviewAction(req, res),
 );
+/** Completar o critério de eficácia; depois da validação, só se faltava. [B3-4-A] */
+router.patch("/api/actions/:id/criterio", write, (req, res) =>
+  actionEvidence.updateCriteria(req, res),
+);
 
 router.get("/api/evidences", read, (req, res) =>
   actionEvidence.listEvidences(req, res),

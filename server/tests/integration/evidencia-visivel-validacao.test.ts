@@ -46,6 +46,7 @@ beforeAll(async () => {
     .set(as(sst.token))
     // Ação exige dono e prazo (NR-1 1.5.5.2). [S2-M]
     .send({
+      effectiveness_criteria: "Critério do teste",
       title: "Instalar corrimão na escada",
       priority: "HIGH",
       assignee_id: sst.user.id,

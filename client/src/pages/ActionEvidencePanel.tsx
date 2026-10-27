@@ -5,13 +5,19 @@ import {
   fetchEvidenceBlob,
   reviewAction,
   sendActionEvidence,
+  updateActionCriteria,
   type ActionRow,
   type EvidenceRow,
 } from "@/api/actions";
 import { fileToBase64 } from "@/api/payslips";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
-import { formatDay } from "@/lib/labels";
+import {
+  CRITERIO_HINT,
+  CRITERIO_LABEL,
+  formatDay,
+  podeEditarCriterio,
+} from "@/lib/labels";
 import { openProtectedFile } from "@/lib/protected-file";
 import "@/components/form.css";
 
@@ -75,8 +81,129 @@ type Props = {
   action: ActionRow;
   userId: string | undefined;
   canReview: boolean;
+  /** Quem cuida do plano completa o critério até a validação. [B3-4-A] */
+  canEditCriteria: boolean;
   onReviewed: (action: ActionRow) => void;
 };
+
+/**
+ * O critério de eficácia, à vista de todos, e o caminho para completá-lo.
+ *
+ * Não havia tela para mexer na ação depois de aberta: a validada sem
+ * critério ficava para sempre como pendência no Painel. Até a validação,
+ * quem cuida do plano completa ou corrige; depois, só a validada sem
+ * critério o recebe, de quem valida, com nome e data. [B3-4-A]
+ */
+function CriterioDaAcao({
+  action,
+  canEdit,
+  canValidate,
+  onSaved,
+}: {
+  action: ActionRow;
+  canEdit: boolean;
+  canValidate: boolean;
+  onSaved: (action: ActionRow) => void;
+}) {
+  const validada = action.status === "VALIDATED" || action.status === "CLOSED";
+  const podeEditar = podeEditarCriterio(
+    action.status,
+    Boolean(action.effectivenessCriteria),
+    canEdit,
+    canValidate,
+  );
+  const [editando, setEditando] = useState(false);
+  const [texto, setTexto] = useState(action.effectivenessCriteria ?? "");
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  async function salvar(e: FormEvent) {
+    e.preventDefault();
+    if (!texto.trim()) {
+      setErro("Escreva o critério: como saber se a ação deu certo.");
+      return;
+    }
+    setSalvando(true);
+    setErro(null);
+    try {
+      const { action: atualizada } = await updateActionCriteria(action.id, texto.trim());
+      setEditando(false);
+      onSaved(atualizada);
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : "Falha ao registrar o critério");
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div className="action-criterio">
+      <p className={`action-panel-note${action.effectivenessCriteria ? "" : " is-danger"}`}>
+        <strong>{CRITERIO_LABEL}:</strong>{" "}
+        {action.effectivenessCriteria ?? "não registrado."}
+        {action.effectivenessCriteriaLateAt && (
+          <span className="action-criterio-tarde">
+            Registrado depois da validação
+            {action.effectivenessCriteriaLateBy
+              ? ` por ${action.effectivenessCriteriaLateBy.name}`
+              : ""}{" "}
+            em {formatDay(action.effectivenessCriteriaLateAt)}.
+          </span>
+        )}
+      </p>
+      {podeEditar && !editando && (
+        <Button
+          type="button"
+          size="compact"
+          variant="secondary"
+          onClick={() => {
+            setTexto(action.effectivenessCriteria ?? "");
+            setErro(null);
+            setEditando(true);
+          }}
+        >
+          {action.effectivenessCriteria ? "Corrigir o critério" : "Registrar o critério"}
+        </Button>
+      )}
+      {editando && (
+        <form className="action-criterio-form" onSubmit={salvar}>
+          <label className="form-field">
+            {CRITERIO_LABEL}
+            <input
+              value={texto}
+              onChange={(e) => setTexto(e.target.value)}
+              disabled={salvando}
+              required
+            />
+            <span className="form-hint">
+              {CRITERIO_HINT}
+              {validada &&
+                " A ação já foi validada: o critério fica registrado com seu nome e a data, e não muda mais."}
+            </span>
+          </label>
+          {erro && (
+            <p className="form-error" role="alert">
+              {erro}
+            </p>
+          )}
+          <div className="form-actions">
+            <Button type="submit" disabled={salvando || !texto.trim()}>
+              {salvando ? "Salvando…" : "Salvar o critério"}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setEditando(false)}
+              disabled={salvando}
+            >
+              Cancelar
+            </Button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
 
 /**
  * Evidências da ação, com a foto à vista, e a validação no mesmo lugar:
@@ -154,7 +281,13 @@ function SendEvidence({
   );
 }
 
-export function ActionEvidencePanel({ action, userId, canReview, onReviewed }: Props) {
+export function ActionEvidencePanel({
+  action,
+  userId,
+  canReview,
+  canEditCriteria,
+  onReviewed,
+}: Props) {
   const [evidences, setEvidences] = useState<EvidenceRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState("");
@@ -253,6 +386,13 @@ export function ActionEvidencePanel({ action, userId, canReview, onReviewed }: P
         </p>
       )}
 
+      <CriterioDaAcao
+        action={action}
+        canEdit={canEditCriteria}
+        canValidate={canReview}
+        onSaved={onReviewed}
+      />
+
       <h3 className="action-panel-title">Evidências</h3>
       {error && (
         <p className="form-error" role="alert">
@@ -302,11 +442,6 @@ export function ActionEvidencePanel({ action, userId, canReview, onReviewed }: P
       {open && isExecutor && (
         <div className="action-mine">
           <h3 className="action-panel-title">Sua ação</h3>
-          {action.effectivenessCriteria && (
-            <p className="action-panel-note">
-              <strong>Para dar certo:</strong> {action.effectivenessCriteria}
-            </p>
-          )}
           <SendEvidence
             actionId={action.id}
             onSent={async () => {
@@ -338,11 +473,6 @@ export function ActionEvidencePanel({ action, userId, canReview, onReviewed }: P
       {waiting && canReview && !isExecutor && (
         <form className="action-review" onSubmit={(e) => decide(e, "approve")}>
           <h3 className="action-panel-title">Validar</h3>
-          {action.effectivenessCriteria && (
-            <p className="action-panel-note">
-              <strong>Critério de eficácia:</strong> {action.effectivenessCriteria}
-            </p>
-          )}
           <label className="form-field">
             O que você conferiu
             <textarea

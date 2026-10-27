@@ -47,6 +47,7 @@ async function acaoConcluida(titulo: string) {
     .post("/api/actions")
     .set(as(sst.token))
     .send({
+      effectiveness_criteria: "Critério do teste",
       title: `${titulo} ${SUFIXO}`,
       risk_id: risco,
       assignee_id: supervisor.user.id,
@@ -177,6 +178,7 @@ describe("quem é avisado da ação concluída [CB-56]", () => {
       .post("/api/actions")
       .set(as(gerente.token))
       .send({
+        effectiveness_criteria: "Critério do teste",
         title: `Aberta pelo gerente ${SUFIXO}`,
         risk_id: risco,
         assignee_id: supervisor.user.id,

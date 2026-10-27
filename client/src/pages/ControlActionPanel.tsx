@@ -14,6 +14,8 @@ import {
   ACTION_STATUS_LABEL,
   CONTROL_STATUS_LABEL,
   CONTROL_TYPE_LABEL,
+  CRITERIO_HINT,
+  CRITERIO_LABEL,
   formatDay,
 } from "@/lib/labels";
 import "@/components/form.css";
@@ -153,6 +155,10 @@ export function ControlActionPanel({
       setActionError("Informe o prazo.");
       return;
     }
+    if (!criteria.trim()) {
+      setActionError("Informe o critério de eficácia: como saber se a ação deu certo.");
+      return;
+    }
     setSavingAction(true);
     setActionError(null);
     try {
@@ -164,7 +170,7 @@ export function ControlActionPanel({
         assignee_id: assignee,
         due_date: dueDate,
         deadline_justification: justificativa.trim() || undefined,
-        effectiveness_criteria: criteria.trim() || undefined,
+        effectiveness_criteria: criteria.trim(),
       });
       setOpenAction(null);
       setTitle("");
@@ -334,12 +340,14 @@ export function ControlActionPanel({
               )}
             </label>
             <label className="form-field">
-              Como saber se deu certo
+              {CRITERIO_LABEL}
               <input
                 value={criteria}
                 onChange={(e) => setCriteria(e.target.value)}
                 placeholder="Ex.: nova medição abaixo de 80 dB"
+                required
               />
+              <span className="form-hint">{CRITERIO_HINT}</span>
             </label>
           </div>
           {/* O prazo do nível virou limite: passar dele exige dizer por quê,

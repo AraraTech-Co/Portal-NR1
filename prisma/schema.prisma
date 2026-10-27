@@ -46,6 +46,7 @@ model User {
   actionsAssigned   Action[]         @relation("ActionAssignee")
   actionsCreated    Action[]         @relation("ActionCreatedBy")
   actionsValidated  Action[]         @relation("ActionValidator")
+  actionsCriteriaLate Action[]       @relation("ActionCriteriaLate")
   evidencesUploaded Evidence[]       @relation("EvidenceUploader")
   evidencesReviewed Evidence[]       @relation("EvidenceReviewer")
   changeEvents      ChangeEvent[]    @relation("ChangeEventReporter")
@@ -769,6 +770,10 @@ model Action {
   /// NR-1 1.5.5.2.2: além de cronograma, responsável e acompanhamento, o plano
   /// de ação exige AFERIÇÃO DE RESULTADOS — como a eficácia será medida.
   effectivenessCriteria String?
+  /// Critério registrado depois da validação, na ação validada sem ele: quem
+  /// registrou e quando. Antes da validação o critério se edita sem isso. [B3-4-A]
+  effectivenessCriteriaLateById String?
+  effectivenessCriteriaLateAt   DateTime?
   /// Resultado aferido, preenchido por quem valida.
   effectivenessResult   String?
   createdById    String
@@ -788,6 +793,7 @@ model Action {
   assignee     User?           @relation("ActionAssignee", fields: [assigneeId], references: [id])
   createdBy    User            @relation("ActionCreatedBy", fields: [createdById], references: [id])
   validatedBy  User?           @relation("ActionValidator", fields: [validatedById], references: [id])
+  effectivenessCriteriaLateBy User? @relation("ActionCriteriaLate", fields: [effectivenessCriteriaLateById], references: [id])
   evidences    Evidence[]
 
   @@index([organizationId, status])

@@ -780,6 +780,8 @@ class RiskController {
         include: {
           assignee: { select: { id: true, name: true } },
           validatedBy: { select: { id: true, name: true } },
+          /* Critério registrado depois da validação: quem e quando. [B3-4-A] */
+          effectivenessCriteriaLateBy: { select: { id: true, name: true } },
           risk: {
             select: {
               description: true,
@@ -850,6 +852,19 @@ class RiskController {
       }
       if (!due_date) {
         res.status(400).json({ message: "Informe o prazo da ação." });
+        return;
+      }
+      /*
+        NR-1 1.5.5.2.2: o plano exige aferição de resultados. Sem o critério
+        na abertura, a ação chegava validada sem dizer como a eficácia seria
+        medida, e o Painel a cobrava para sempre. [B3-4-A]
+      */
+      const criterio = effectiveness_criteria?.trim() || null;
+      if (!criterio) {
+        res.status(400).json({
+          message: "Informe o critério de eficácia: como saber se a ação deu certo.",
+          code: "CRITERIA_REQUIRED",
+        });
         return;
       }
       const responsavel = await prisma.membership.findFirst({
@@ -932,7 +947,7 @@ class RiskController {
         dueDate: prazo,
         // Só guarda o motivo quando ele foi de fato necessário.
         deadlineJustification: passouDoLimite ? justificativa : null,
-        effectivenessCriteria: effectiveness_criteria ?? null,
+        effectivenessCriteria: criterio,
         createdById: userId,
       });
       await audit(req, "action.create", "Risk", risk_id ?? row.id, null, {

@@ -94,14 +94,14 @@ describe("medida de prevenção", () => {
     const semDono = await request(app)
       .post("/api/actions")
       .set(as(sst.token))
-      .send({ title: "Instalar proteção", risk_id: riskId, control_id: controlId, due_date: PRAZO });
+      .send({ effectiveness_criteria: "Critério do teste", title: "Instalar proteção", risk_id: riskId, control_id: controlId, due_date: PRAZO });
     expect(semDono.status).toBe(400);
     expect(semDono.body.message).toMatch(/respons/i);
 
     const semPrazo = await request(app)
       .post("/api/actions")
       .set(as(sst.token))
-      .send({ title: "Instalar proteção", risk_id: riskId, control_id: controlId, assignee_id: supervisor.user.id });
+      .send({ effectiveness_criteria: "Critério do teste", title: "Instalar proteção", risk_id: riskId, control_id: controlId, assignee_id: supervisor.user.id });
     expect(semPrazo.status).toBe(400);
     expect(semPrazo.body.message).toMatch(/prazo/i);
 
@@ -127,6 +127,7 @@ describe("medida de prevenção", () => {
       .post("/api/actions")
       .set(as(sst.token))
       .send({
+        effectiveness_criteria: "Critério do teste",
         title: "Ação com estranho",
         risk_id: riskId,
         assignee_id: "00000000-0000-4000-8000-000000000001",
@@ -141,6 +142,7 @@ describe("medida de prevenção", () => {
       .post("/api/actions")
       .set(as(sst.token))
       .send({
+        effectiveness_criteria: "Critério do teste",
         title: "Ação com medida alheia",
         risk_id: outroRiskId,
         control_id: controlId,

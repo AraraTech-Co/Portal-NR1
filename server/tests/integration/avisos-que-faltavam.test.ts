@@ -51,6 +51,7 @@ describe("a ação avisa em cada passo [S3-A] [CB-19]", () => {
       .post("/api/actions")
       .set(as(sst.token))
       .send({
+        effectiveness_criteria: "Critério do teste",
         title: `Trocar proteção ${SUFIXO}`,
         assignee_id: supervisor.user.id,
         due_date: "2027-05-01",

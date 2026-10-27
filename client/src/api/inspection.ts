@@ -133,6 +133,7 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   "action.evidence": "Prova da ação enviada",
   "action.validate": "Ação validada",
   "action.reject": "Prova da ação recusada",
+  "action.criteria": "Critério de eficácia registrado",
   "announcement.edit": "Aviso corrigido",
   "announcement.withdraw": "Aviso retirado do mural",
   "idea.create": "Ideia registrada",

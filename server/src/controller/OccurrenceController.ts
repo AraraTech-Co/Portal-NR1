@@ -505,6 +505,15 @@ class OccurrenceController {
         res.status(400).json({ message: "Informe o prazo da ação." });
         return;
       }
+      /* O mesmo do plano de ação: sem critério, a ação não abre. [B3-4-A] */
+      const criterio = blank(effectiveness_criteria);
+      if (!criterio) {
+        res.status(400).json({
+          message: "Informe o critério de eficácia: como saber se a ação deu certo.",
+          code: "CRITERIA_REQUIRED",
+        });
+        return;
+      }
 
       const action = await new Action().create.new({
         organizationId: orgId,
@@ -517,7 +526,7 @@ class OccurrenceController {
         status: ACTION_STATUSES.OPEN,
         assigneeId: assignee_id ?? null,
         dueDate: due_date ? new Date(due_date) : null,
-        effectivenessCriteria: blank(effectiveness_criteria),
+        effectivenessCriteria: criterio,
         createdById: userId,
       });
 

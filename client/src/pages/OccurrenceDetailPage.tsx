@@ -17,6 +17,8 @@ import { PeoplePicker } from "@/components/PeoplePicker";
 import {
   ACTION_PRIORITY_LABEL,
   ACTION_STATUS_LABEL,
+  CRITERIO_HINT,
+  CRITERIO_LABEL,
   formatDay,
   OCCURRENCE_TYPE_LABEL,
 } from "@/lib/labels";
@@ -44,6 +46,7 @@ export function OccurrenceDetailPage() {
   */
   const [abrindoAcao, setAbrindoAcao] = useState(false);
   const [tituloDaAcao, setTituloDaAcao] = useState("");
+  const [criterioDaAcao, setCriterioDaAcao] = useState("");
   const [responsavel, setResponsavel] = useState("");
   const [prazo, setPrazo] = useState("");
   const [salvandoAcao, setSalvandoAcao] = useState(false);
@@ -262,6 +265,7 @@ export function OccurrenceDetailPage() {
               onClick={() => {
                 setErroDaAcao(null);
                 setTituloDaAcao("");
+                setCriterioDaAcao("");
                 setResponsavel("");
                 setPrazo("");
                 setAbrindoAcao(true);
@@ -320,7 +324,7 @@ export function OccurrenceDetailPage() {
       {abrindoAcao && (
         <Dialog
           title="Abrir ação a partir desta ocorrência"
-          description="A ação entra no Plano de ação ligada a esta ocorrência e ao risco dela. Responsável e prazo são obrigatórios."
+          description="A ação entra no Plano de ação ligada a esta ocorrência e ao risco dela. Responsável, prazo e critério de eficácia são obrigatórios."
           onClose={() => setAbrindoAcao(false)}
         >
           <form
@@ -336,6 +340,7 @@ export function OccurrenceDetailPage() {
                   assignee_id: responsavel,
                   due_date: prazo,
                   priority: "HIGH",
+                  effectiveness_criteria: criterioDaAcao.trim(),
                 });
                 setAbrindoAcao(false);
                 await load();
@@ -377,6 +382,16 @@ export function OccurrenceDetailPage() {
                 required
               />
             </label>
+            <label className="form-field">
+              {CRITERIO_LABEL}
+              <input
+                value={criterioDaAcao}
+                onChange={(e) => setCriterioDaAcao(e.target.value)}
+                disabled={salvandoAcao}
+                required
+              />
+              <span className="form-hint">{CRITERIO_HINT}</span>
+            </label>
             {erroDaAcao && (
               <p className="form-error" role="alert">
                 {erroDaAcao}
@@ -386,7 +401,11 @@ export function OccurrenceDetailPage() {
               <Button
                 type="submit"
                 disabled={
-                  salvandoAcao || !tituloDaAcao.trim() || !responsavel || !prazo
+                  salvandoAcao ||
+                  !tituloDaAcao.trim() ||
+                  !responsavel ||
+                  !prazo ||
+                  !criterioDaAcao.trim()
                 }
               >
                 {salvandoAcao ? "Abrindo…" : "Abrir ação"}
