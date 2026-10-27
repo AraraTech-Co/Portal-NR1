@@ -49,6 +49,12 @@ async function buildInventorySnapshot(
 
   return {
     generated_at: new Date().toISOString(),
+    /*
+      Os critérios de avaliação e de decisão são conteúdo do inventário
+      (NR-1 1.5.7.3.2 "f"), e iam num terceiro documento que a norma não
+      pede. [B3-4-J]
+    */
+    criteria: await buildCriteriaSnapshot(organizationId),
     items: hazards.map((h) => ({
       hazard_id: h.id,
       description: h.description,
@@ -351,6 +357,15 @@ class DocumentController {
         signature_statement?: string;
       };
 
+      /* Os critérios vão dentro do inventário: não se emitem mais à parte. [B3-4-J] */
+      if (type === PgrDocumentType.CRITERIA) {
+        res.status(400).json({
+          message:
+            "Os critérios de avaliação vão dentro do inventário de riscos (NR-1 1.5.7.3.2 \"f\"). Emita o inventário.",
+          code: "CRITERIA_IN_INVENTORY",
+        });
+        return;
+      }
       if (!type || !isPgrDocumentType(type) || !REQUIRED_PGR_DOCUMENTS.includes(type as never)) {
         res.status(400).json({
           message: `type deve ser um de: ${REQUIRED_PGR_DOCUMENTS.join(", ")}`,
@@ -389,10 +404,8 @@ class DocumentController {
       let content: unknown;
       if (type === PgrDocumentType.INVENTORY) {
         content = await buildInventorySnapshot(orgId, establishment_id);
-      } else if (type === PgrDocumentType.ACTION_PLAN) {
-        content = await buildActionPlanSnapshot(orgId, establishment_id);
       } else {
-        content = await buildCriteriaSnapshot(orgId);
+        content = await buildActionPlanSnapshot(orgId, establishment_id);
       }
 
       /*
@@ -406,8 +419,6 @@ class DocumentController {
             "Não há nenhum perigo registrado para emitir o inventário. Levante os perigos antes de assinar.",
           [PgrDocumentType.ACTION_PLAN]:
             "Não há nenhuma ação para emitir o plano de ação. Abra as ações antes de assinar.",
-          [PgrDocumentType.CRITERIA]:
-            "Não há metodologia de avaliação cadastrada para emitir os critérios.",
         };
         res.status(400).json({
           message: falta[type] ?? "Não há conteúdo para emitir este documento.",

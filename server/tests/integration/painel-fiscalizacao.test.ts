@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import request from "supertest";
 import type { Express } from "express";
 import { createApp } from "../../src/app";
+import prisma from "../../src/model/prisma";
 
 /**
  * O painel da fiscalização mostra o PGR INTEIRO, com as lacunas à mostra, e
@@ -122,26 +123,49 @@ describe("o painel não esconde lacuna [S7-B]", () => {
   it("documento nunca emitido aparece como pendente, e o emitido traz quem assinou", async () => {
     const antes = await painel(sst.token);
     const docsAntes = acha(antes.body.checks as Check[], "documentos");
-    expect(docsAntes.items.length).toBe(3);
+    /* Dois documentos: os critérios vão no inventário (1.5.7.3.2 "f"). [B3-4-J] */
+    expect(docsAntes.items.length).toBe(2);
 
-    await request(app)
-      .post("/api/pgr-documents")
-      .set(as(sst.token))
-      .send({
-        type: "CRITERIA",
-        responsible_name: `Responsável ${SUFIXO}`,
-        responsible_role: "Técnico de SST",
-      });
-
-    const depois = await painel(sst.token);
-    const docs = acha(depois.body.checks as Check[], "documentos");
-    const critérios = docs.items.find((i) => i.label.includes("Critérios"));
-    expect(critérios?.ok).toBe(true);
-    // Autor e data: é o que faltava no que o fiscal abria. [S7-D]
-    expect(critérios?.who).toBeTruthy();
-    expect(critérios?.when).toBeTruthy();
-    expect(critérios?.link).toMatch(/^\/documentos\//);
-  });
+    /*
+      O que se prova aqui é o que o Painel mostra, não a emissão (que tem
+      teste próprio): o plano é gravado direto, como a versão mais nova. Era
+      com os critérios, que tinham retrato barato; o plano de ação da
+      organização de teste é grande demais para emitir dentro do tempo.
+    */
+    const membro = await prisma.membership.findFirstOrThrow({
+      where: { userId: sst.user.id },
+      select: { organizationId: true },
+    });
+    const ultima = await prisma.pgrDocument.findFirst({
+      where: { organizationId: membro.organizationId, type: "ACTION_PLAN" },
+      orderBy: { version: "desc" },
+      select: { version: true },
+    });
+    const doc = await prisma.pgrDocument.create({
+      data: {
+        organizationId: membro.organizationId,
+        type: "ACTION_PLAN",
+        version: (ultima?.version ?? 0) + 1,
+        content: { generated_at: new Date().toISOString(), actions: [] },
+        issuedById: sst.user.id,
+        responsibleName: `Responsável ${SUFIXO}`,
+        responsibleRole: "Técnico de SST",
+        signatureStatement: "Declaro que este documento reflete o gerenciamento de riscos.",
+      },
+    });
+    try {
+      const depois = await painel(sst.token);
+      const docs = acha(depois.body.checks as Check[], "documentos");
+      const plano = docs.items.find((i) => i.label.includes("Plano de ação"));
+      expect(plano?.ok).toBe(true);
+      // Autor e data: é o que faltava no que o fiscal abria. [S7-D]
+      expect(plano?.who).toContain(`Responsável ${SUFIXO}`);
+      expect(plano?.when).toBeTruthy();
+      expect(plano?.link).toBe(`/documentos/${doc.id}`);
+    } finally {
+      await prisma.pgrDocument.delete({ where: { id: doc.id } });
+    }
+  }, 90_000);
 
   it("o risco em ordem mostra quem avaliou e quem validou", async () => {
     const est = (

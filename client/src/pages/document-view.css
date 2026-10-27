@@ -236,6 +236,15 @@
   font-size: 0.9rem;
 }
 
+/* Os critérios de avaliação, dentro do inventário (1.5.7.3.2 "f"). [B3-4-J] */
+.doc-criterios {
+  margin-top: 2rem;
+}
+
+.doc-criterios-nota {
+  margin-bottom: 1rem;
+}
+
 @media print {
   @page {
     size: A4;
