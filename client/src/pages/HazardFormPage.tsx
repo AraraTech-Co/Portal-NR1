@@ -181,7 +181,6 @@ function RiskList({
                     />
                     <ControlActionPanel
                       riskId={r.id}
-                      riskLevel={level}
                       canWrite={canEdit}
                       onChanged={async () => {
                         await reload();

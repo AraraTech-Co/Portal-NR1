@@ -767,6 +767,10 @@ model Action {
   /// Por que o prazo passou do limite do nível do risco. O prazo sugerido
   /// virou limite: passar dele exige dizer por quê, e fica registrado. [S2-M]
   deadlineJustification String?
+  /// O nível do risco com que a ação foi aberta — o que decidiu prioridade e
+  /// limite de prazo. Pode vir de avaliação ainda sem validação; se a
+  /// validação der outro nível, quem abriu é avisado. [B3-2-A]
+  riskLevelAtOpening    String?
   /// NR-1 1.5.5.2.2: além de cronograma, responsável e acompanhamento, o plano
   /// de ação exige AFERIÇÃO DE RESULTADOS — como a eficácia será medida.
   effectivenessCriteria String?
@@ -1684,6 +1688,8 @@ enum NotificationKind {
   SUMMON_OPENED
   /// Denúncia nova no canal de ética, para quem é do comitê. [CB-29]
   ETHICS_REPORT_OPENED
+  /// A validação deu ao risco outro nível que o da abertura da ação. [B3-2-A]
+  ACTION_RISK_LEVEL_CHANGED
 }
 
 model Notification {

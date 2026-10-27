@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import {
   createControl,
   createRiskAction,
+  fetchAssessments,
   fetchControls,
   type Control,
 } from "@/api/risks";
@@ -17,6 +18,7 @@ import {
   CRITERIO_HINT,
   CRITERIO_LABEL,
   formatDay,
+  nivelParaPrazo,
 } from "@/lib/labels";
 import "@/components/form.css";
 import "./control-action.css";
@@ -67,15 +69,22 @@ function sugestaoDoNivel(nivel: string | null) {
 /** Medidas de prevenção e as ações que as implantam. [S2-A] */
 export function ControlActionPanel({
   riskId,
-  riskLevel,
   canWrite,
   onChanged,
 }: {
   riskId: string;
-  riskLevel: string | null;
   canWrite: boolean;
   onChanged?: () => Promise<void> | void;
 }) {
+  /*
+    O nível vem da avaliação mais recente, validada ou não, e a tela diz de
+    onde ele vem. Só o validado valia: logo depois de avaliar, a tela dizia
+    "Sem risco avaliado" e aceitava qualquer prazo. [B3-2-A]
+  */
+  const [avaliado, setAvaliado] = useState<{ nivel: string; validada: boolean } | null>(
+    null,
+  );
+  const riskLevel = avaliado?.nivel ?? null;
   const [controls, setControls] = useState<Control[] | null>(null);
   const [actions, setActions] = useState<ActionRow[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -98,9 +107,14 @@ export function ControlActionPanel({
   const [actionError, setActionError] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
-    const [c, a] = await Promise.all([fetchControls(riskId), fetchActions(riskId)]);
+    const [c, a, av] = await Promise.all([
+      fetchControls(riskId),
+      fetchActions(riskId),
+      fetchAssessments(riskId),
+    ]);
     setControls(c.controls);
     setActions(a.actions);
+    setAvaliado(nivelParaPrazo(av.assessments));
   }, [riskId]);
 
   useEffect(() => {
@@ -130,8 +144,16 @@ export function ControlActionPanel({
     90 dias". Avaliar em seguida não a atualizava. Agora ela é recalculada
     aqui, com o nível que o risco tem neste instante. [B2-2-A]
   */
-  function startAction(controlId: string | null, suggestion?: string) {
-    const { prioridade, dias } = sugestaoDoNivel(riskLevel);
+  async function startAction(controlId: string | null, suggestion?: string) {
+    /* A avaliação pode ter acabado de ser feita no painel de cima. [B3-2-A] */
+    let atual = avaliado;
+    try {
+      atual = nivelParaPrazo((await fetchAssessments(riskId)).assessments);
+      setAvaliado(atual);
+    } catch {
+      /* Sem rede, fica o que já se sabia. */
+    }
+    const { prioridade, dias } = sugestaoDoNivel(atual?.nivel ?? null);
     setOpenAction(controlId ?? "__sem_controle__");
     setTitle(suggestion ?? "");
     setCriteria("");
@@ -231,7 +253,7 @@ export function ControlActionPanel({
                   <Button
                     type="button"
                     variant="ghost"
-                    onClick={() => startAction(c.id, `Implantar: ${c.description}`)}
+                    onClick={() => void startAction(c.id, `Implantar: ${c.description}`)}
                   >
                     Planejar esta medida
                   </Button>
@@ -281,7 +303,7 @@ export function ControlActionPanel({
             type="button"
             variant="ghost"
             disabled={openAction === "__sem_controle__"}
-            onClick={() => startAction(null)}
+            onClick={() => void startAction(null)}
           >
             Abrir ação sem medida ligada
           </Button>
@@ -312,11 +334,13 @@ export function ControlActionPanel({
               />
               <span className="form-hint">
                 {riskLevel
-                  ? `${RISK_LEVEL_LABEL[riskLevel] ?? riskLevel} → ${
+                  ? `${RISK_LEVEL_LABEL[riskLevel] ?? riskLevel}${
+                      avaliado?.validada ? "" : ", aguardando validação"
+                    } → ${
                       ACTION_PRIORITY_LABEL[sugestaoDoNivel(riskLevel).prioridade] ??
                       sugestaoDoNivel(riskLevel).prioridade
                     } → até ${sugestaoDoNivel(riskLevel).dias} dias.`
-                  : "Sem risco avaliado, o prazo é livre — só não pode ser uma data que já passou."}
+                  : "Risco ainda sem avaliação: o prazo é livre — só não pode ser uma data que já passou."}
               </span>
             </label>
             <label className="form-field">
