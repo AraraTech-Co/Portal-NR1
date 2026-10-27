@@ -229,6 +229,8 @@ export const PARTICIPATION_TYPE_LABEL: Record<string, string> = {
   CONSULTATION: "Consulta aos trabalhadores",
   CIPA_MANIFESTATION: "Manifestação da CIPA",
   MEETING: "Reunião",
+  /* A tela vazia citava o DDS, e não havia como registrá-lo. [B3-4-G] */
+  SAFETY_DIALOGUE: "DDS (Diálogo Diário de Segurança)",
   RISK_COMMUNICATION: "Comunicação de risco",
   BASIC_TRAINING: "Treinamento básico",
   WORKSHOP: "Oficina",

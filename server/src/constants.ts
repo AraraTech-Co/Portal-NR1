@@ -249,7 +249,8 @@ export const CONTRACTOR_RELATION_DEFAULT = ContractorRelation.WE_HIRE;
  * o documento sozinho não basta; evidências anexas reforçam o registro.
  * - CONSULTATION: consulta formal aos trabalhadores
  * - CIPA_MANIFESTATION: manifestação / atuação da CIPA
- * - MEETING: reunião de SST / DDS
+ * - MEETING: reunião de SST
+ * - SAFETY_DIALOGUE: DDS, o Diálogo Diário de Segurança no início do turno
  * - RISK_COMMUNICATION: comunicação de riscos
  * - BASIC_TRAINING: capacitação básica vinculada à participação
  * - WORKSHOP: oficina / workshop

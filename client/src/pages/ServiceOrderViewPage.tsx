@@ -170,8 +170,11 @@ function Receipt({
         </div>
       </dl>
       <p className="so-text">
-        Declaro que recebi, li e entendi a ordem de serviço acima, que diz a
-        que estou exposto, como me proteger e o que devo fazer.
+        {/* O comprovante sai em folha própria, sem a ordem: "acima" não
+            apontava para nada. [B3-4-H] */}
+        Declaro que recebi, li e entendi a ordem de serviço identificada nesta
+        folha, que diz a que estou exposto, como me proteger e o que devo
+        fazer.
       </p>
       <p className="so-receipt-state">
         {person.acknowledged_at
@@ -425,7 +428,9 @@ export function ServiceOrderViewPage() {
                                     <td>{r.description}</td>
                                     <td>
                                       {r.level ? (
-                                        label(RISK_LEVEL_LABEL, r.level)
+                                        <span className="so-nivel">
+                                          {label(RISK_LEVEL_LABEL, r.level)}
+                                        </span>
                                       ) : (
                                         <span className="doc-empty">
                                           ainda sem avaliação validada
