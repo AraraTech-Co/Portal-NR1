@@ -14,7 +14,7 @@ import { ControlMeasure } from "../model/schema/ControlMeasure/ControlMeasure";
 import { Action } from "../model/schema/Action/Action";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
-import { notify } from "../helper/notify";
+import { notify, notifyMany } from "../helper/notify";
 import { formatCalendarDay } from "../helper/calendar-day";
 import { resolveLevel } from "../helper/risk-methodology";
 import {
@@ -55,16 +55,31 @@ function textOrNull(raw: unknown): string | null {
 }
 
 /** Nível vigente do risco: a última avaliação validada. [S2-M] */
+/**
+ * O nível que decide prioridade e limite de prazo: o da avaliação MAIS
+ * RECENTE, validada ou à espera de validação. Só o validado valia, e quem
+ * avalia não valida a própria avaliação: no caminho mais comum — avaliar e
+ * já abrir a ação —, a tela dizia "Sem risco avaliado" e aceitava qualquer
+ * prazo. A avaliação substituída não conta. [B3-2-A]
+ */
 async function nivelDoRisco(
   organizationId: string,
   riskId: string,
-): Promise<string | null> {
+): Promise<{ nivel: string; validada: boolean } | null> {
   const avaliacao = await prisma.riskAssessment.findFirst({
-    where: { organizationId, riskId, status: AssessmentStatus.VALIDATED },
+    where: {
+      organizationId,
+      riskId,
+      status: { not: AssessmentStatus.SUPERSEDED },
+    },
     orderBy: { assessedAt: "desc" },
-    select: { resultingLevel: true },
+    select: { resultingLevel: true, status: true },
   });
-  return avaliacao?.resultingLevel ?? null;
+  if (!avaliacao?.resultingLevel) return null;
+  return {
+    nivel: avaliacao.resultingLevel,
+    validada: avaliacao.status === AssessmentStatus.VALIDATED,
+  };
 }
 
 class RiskController {
@@ -691,6 +706,37 @@ class RiskController {
         severity: result.severity,
         probability: result.probability,
       });
+
+      /*
+        A ação pode ter nascido do nível de uma avaliação ainda sem
+        validação. Se a validação dá outro nível, a prioridade e o prazo podem
+        não servir mais: quem abriu a ação fica sabendo. [B3-2-A]
+      */
+      const destoantes = await prisma.action.findMany({
+        where: {
+          organizationId: orgId,
+          riskId: result.riskId,
+          status: { notIn: ["VALIDATED", "CLOSED", "CANCELLED"] },
+          riskLevelAtOpening: { not: null },
+          NOT: { riskLevelAtOpening: result.resultingLevel },
+        },
+        select: { id: true, title: true, createdById: true, riskLevelAtOpening: true },
+      });
+      for (const a of destoantes) {
+        if (a.createdById === userId) continue;
+        const antes = RISK_LEVEL_LABEL[a.riskLevelAtOpening as never] ?? a.riskLevelAtOpening;
+        const depois =
+          RISK_LEVEL_LABEL[result.resultingLevel as never] ?? result.resultingLevel;
+        await notifyMany([a.createdById], {
+          organizationId: orgId,
+          kind: "ACTION_RISK_LEVEL_CHANGED",
+          title: a.title,
+          body: `A ação foi aberta com o risco ${antes}; a validação o deixou ${depois}. Confira a prioridade e o prazo.`,
+          link: "/acoes",
+          entityType: "Action",
+          entityId: a.id,
+        });
+      }
       res.json({ assessment: result });
     } catch (err) {
       fail(res, err);
@@ -922,13 +968,15 @@ class RiskController {
         e segue sem limite: a decisão é sobre o prazo que o nível pede, não
         sobre inventar um teto para toda ação do portal.
       */
-      const nivel = risk_id ? await nivelDoRisco(orgId, risk_id) : null;
+      const avaliado = risk_id ? await nivelDoRisco(orgId, risk_id) : null;
+      const nivel = avaliado?.nivel ?? null;
       const justificativa = deadline_justification?.trim() || null;
       const { days, limit } = deadlineLimit(nivel, hoje);
       const passouDoLimite = Boolean(nivel) && prazo > limit;
       if (passouDoLimite && !justificativa) {
+        const deOnde = avaliado?.validada ? "" : ", aguardando validação,";
         res.status(400).json({
-          message: `Risco ${RISK_LEVEL_LABEL[nivel as never] ?? nivel} pede prazo de até ${days} dias (${formatCalendarDay(limit)}). Para ir além, diga por quê.`,
+          message: `Risco ${RISK_LEVEL_LABEL[nivel as never] ?? nivel}${deOnde} pede prazo de até ${days} dias (${formatCalendarDay(limit)}). Para ir além, diga por quê.`,
           code: "DEADLINE_NEEDS_JUSTIFICATION",
           limit_days: days,
           limit_date: limit.toISOString().slice(0, 10),
@@ -947,6 +995,7 @@ class RiskController {
         dueDate: prazo,
         // Só guarda o motivo quando ele foi de fato necessário.
         deadlineJustification: passouDoLimite ? justificativa : null,
+        riskLevelAtOpening: nivel,
         effectivenessCriteria: criterio,
         createdById: userId,
       });

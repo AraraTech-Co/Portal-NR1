@@ -321,6 +321,34 @@ export function podeEditarCriterio(
   return cuidaDoPlano;
 }
 
+/**
+ * O nível que decide prioridade e limite de prazo da ação: o da avaliação
+ * MAIS RECENTE, validada ou à espera de validação — a mesma regra do
+ * servidor. A substituída não conta. Só o validado valia, e quem avalia não
+ * valida a própria avaliação: logo depois de avaliar, a tela dizia "Sem
+ * risco avaliado". [B3-2-A]
+ */
+export function nivelParaPrazo(
+  avaliacoes: Array<{
+    status: string;
+    resultingLevel: string | null;
+    assessedAt: string;
+  }>,
+): { nivel: string; validada: boolean } | null {
+  let maisRecente: (typeof avaliacoes)[number] | null = null;
+  for (const a of avaliacoes) {
+    if (a.status === "SUPERSEDED" || !a.resultingLevel) continue;
+    if (!maisRecente || new Date(a.assessedAt) > new Date(maisRecente.assessedAt)) {
+      maisRecente = a;
+    }
+  }
+  if (!maisRecente) return null;
+  return {
+    nivel: maisRecente.resultingLevel!,
+    validada: maisRecente.status === "VALIDATED",
+  };
+}
+
 /** A cor da situação da convocação: a mesma em Convocações e no treinamento. */
 export function summonAttendanceTone(
   status: string,

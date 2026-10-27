@@ -20,7 +20,9 @@ export type Notification = {
     | "POINTS_GRANTED"
     | "REWARD_REQUESTED"
     | "SUMMON_OPENED"
-    | "ETHICS_REPORT_OPENED";
+    | "ETHICS_REPORT_OPENED"
+    /* A validação deu ao risco outro nível que o da abertura da ação. [B3-2-A] */
+    | "ACTION_RISK_LEVEL_CHANGED";
   title: string;
   body: string | null;
   link: string | null;
