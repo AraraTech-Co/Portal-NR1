@@ -412,3 +412,6 @@ export const LEAVE_STATUS_LABEL: Record<string, string> = {
   REJECTED: "Recusado",
   CANCELLED: "Cancelado",
 };
+
+/** "Onde incomoda", na queixa ergonômica: o lugar do corpo, não a frase. O servidor recusa acima disto. [B3-3-D] */
+export const ONDE_INCOMODA_MAX = 60;

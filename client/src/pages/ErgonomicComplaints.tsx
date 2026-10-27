@@ -9,8 +9,9 @@ import {
 import { fetchEstablishments, type Establishment } from "@/api/operation";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
-import { formatDay } from "@/lib/labels";
+import { formatDay, ONDE_INCOMODA_MAX } from "@/lib/labels";
 import "@/components/form.css";
+import "./ergonomia.css";
 
 const SITUACAO: Record<ErgonomicComplaint["status"], string> = {
   OPEN: "Esperando o SST",
@@ -142,8 +143,12 @@ export function ErgonomicComplaints({ onEvaluated }: { onEvaluated?: () => void 
               value={onde}
               onChange={(e) => setOnde(e.target.value)}
               placeholder="Ombro direito, lombar, punho…"
-              maxLength={120}
+              maxLength={ONDE_INCOMODA_MAX}
+              aria-describedby="onde-incomoda-dica"
             />
+            <span id="onde-incomoda-dica" className="form-hint">
+              Só o lugar do corpo, em poucas palavras. O que acontece vai no campo abaixo.
+            </span>
           </label>
         </div>
         <label className="form-field">
@@ -178,31 +183,32 @@ export function ErgonomicComplaints({ onEvaluated }: { onEvaluated?: () => void 
 
       {rows.length > 0 && (
         <ul
-          style={{ listStyle: "none", padding: 0, margin: "1rem 0", display: "grid", gap: "0.75rem" }}
+          className="queixas"
         >
           {rows.map((q) => (
-            <li
-              key={q.id}
-              style={{
-                border: "1px solid var(--border)",
-                borderRadius: "10px",
-                padding: "0.75rem 1rem",
-              }}
-            >
-              <p style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", margin: 0 }}>
+            <li key={q.id} className="queixa">
+              {/*
+                As etiquetas quebram linha, e o lugar do corpo é texto: no
+                celular, o cartão cabe na tela. [B3-3-D]
+              */}
+              <p className="queixa-etiquetas">
                 <Chip tone={tone(q.status)}>{SITUACAO[q.status]}</Chip>
-                {q.bodyPart && <Chip>{q.bodyPart}</Chip>}
-                {manages && <Chip>{q.user.name}</Chip>}
-                {q.jobRoleName && <Chip>{q.jobRoleName}</Chip>}
-                {q.establishment && <Chip>{q.establishment.name}</Chip>}
+                {manages && <Chip className="chip-quebra">{q.user.name}</Chip>}
+                {q.jobRoleName && <Chip className="chip-quebra">{q.jobRoleName}</Chip>}
+                {q.establishment && <Chip className="chip-quebra">{q.establishment.name}</Chip>}
               </p>
-              <p style={{ whiteSpace: "pre-wrap", maxWidth: "70ch" }}>{q.description}</p>
+              {q.bodyPart && (
+                <p className="queixa-onde">
+                  <strong>Onde incomoda:</strong> {q.bodyPart}
+                </p>
+              )}
+              <p className="queixa-texto">{q.description}</p>
               <p className="muted" style={{ margin: 0 }}>
                 Registrada em {formatDay(q.createdAt)}
               </p>
 
               {q.handlingNote && (
-                <p style={{ maxWidth: "70ch" }}>
+                <p className="queixa-texto">
                   <strong>Resposta:</strong> {q.handlingNote}
                   {q.handledBy && (
                     <span className="muted">
