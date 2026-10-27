@@ -63,6 +63,12 @@
   flex: 1 1 14rem;
 }
 
+/* O exemplo do tipo escolhido ocupa a linha de baixo inteira. [B3-2-D] */
+.ctrl-tipo-exemplo {
+  flex: 1 1 100%;
+  margin: 0;
+}
+
 .ctrl-free-action .btn {
   padding: 0.22rem 0.5rem;
   font-size: 0.76rem;
