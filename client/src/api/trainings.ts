@@ -46,6 +46,21 @@ export type TrainingFull = {
   slides: TrainingSlide[];
   questions: TrainingQuestion[];
   my_enrollment: MyEnrollment | null;
+  /**
+   * A turma presencial para a qual a pessoa foi convocada e que ainda
+   * espera a lista de presença. [B3-3-C]
+   */
+  my_session: MySession | null;
+};
+
+export type MySession = {
+  id: string;
+  held_at: string;
+  location: string | null;
+  instructor_name: string;
+  duration_minutes: number;
+  summon_id: string;
+  attendance_status: string;
 };
 
 export type CompleteResult = {

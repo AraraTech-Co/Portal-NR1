@@ -48,6 +48,8 @@ class SummonController {
         orderBy: { scheduledFor: "desc" },
         include: {
           createdBy: { select: { id: true, name: true } },
+          /* A convocação de turma leva ao treinamento. [B3-3-C] */
+          trainingSession: { select: { trainingId: true } },
           _count: { select: { attendances: true } },
           attendances: {
             where: { userId },

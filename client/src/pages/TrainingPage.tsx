@@ -8,12 +8,19 @@ import {
   type CompleteResult,
   type TrainingFull,
 } from "@/api/trainings";
+import { confirmSummonAttendance } from "@/api/modules";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
 import { LoadingState } from "@/components/LoadingState";
 import { PageHeader } from "@/components/PageHeader";
 import { useAuth } from "@/auth/AuthContext";
-import { formatDay } from "@/lib/labels";
+import {
+  formatDay,
+  formatDayTime,
+  jaChegou,
+  SUMMON_ATTENDANCE_LABEL,
+  summonAttendanceTone,
+} from "@/lib/labels";
 import { isReadOnlyPermission } from "@/lib/module-access";
 import "@/components/form.css";
 import "./training-page.css";
@@ -40,6 +47,8 @@ export function TrainingPage() {
   const [enviando, setEnviando] = useState(false);
   const [resultado, setResultado] = useState<CompleteResult | null>(null);
   const [erroProva, setErroProva] = useState<string | null>(null);
+  const [confirmando, setConfirmando] = useState(false);
+  const [erroConfirmar, setErroConfirmar] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const data = await fetchTraining(id);
@@ -96,6 +105,20 @@ export function TrainingPage() {
     }
   }
 
+  /* Quem foi convocado confirma aqui mesmo, sem ir a Convocações. [B3-3-C] */
+  async function confirmarPresenca(summonId: string) {
+    setConfirmando(true);
+    setErroConfirmar(null);
+    try {
+      await confirmSummonAttendance(summonId);
+      await load();
+    } catch (err) {
+      setErroConfirmar(err instanceof Error ? err.message : "Falha ao confirmar");
+    } finally {
+      setConfirmando(false);
+    }
+  }
+
   if (error) {
     return (
       <div>
@@ -113,6 +136,7 @@ export function TrainingPage() {
   const concluido = matricula?.status === "COMPLETED";
   const reprovado = matricula?.status === "FAILED";
   const presencial = training.kind === "CLASSROOM";
+  const turma = training.my_session;
   const slides = training.slides;
   const total = slides.length;
   const naProva = passo > total;
@@ -175,6 +199,50 @@ export function TrainingPage() {
               </p>
             )}
           </div>
+        </section>
+      )}
+
+      {/*
+        O convocado abria o treinamento e não via a turma para a qual foi
+        chamado: quando, onde e com quem só estavam no aviso. [B3-3-C]
+      */}
+      {presencial && turma && (
+        <section className="tr-classroom tr-turma">
+          <strong>
+            {jaChegou(turma.held_at)
+              ? "Sua turma"
+              : "Você está convocado para esta turma"}
+          </strong>
+          <dl className="tr-turma-fatos">
+            <dt>Quando</dt>
+            <dd>{formatDayTime(turma.held_at)}</dd>
+            <dt>Onde</dt>
+            <dd>{turma.location ?? "Local ainda não informado"}</dd>
+            <dt>Com</dt>
+            <dd>{turma.instructor_name}</dd>
+            <dt>Duração</dt>
+            <dd>{turma.duration_minutes} min</dd>
+          </dl>
+          <div className="tr-turma-presenca">
+            <Chip tone={summonAttendanceTone(turma.attendance_status)}>
+              {SUMMON_ATTENDANCE_LABEL[turma.attendance_status] ??
+                turma.attendance_status}
+            </Chip>
+            {turma.attendance_status === "INVITED" && !jaChegou(turma.held_at) && (
+              <Button
+                type="button"
+                disabled={confirmando}
+                onClick={() => void confirmarPresenca(turma.summon_id)}
+              >
+                {confirmando ? "Confirmando…" : "Confirmar presença"}
+              </Button>
+            )}
+          </div>
+          {erroConfirmar && (
+            <p className="form-error" role="alert">
+              {erroConfirmar}
+            </p>
+          )}
         </section>
       )}
 

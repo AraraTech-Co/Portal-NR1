@@ -294,6 +294,41 @@ export function formatDayTime(value: string | Date | null | undefined): string {
   return `${formatDay(d)} às ${hh}:${mm}`;
 }
 
+/** A cor da situação da convocação: a mesma em Convocações e no treinamento. */
+export function summonAttendanceTone(
+  status: string,
+): "success" | "warning" | "danger" | "neutral" {
+  if (status === "CONFIRMED" || status === "ATTENDED") return "success";
+  if (status === "INVITED") return "warning";
+  if (status === "ABSENT") return "danger";
+  return "neutral";
+}
+
+/**
+ * O compromisso marcado já chegou? Marcado só com o dia, ele chega no dia,
+ * pelo calendário de quem olha; marcado com hora, chega na hora. A turma
+ * marcada às 22h não pode virar "amanhã" por causa do UTC. [B3-3-C]
+ */
+export function jaChegou(
+  value: string | Date,
+  agora: Date = new Date(),
+): boolean {
+  const d = typeof value === "string" ? new Date(value) : value;
+  if (Number.isNaN(d.getTime())) return false;
+  const semHora =
+    d.getUTCHours() === 0 &&
+    d.getUTCMinutes() === 0 &&
+    d.getUTCSeconds() === 0 &&
+    d.getUTCMilliseconds() === 0;
+  if (!semHora) return d.getTime() <= agora.getTime();
+  const hoje = [
+    agora.getFullYear(),
+    String(agora.getMonth() + 1).padStart(2, "0"),
+    String(agora.getDate()).padStart(2, "0"),
+  ].join("-");
+  return d.toISOString().slice(0, 10) <= hoje;
+}
+
 export function isOverdue(
   dueDate: string | Date | null | undefined,
   status: string,

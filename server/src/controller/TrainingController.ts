@@ -5,7 +5,7 @@ import { Training } from "../model/schema/Training/Training";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
 import { notify, notifyMany } from "../helper/notify";
-import { formatCalendarDay } from "../helper/calendar-day";
+import { formatCalendarDayTime } from "../helper/calendar-day";
 import { canManageModule, canSeeAllInModule } from "../helper/module-access";
 import { NotificationKind, TrainingKind } from "@prisma/client";
 import { ENROLLMENT_STATUSES } from "../constants";
@@ -90,9 +90,69 @@ class TrainingController {
         return;
       }
       const minha = training.enrollments[0] ?? null;
+
+      /*
+        O convocado abria o treinamento presencial e não via a turma para a
+        qual foi chamado: ela só aparecia no aviso e em Convocações. Vem a
+        turma que ainda espera a lista de presença — a próxima, ou a que já
+        aconteceu e falta lançar. [B3-3-C]
+      */
+      let minhaTurma = null;
+      if (training.kind === TrainingKind.CLASSROOM) {
+        const chamadas = await prisma.summonAttendance.findMany({
+          where: {
+            userId,
+            summon: {
+              organizationId: orgId,
+              trainingSession: {
+                trainingId: training.id,
+                attendances: { none: {} },
+              },
+            },
+          },
+          select: {
+            status: true,
+            summon: {
+              select: {
+                id: true,
+                trainingSession: {
+                  select: {
+                    id: true,
+                    heldAt: true,
+                    location: true,
+                    instructorName: true,
+                    durationMinutes: true,
+                  },
+                },
+              },
+            },
+          },
+        });
+        const proxima = chamadas
+          .filter((c) => c.summon.trainingSession)
+          .sort(
+            (a, b) =>
+              a.summon.trainingSession!.heldAt.getTime() -
+              b.summon.trainingSession!.heldAt.getTime(),
+          )[0];
+        if (proxima) {
+          const turma = proxima.summon.trainingSession!;
+          minhaTurma = {
+            id: turma.id,
+            held_at: turma.heldAt,
+            location: turma.location,
+            instructor_name: turma.instructorName,
+            duration_minutes: turma.durationMinutes,
+            summon_id: proxima.summon.id,
+            attendance_status: proxima.status,
+          };
+        }
+      }
+
       res.json({
         training: {
           ...training,
+          my_session: minhaTurma,
           my_enrollment: minha
             ? {
                 ...minha,
@@ -960,6 +1020,8 @@ class TrainingController {
               scheduledFor: heldAt,
               location: blank(body.location),
               createdById: userId,
+              /* O convocado abre o treinamento e vê a turma. [B3-3-C] */
+              trainingSessionId: criada.id,
             },
           });
           for (const alvo of convocados) {
@@ -980,10 +1042,14 @@ class TrainingController {
             organizationId: orgId,
             kind: NotificationKind.TRAINING_SCHEDULED,
             title: `Treinamento: ${tituloDoTreinamento}`,
-            body: `Turma marcada para ${formatCalendarDay(heldAt)}${
+            body: `Turma marcada para ${formatCalendarDayTime(heldAt)}${
               blank(body.location) ? ` em ${blank(body.location)}` : ""
             }.`,
-            link: "/convocacoes",
+            /*
+              O aviso levava a Convocações, e quem abria o treinamento não
+              via a turma. Agora leva ao treinamento, onde ela aparece. [B3-3-C]
+            */
+            link: `/treinamentos/${training.id}`,
             entityType: "TrainingSession",
             entityId: session.id,
           },

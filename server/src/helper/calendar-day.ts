@@ -23,3 +23,27 @@ export function formatCalendarDay(value: Date | string | null | undefined): stri
   // Com hora, é um instante: aí o fuso da empresa vale.
   return d.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
 }
+
+/**
+ * Dia e hora de um compromisso marcado (turma, convocação). Marcado só com
+ * o dia, sai só o dia — sem inventar uma hora que ninguém escolheu. [B3-3-C]
+ */
+export function formatCalendarDayTime(
+  value: Date | string | null | undefined,
+): string {
+  const dia = formatCalendarDay(value);
+  if (!value || dia === "—") return dia;
+  const d = typeof value === "string" ? new Date(value) : value;
+  const semHora =
+    d.getUTCHours() === 0 &&
+    d.getUTCMinutes() === 0 &&
+    d.getUTCSeconds() === 0 &&
+    d.getUTCMilliseconds() === 0;
+  if (semHora) return dia;
+  const hora = d.toLocaleTimeString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return `${dia} às ${hora}`;
+}

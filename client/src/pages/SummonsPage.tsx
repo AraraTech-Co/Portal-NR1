@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useResourceList } from "@/hooks/useResourceList";
 import {
   confirmSummonAttendance,
@@ -10,16 +11,13 @@ import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
 import { NewRecordSection } from "@/components/NewRecordSection";
 import { PeoplePicker } from "@/components/PeoplePicker";
-import { formatDayTime, SUMMON_ATTENDANCE_LABEL } from "@/lib/labels";
+import {
+  formatDayTime,
+  SUMMON_ATTENDANCE_LABEL,
+  summonAttendanceTone,
+} from "@/lib/labels";
 import { useModuleAccess } from "@/lib/module-access";
 import "./summons.css";
-
-function tom(status: string): "success" | "warning" | "danger" | "neutral" {
-  if (status === "CONFIRMED" || status === "ATTENDED") return "success";
-  if (status === "INVITED") return "warning";
-  if (status === "ABSENT") return "danger";
-  return "neutral";
-}
 
 /**
  * Convocações: convocar e confirmar presença.
@@ -146,6 +144,14 @@ export function SummonsPage() {
                 <tr key={r.id}>
                     <td>
                       <strong>{r.title}</strong>
+                      {/* A turma aparece no treinamento, com quem dá a aula. [B3-3-C] */}
+                      {r.trainingSession && (
+                        <div>
+                          <Link to={`/treinamentos/${r.trainingSession.trainingId}`}>
+                            Abrir o treinamento
+                          </Link>
+                        </div>
+                      )}
                       {/* A pauta estava guardada e não aparecia. */}
                       {r.description && (
                         <div className="muted">{r.description}</div>
@@ -161,7 +167,7 @@ export function SummonsPage() {
                     </td>
                     <td>
                       {r.my_attendance ? (
-                        <Chip tone={tom(r.my_attendance.status)}>
+                        <Chip tone={summonAttendanceTone(r.my_attendance.status)}>
                           {SUMMON_ATTENDANCE_LABEL[r.my_attendance.status] ??
                             r.my_attendance.status}
                         </Chip>
