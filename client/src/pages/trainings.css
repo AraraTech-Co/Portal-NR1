@@ -59,3 +59,32 @@
 .training-certificado .training-sub {
   text-decoration: none;
 }
+
+/* O que o certificado pede: quem ministra e o responsável técnico. [B3-3-G] */
+.tr-cert-data {
+  display: grid;
+  gap: 0.6rem;
+  justify-items: start;
+}
+
+.tr-cert-data h3 {
+  margin: 0;
+}
+
+.tr-cert-data-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 0.5rem 1.4rem;
+  margin: 0;
+  width: 100%;
+}
+
+.tr-cert-data-list dt {
+  font-size: 0.8rem;
+  color: var(--muted-foreground);
+}
+
+.tr-cert-data-list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}

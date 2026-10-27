@@ -20,12 +20,18 @@ export type TrainingCertificate = {
     summary: string | null;
     duration_minutes: number;
     validity_months: number | null;
+    /** Quem ministra e o responsável técnico (1.7.1.1). [B3-3-G] */
+    instructor_name: string | null;
+    instructor_qualification: string | null;
+    technical_responsible_name: string | null;
+    technical_responsible_qualification: string | null;
   };
   session: {
     held_at: string;
     location: string | null;
     instructor_name: string;
     instructor_registration: string | null;
+    instructor_qualification: string | null;
   } | null;
   organization: { name: string; taxId: string | null } | null;
 };

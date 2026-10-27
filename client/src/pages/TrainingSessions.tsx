@@ -157,10 +157,15 @@ function AttendanceForm({
 function RecordForm({
   trainingId,
   defaultMinutes,
+  defaultInstructor,
+  defaultQualification,
   onSaved,
 }: {
   trainingId: string;
   defaultMinutes: number;
+  /** Quem ministra, do cadastro do treinamento: só sugestão. [B3-3-G] */
+  defaultInstructor: string;
+  defaultQualification: string;
   onSaved: () => Promise<void>;
 }) {
   const [aberto, setAberto] = useState(false);
@@ -172,8 +177,10 @@ function RecordForm({
   const [data, setData] = useState(hojeIso());
   /* A turma tinha só o dia: o convocado não sabia a hora da aula. [B3-3-C] */
   const [hora, setHora] = useState("");
-  const [instrutor, setInstrutor] = useState("");
+  const [instrutor, setInstrutor] = useState(defaultInstructor);
   const [registro, setRegistro] = useState("");
+  /* O certificado pede a qualificação de quem deu a aula. [B3-3-G] */
+  const [qualificacao, setQualificacao] = useState(defaultQualification);
   const [local, setLocal] = useState("");
   const [minutos, setMinutos] = useState(String(defaultMinutes));
   const [observacao, setObservacao] = useState("");
@@ -228,6 +235,7 @@ function RecordForm({
           agendando && hora ? new Date(`${data}T${hora}`).toISOString() : data,
         instructor_name: instrutor.trim(),
         instructor_registration: registro.trim() || undefined,
+        instructor_qualification: qualificacao.trim() || undefined,
         location: local.trim() || undefined,
         duration_minutes: Number(minutos) || defaultMinutes,
         notes: observacao.trim() || undefined,
@@ -242,7 +250,8 @@ function RecordForm({
       });
       setAberto(false);
       setHora("");
-      setInstrutor("");
+      setInstrutor(defaultInstructor);
+      setQualificacao(defaultQualification);
       setRegistro("");
       setLocal("");
       setObservacao("");
@@ -264,6 +273,8 @@ function RecordForm({
           onClick={() => {
             setModo("registrar");
             setData(hojeIso());
+            setInstrutor(defaultInstructor);
+            setQualificacao(defaultQualification);
             setAberto(true);
           }}
         >
@@ -276,6 +287,8 @@ function RecordForm({
           onClick={() => {
             setModo("agendar");
             setData("");
+            setInstrutor(defaultInstructor);
+            setQualificacao(defaultQualification);
             setAberto(true);
           }}
         >
@@ -340,6 +353,15 @@ function RecordForm({
         <label className="form-field">
           Registro profissional (opcional)
           <input value={registro} onChange={(e) => setRegistro(e.target.value)} />
+        </label>
+        <label className="form-field">
+          Qualificação de quem deu
+          <input
+            value={qualificacao}
+            onChange={(e) => setQualificacao(e.target.value)}
+            placeholder="Ex.: Técnico em Segurança do Trabalho"
+          />
+          <span className="form-hint">Vai no certificado (NR-1 1.7.1.1).</span>
         </label>
       </div>
       <label className="form-field">
@@ -424,12 +446,17 @@ export function TrainingSessions({
   trainingId,
   kind,
   defaultMinutes,
+  defaultInstructor = "",
+  defaultQualification = "",
   canRecord,
   onRecorded,
 }: {
   trainingId: string;
   kind: string;
   defaultMinutes: number;
+  /** Do cadastro do treinamento, para sugerir na turma. [B3-3-G] */
+  defaultInstructor?: string;
+  defaultQualification?: string;
   canRecord: boolean;
   onRecorded?: () => void;
 }) {
@@ -490,6 +517,7 @@ export function TrainingSessions({
               </div>
               <div className="muted">
                 {s.instructor_name}
+                {s.instructor_qualification && `, ${s.instructor_qualification}`}
                 {s.instructor_registration && ` (${s.instructor_registration})`} ·{" "}
                 {s.duration_minutes} min
                 {s.location && ` · ${s.location}`}
@@ -527,6 +555,8 @@ export function TrainingSessions({
         <RecordForm
           trainingId={trainingId}
           defaultMinutes={defaultMinutes}
+          defaultInstructor={defaultInstructor}
+          defaultQualification={defaultQualification}
           onSaved={async () => {
             await load();
             onRecorded?.();

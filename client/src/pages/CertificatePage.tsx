@@ -6,6 +6,7 @@ import {
 } from "@/api/certificates";
 import { Button } from "@/components/Button";
 import { LoadingState } from "@/components/LoadingState";
+import { formatarCnpj, itensDoCertificado } from "@/lib/certificado";
 import { formatDay } from "@/lib/labels";
 import "./certificado.css";
 
@@ -58,7 +59,8 @@ export function CertificatePage() {
 
   if (!cert) return <LoadingState />;
 
-  const presencial = cert.training.kind === "CLASSROOM";
+  const itens = itensDoCertificado(cert);
+  const cnpj = formatarCnpj(cert.organization?.taxId ?? null);
 
   return (
     <div>
@@ -72,7 +74,7 @@ export function CertificatePage() {
       <article className="cert-sheet">
         <p className="cert-org">
           {cert.organization?.name ?? "Certificado"}
-          {cert.organization?.taxId ? ` · CNPJ ${cert.organization.taxId}` : ""}
+          {cnpj ? ` · CNPJ ${cnpj}` : ""}
         </p>
         <h1 className="cert-title">Certificado de treinamento</h1>
 
@@ -82,21 +84,15 @@ export function CertificatePage() {
           {cert.person.registration ? `, matrícula ${cert.person.registration}` : ""}
           {cert.person.job_role ? `, ${cert.person.job_role}` : ""}, concluiu o
           treinamento <strong>{cert.training.title}</strong>
-          {cert.session
-            ? `, realizado em ${formatDay(cert.session.held_at)}${
-                cert.session.location ? ` em ${cert.session.location}` : ""
-              }`
-            : cert.completed_at
-              ? `, concluído em ${formatDay(cert.completed_at)}`
-              : ""}
+          {itens.data ? `, realizado em ${formatDay(itens.data)}` : ""}
           , com carga horária de {cargaHoraria(cert.training.duration_minutes)}.
         </p>
 
-        {cert.training.summary && (
-          <p className="cert-body">
-            <strong>Conteúdo:</strong> {cert.training.summary}
-          </p>
-        )}
+        {/* O 1.7.1.1 pede o conteúdo programático: sem ele, o papel diz que falta. [B3-3-G] */}
+        <p className="cert-body">
+          <strong>Conteúdo programático:</strong>{" "}
+          {itens.conteudo ?? "não informado no cadastro do treinamento."}
+        </p>
 
         {/* Certificado abaixo da nota de hoje vale até vencer, mas diz
             isso no papel: esconder seria entregar uma prova que não é. [CB-31] */}
@@ -108,19 +104,25 @@ export function CertificatePage() {
         )}
 
         <dl className="cert-facts">
-          {presencial && cert.session && (
-            <>
-              <div>
-                <dt>Instrutor</dt>
-                <dd>{cert.session.instructor_name}</dd>
-              </div>
-              {cert.session.instructor_registration && (
-                <div>
-                  <dt>Registro do instrutor</dt>
-                  <dd>{cert.session.instructor_registration}</dd>
-                </div>
+          {/* Quem ministrou e onde, também no curso a distância. [B3-3-G] */}
+          <div>
+            <dt>Local</dt>
+            <dd>{itens.local ?? "não informado"}</dd>
+          </div>
+          <div>
+            <dt>Ministrado por</dt>
+            <dd>
+              {itens.ministrou.nome ?? "não informado"}
+              {itens.ministrou.qualificacao && (
+                <span className="cert-sub">{itens.ministrou.qualificacao}</span>
               )}
-            </>
+            </dd>
+          </div>
+          {itens.ministrou.registro && (
+            <div>
+              <dt>Registro do instrutor</dt>
+              <dd>{itens.ministrou.registro}</dd>
+            </div>
           )}
           {cert.score !== null && (
             <div>
@@ -142,8 +144,38 @@ export function CertificatePage() {
           </div>
         </dl>
 
+        {/*
+          As duas assinaturas que o 1.7.1.1 pede: no papel, à mão; a cópia
+          assinada pode ser guardada no portal (B3-4-F). [B3-3-G]
+        */}
+        <div className="cert-signatures">
+          <div className="cert-signature">
+            <span className="cert-signature-line" />
+            <span>{cert.person.name}</span>
+            <span className="cert-sub">Assinatura do trabalhador</span>
+          </div>
+          <div className="cert-signature">
+            <span className="cert-signature-line" />
+            <span>{itens.responsavel.nome ?? " "}</span>
+            <span className="cert-sub">
+              Assinatura do responsável técnico
+              {itens.responsavel.qualificacao
+                ? ` · ${itens.responsavel.qualificacao}`
+                : ""}
+            </span>
+          </div>
+        </div>
+
         <p className="cert-code">Certificado nº {cert.code}</p>
       </article>
+
+      {/* Na tela, não no papel: o que o cadastro ainda deve ao certificado. */}
+      {itens.faltando.length > 0 && (
+        <p className="cert-pendente" role="note">
+          Falta no cadastro do treinamento: {itens.faltando.join(", ")}. Quem
+          cuida dos treinamentos completa em Treinamentos, na linha do curso.
+        </p>
+      )}
     </div>
   );
 }

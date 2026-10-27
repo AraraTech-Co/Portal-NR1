@@ -268,6 +268,10 @@ class TrainingController {
               durationMinutes: true,
               passingScore: true,
               validityMonths: true,
+              instructorName: true,
+              instructorQualification: true,
+              technicalResponsibleName: true,
+              technicalResponsibleQualification: true,
             },
           },
         },
@@ -316,6 +320,7 @@ class TrainingController {
                     location: true,
                     instructorName: true,
                     instructorRegistration: true,
+                    instructorQualification: true,
                   },
                 },
               },
@@ -350,6 +355,16 @@ class TrainingController {
             duration_minutes:
               turma?.session.durationMinutes ?? enrollment.training.durationMinutes,
             validity_months: enrollment.training.validityMonths,
+            /*
+              O certificado pede quem ministrou, com a qualificação, e a
+              assinatura do responsável técnico (NR-1 1.7.1.1). No curso a
+              distância, quem ministra vem do cadastro. [B3-3-G]
+            */
+            instructor_name: enrollment.training.instructorName,
+            instructor_qualification: enrollment.training.instructorQualification,
+            technical_responsible_name: enrollment.training.technicalResponsibleName,
+            technical_responsible_qualification:
+              enrollment.training.technicalResponsibleQualification,
           },
           session: turma
             ? {
@@ -357,6 +372,7 @@ class TrainingController {
                 location: turma.session.location,
                 instructor_name: turma.session.instructorName,
                 instructor_registration: turma.session.instructorRegistration,
+                instructor_qualification: turma.session.instructorQualification,
               }
             : null,
           organization: organizacao,
@@ -384,6 +400,10 @@ class TrainingController {
         validity_months,
         slides,
         questions,
+        instructor_name,
+        instructor_qualification,
+        technical_responsible_name,
+        technical_responsible_qualification,
       } = req.body as {
         title?: string;
         category?: string;
@@ -394,6 +414,11 @@ class TrainingController {
         points?: number;
         video_url?: string;
         validity_months?: number;
+        /** O que o certificado pede (1.7.1.1). [B3-3-G] */
+        instructor_name?: string;
+        instructor_qualification?: string;
+        technical_responsible_name?: string;
+        technical_responsible_qualification?: string;
         slides?: Array<{ order?: number; title?: string; body?: string }>;
         questions?: Array<{
           order?: number;
@@ -433,6 +458,10 @@ class TrainingController {
             points: points ?? 100,
             videoUrl: blank(video_url),
             validityMonths: validity_months ?? null,
+            instructorName: blank(instructor_name),
+            instructorQualification: blank(instructor_qualification),
+            technicalResponsibleName: blank(technical_responsible_name),
+            technicalResponsibleQualification: blank(technical_responsible_qualification),
             createdById: userId,
           },
         });
@@ -863,6 +892,8 @@ class TrainingController {
         held_at?: string;
         instructor_name?: string;
         instructor_registration?: string;
+        /** Qualificação de quem deu a aula, para o certificado. [B3-3-G] */
+        instructor_qualification?: string;
         location?: string;
         duration_minutes?: number;
         notes?: string;
@@ -951,6 +982,7 @@ class TrainingController {
             heldAt,
             instructorName: instrutor,
             instructorRegistration: blank(body.instructor_registration),
+            instructorQualification: blank(body.instructor_qualification),
             location: blank(body.location),
             durationMinutes: duracao,
             notes: blank(body.notes),
@@ -1106,6 +1138,7 @@ class TrainingController {
           held_at: s.heldAt,
           instructor_name: s.instructorName,
           instructor_registration: s.instructorRegistration,
+          instructor_qualification: s.instructorQualification,
           location: s.location,
           duration_minutes: s.durationMinutes,
           notes: s.notes,
@@ -1121,6 +1154,79 @@ class TrainingController {
             .sort((a, b) => a.user.name.localeCompare(b.user.name, "pt-BR")),
         })),
       });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
+  /**
+   * O que o certificado pede, nos treinamentos já cadastrados: quem
+   * ministra, com a qualificação, e o responsável técnico. O treinamento não
+   * se editava depois de criado, e sem isto os que existem nunca teriam esses
+   * dados. Campo que não vem fica como está; campo vazio apaga. [B3-3-G]
+   */
+  async updateCertificateData(req: Request, res: Response) {
+    try {
+      const auth = req as AuthRequest;
+      const orgId = actorOrgId(auth);
+      const userId = actorUserId(auth);
+      const atual = await prisma.training.findFirst({
+        where: { id: req.params.id, organizationId: orgId, archivedAt: null },
+        select: {
+          id: true,
+          instructorName: true,
+          instructorQualification: true,
+          technicalResponsibleName: true,
+          technicalResponsibleQualification: true,
+        },
+      });
+      if (!atual) {
+        res.status(404).json({ message: "Treinamento não encontrado." });
+        return;
+      }
+      const body = req.body as Record<string, unknown>;
+      const campos = {
+        instructor_name: "instructorName",
+        instructor_qualification: "instructorQualification",
+        technical_responsible_name: "technicalResponsibleName",
+        technical_responsible_qualification: "technicalResponsibleQualification",
+      } as const;
+      const data: Partial<Record<(typeof campos)[keyof typeof campos], string | null>> = {};
+      for (const [chave, coluna] of Object.entries(campos)) {
+        if (!(chave in body)) continue;
+        const v = body[chave];
+        if (v !== null && typeof v !== "string") {
+          res.status(400).json({ message: `${chave} deve ser texto.` });
+          return;
+        }
+        data[coluna] = blank(v);
+      }
+      const training = await prisma.training.update({
+        where: { id: atual.id },
+        data,
+        select: {
+          id: true,
+          instructorName: true,
+          instructorQualification: true,
+          technicalResponsibleName: true,
+          technicalResponsibleQualification: true,
+        },
+      });
+      await writeAudit({
+        organizationId: orgId,
+        actorId: userId,
+        action: "training.certificate_data",
+        entityType: "Training",
+        entityId: atual.id,
+        before: {
+          instructorName: atual.instructorName,
+          instructorQualification: atual.instructorQualification,
+          technicalResponsibleName: atual.technicalResponsibleName,
+          technicalResponsibleQualification: atual.technicalResponsibleQualification,
+        },
+        after: training,
+      });
+      res.json({ training });
     } catch (err) {
       fail(res, err);
     }

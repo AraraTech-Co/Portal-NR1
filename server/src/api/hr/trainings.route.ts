@@ -17,6 +17,10 @@ router.get("/api/trainings/:id/enrollments", read, (req, res) =>
   trainings.listEnrollments(req, res),
 );
 router.get("/api/trainings/:id", read, (req, res) => trainings.get(req, res));
+/** Quem ministra e o responsável técnico, para o certificado. [B3-3-G] */
+router.patch("/api/trainings/:id/certificado", writeRh, (req, res) =>
+  trainings.updateCertificateData(req, res),
+);
 router.delete("/api/trainings/:id", writeRh, (req, res) =>
   trainings.archive(req, res),
 );

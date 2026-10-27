@@ -81,6 +81,7 @@ export type TrainingSession = {
   held_at: string;
   instructor_name: string;
   instructor_registration: string | null;
+  instructor_qualification: string | null;
   location: string | null;
   duration_minutes: number;
   notes: string | null;
@@ -126,6 +127,8 @@ export function recordTrainingSession(
     held_at: string;
     instructor_name: string;
     instructor_registration?: string;
+    /** Qualificação de quem deu a aula, para o certificado. [B3-3-G] */
+    instructor_qualification?: string;
     location?: string;
     duration_minutes?: number;
     notes?: string;
@@ -149,6 +152,11 @@ export function createTraining(input: {
   duration_minutes?: number;
   passing_score?: number;
   validity_months?: number;
+  /** O que o certificado pede (1.7.1.1). [B3-3-G] */
+  instructor_name?: string;
+  instructor_qualification?: string;
+  technical_responsible_name?: string;
+  technical_responsible_qualification?: string;
   questions?: Array<{
     prompt: string;
     options: string[];
@@ -157,6 +165,32 @@ export function createTraining(input: {
 }) {
   return request<{ training: { id: string; title: string } }>("/api/trainings", {
     method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export type DadosDoCertificadoDoTreinamento = {
+  instructor_name: string | null;
+  instructor_qualification: string | null;
+  technical_responsible_name: string | null;
+  technical_responsible_qualification: string | null;
+};
+
+/** Quem ministra e o responsável técnico, nos treinamentos já cadastrados. [B3-3-G] */
+export function updateTrainingCertificateData(
+  id: string,
+  input: DadosDoCertificadoDoTreinamento,
+) {
+  return request<{
+    training: {
+      id: string;
+      instructorName: string | null;
+      instructorQualification: string | null;
+      technicalResponsibleName: string | null;
+      technicalResponsibleQualification: string | null;
+    };
+  }>(`/api/trainings/${encodeURIComponent(id)}/certificado`, {
+    method: "PATCH",
     body: JSON.stringify(input),
   });
 }

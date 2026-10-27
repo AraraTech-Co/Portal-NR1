@@ -1987,6 +1987,13 @@ model Training {
   /// NR-1 1.7.1.2.2: quando a NR não fixa periodicidade, o prazo é do
   /// empregador. Nulo = sem reciclagem obrigatória.
   validityMonths Int?
+  /// O que o certificado pede (NR-1 1.7.1.1): nome e qualificação de quem
+  /// ministra — no curso a distância, é daqui que sai; no presencial, a turma
+  /// diz quem deu — e o responsável técnico, que assina. [B3-3-G]
+  instructorName                   String?
+  instructorQualification          String?
+  technicalResponsibleName         String?
+  technicalResponsibleQualification String?
   archivedAt     DateTime?
   createdById    String
   createdAt      DateTime   @default(now())
@@ -2066,6 +2073,8 @@ model TrainingSession {
   instructorName String
   /// Registro profissional do instrutor, quando a NR exige.
   instructorRegistration String?
+  /// Qualificação de quem deu a aula, para o certificado (1.7.1.1). [B3-3-G]
+  instructorQualification String?
   location       String?
   durationMinutes Int
   notes          String?

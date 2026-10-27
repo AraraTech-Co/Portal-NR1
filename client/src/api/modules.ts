@@ -248,6 +248,11 @@ export const fetchTrainings = () =>
       durationMinutes: number;
       passingScore: number;
       archivedAt: string | null;
+      /** Quem ministra e o responsável técnico (1.7.1.1). [B3-3-G] */
+      instructorName: string | null;
+      instructorQualification: string | null;
+      technicalResponsibleName: string | null;
+      technicalResponsibleQualification: string | null;
       _count?: { enrollments: number };
     }>;
   }>("/api/trainings").then((d) => d.trainings);
