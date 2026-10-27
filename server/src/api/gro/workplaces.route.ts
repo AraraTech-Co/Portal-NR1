@@ -16,6 +16,8 @@ router.post("/api/establishments", write, (req, res) =>
 router.patch("/api/establishments/:id", write, (req, res) =>
   workplace.updateEstablishment(req, res),
 );
+/* Conferir antes de pedir confirmação. [B3-1-C] */
+router.get("/api/establishments/:id/pode-arquivar", write, workplace.canArchive("establishment"));
 router.delete("/api/establishments/:id", write, (req, res) =>
   workplace.archiveEstablishment(req, res),
 );
@@ -27,6 +29,7 @@ router.post("/api/sectors", write, (req, res) =>
 router.patch("/api/sectors/:id", write, (req, res) =>
   workplace.updateSector(req, res),
 );
+router.get("/api/sectors/:id/pode-arquivar", write, workplace.canArchive("sector"));
 router.delete("/api/sectors/:id", write, (req, res) =>
   workplace.archiveSector(req, res),
 );
@@ -44,6 +47,7 @@ router.patch("/api/job-roles/:id", write, (req, res) =>
 router.patch("/api/job-roles/:id/ordem", write, (req, res) =>
   workplace.moveJobRole(req, res),
 );
+router.get("/api/job-roles/:id/pode-arquivar", write, workplace.canArchive("job_role"));
 router.delete("/api/job-roles/:id", write, (req, res) =>
   workplace.archiveJobRole(req, res),
 );
@@ -57,6 +61,7 @@ router.post("/api/activities", write, (req, res) =>
 router.patch("/api/activities/:id", write, (req, res) =>
   workplace.updateActivity(req, res),
 );
+router.get("/api/activities/:id/pode-arquivar", write, workplace.canArchive("activity"));
 router.delete("/api/activities/:id", write, (req, res) =>
   workplace.archiveActivity(req, res),
 );

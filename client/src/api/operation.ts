@@ -1,3 +1,4 @@
+import type { PodeArquivar } from "@/lib/arquivar";
 import { request } from "./client";
 
 export type Establishment = {
@@ -115,6 +116,14 @@ export async function updateEstablishment(
     method: "PATCH",
     body: JSON.stringify(input),
   });
+}
+
+/** Se dá para arquivar, e o que impede. [B3-1-C] */
+export async function fetchCanArchive(
+  caminho: "establishments" | "sectors" | "job-roles" | "activities",
+  id: string,
+) {
+  return request<PodeArquivar>(`/api/${caminho}/${id}/pode-arquivar`);
 }
 
 export async function archiveEstablishment(id: string) {

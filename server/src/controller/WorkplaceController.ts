@@ -23,6 +23,104 @@ function textOrNull(raw: string | null | undefined): string | null {
   return raw && raw.trim() !== "" ? raw.trim() : null;
 }
 
+type Impedimento = { message: string; code: string };
+export type Arquivavel = "establishment" | "sector" | "job_role" | "activity";
+
+/*
+  O que impede arquivar, num lugar só: o arquivamento recusa por aqui, e a
+  tela pergunta antes de pedir confirmação — quem confirmava recebia em
+  seguida a notícia de que não podia. [B3-1-C]
+*/
+async function impedimentoDoEstabelecimento(orgId: string, id: string): Promise<Impedimento | null> {
+  const sectors = await prisma.sector.count({
+    where: { organizationId: orgId, establishmentId: id, archivedAt: null },
+  });
+  return sectors > 0
+    ? {
+        message: `Este estabelecimento ainda tem ${sectors} setor(es) ativo(s). Arquive os setores antes.`,
+        code: "ESTABLISHMENT_HAS_SECTORS",
+      }
+    : null;
+}
+
+async function impedimentoDoSetor(orgId: string, id: string): Promise<Impedimento | null> {
+  const activities = await prisma.activity.count({
+    where: { organizationId: orgId, sectorId: id, archivedAt: null },
+  });
+  return activities > 0
+    ? {
+        message: `Este setor ainda tem ${activities} atividade(s) ativa(s). Arquive as atividades antes.`,
+        code: "SECTOR_HAS_ACTIVITIES",
+      }
+    : null;
+}
+
+/*
+  Arquivar a função não conferia nada: dava para arquivar uma função ainda
+  ligada a atividade ativa — a atividade continuava na lista, sem função — e
+  para arquivar a função de quem trabalha nela, deixando a ficha sem o que
+  define os perigos e a ordem de serviço. [S2-G] [B2-1-H]
+*/
+async function impedimentoDaFuncao(orgId: string, id: string): Promise<Impedimento | null> {
+  const [atividades, pessoas] = await Promise.all([
+    prisma.activityJobRole.count({
+      where: {
+        jobRoleId: id,
+        activity: { organizationId: orgId, archivedAt: null },
+      },
+    }),
+    prisma.employeeProfile.count({
+      where: { organizationId: orgId, jobRoleId: id, dismissedAt: null },
+    }),
+  ]);
+  if (atividades > 0) {
+    return {
+      message: `Esta função ainda está em ${atividades} atividade(s) ativa(s). Desligue a função das atividades antes.`,
+      code: "JOB_ROLE_IN_USE",
+    };
+  }
+  if (pessoas > 0) {
+    return {
+      message: `${pessoas} pessoa(s) estão nesta função. Mude a função delas antes de arquivar.`,
+      code: "JOB_ROLE_HAS_PEOPLE",
+    };
+  }
+  return null;
+}
+
+async function impedimentoDaAtividade(orgId: string, id: string): Promise<Impedimento | null> {
+  const hazards = await prisma.hazard.count({
+    where: { organizationId: orgId, activityId: id, archivedAt: null },
+  });
+  return hazards > 0
+    ? {
+        message: `Esta atividade tem ${hazards} perigo(s) no inventário. Arquive-os antes, para o inventário não perder a origem.`,
+        code: "ACTIVITY_HAS_HAZARDS",
+      }
+    : null;
+}
+
+const IMPEDIMENTO: Record<Arquivavel, (orgId: string, id: string) => Promise<Impedimento | null>> = {
+  establishment: impedimentoDoEstabelecimento,
+  sector: impedimentoDoSetor,
+  job_role: impedimentoDaFuncao,
+  activity: impedimentoDaAtividade,
+};
+
+/** Existe, é da empresa e ainda não foi arquivado. */
+async function aindaAtivo(tipo: Arquivavel, orgId: string, id: string): Promise<boolean> {
+  const where = { id, organizationId: orgId, archivedAt: null };
+  const n =
+    tipo === "establishment"
+      ? await prisma.establishment.count({ where })
+      : tipo === "sector"
+        ? await prisma.sector.count({ where })
+        : tipo === "job_role"
+          ? await prisma.jobRole.count({ where })
+          : await prisma.activity.count({ where });
+  return n > 0;
+}
+
 /**
  * Mudança na operação fica na trilha: o inventário depende dela, e a
  * fiscalização pergunta quem mudou o quê. [S2-N]
@@ -136,17 +234,33 @@ class WorkplaceController {
     }
   }
 
+  /**
+   * Se dá para arquivar, sem arquivar: a tela pergunta antes de pedir
+   * confirmação, e diz já o que impede. [B3-1-C]
+   */
+  canArchive(tipo: Arquivavel) {
+    return async (req: Request, res: Response) => {
+      try {
+        const orgId = actorOrgId(req as AuthRequest);
+        if (!(await aindaAtivo(tipo, orgId, req.params.id))) {
+          res.status(404).json({ message: "Não encontrado." });
+          return;
+        }
+        const impedimento = await IMPEDIMENTO[tipo](orgId, req.params.id);
+        res.json(impedimento ? { can_archive: false, ...impedimento } : { can_archive: true });
+      } catch (err) {
+        fail(res, err);
+      }
+    };
+  }
+
   async archiveEstablishment(req: Request, res: Response) {
     try {
       const orgId = actorOrgId(req as AuthRequest);
       const id = req.params.id;
-      const sectors = await prisma.sector.count({
-        where: { organizationId: orgId, establishmentId: id, archivedAt: null },
-      });
-      if (sectors > 0) {
-        res.status(409).json({
-          message: `Este estabelecimento ainda tem ${sectors} setor(es) ativo(s). Arquive os setores antes.`,
-        });
+      const impedimento = await impedimentoDoEstabelecimento(orgId, id);
+      if (impedimento) {
+        res.status(409).json(impedimento);
         return;
       }
       const row = await new Establishment().update.one(
@@ -264,13 +378,9 @@ class WorkplaceController {
   async archiveSector(req: Request, res: Response) {
     try {
       const orgId = actorOrgId(req as AuthRequest);
-      const activities = await prisma.activity.count({
-        where: { organizationId: orgId, sectorId: req.params.id, archivedAt: null },
-      });
-      if (activities > 0) {
-        res.status(409).json({
-          message: `Este setor ainda tem ${activities} atividade(s) ativa(s). Arquive as atividades antes.`,
-        });
+      const impedimento = await impedimentoDoSetor(orgId, req.params.id);
+      if (impedimento) {
+        res.status(409).json(impedimento);
         return;
       }
       const row = await new Sector().update.one(
@@ -471,39 +581,9 @@ class WorkplaceController {
   async archiveJobRole(req: Request, res: Response) {
     try {
       const orgId = actorOrgId(req as AuthRequest);
-      /*
-        Arquivar a função não conferia nada: dava para arquivar uma função
-        ainda ligada a atividade ativa — a atividade continuava na lista, sem
-        função — e para arquivar a função de quem trabalha nela, deixando a
-        ficha sem o que define os perigos e a ordem de serviço. [S2-G] [B2-1-H]
-      */
-      const [atividades, pessoas] = await Promise.all([
-        prisma.activityJobRole.count({
-          where: {
-            jobRoleId: req.params.id,
-            activity: { organizationId: orgId, archivedAt: null },
-          },
-        }),
-        prisma.employeeProfile.count({
-          where: {
-            organizationId: orgId,
-            jobRoleId: req.params.id,
-            dismissedAt: null,
-          },
-        }),
-      ]);
-      if (atividades > 0) {
-        res.status(409).json({
-          message: `Esta função ainda está em ${atividades} atividade(s) ativa(s). Desligue a função das atividades antes.`,
-          code: "JOB_ROLE_IN_USE",
-        });
-        return;
-      }
-      if (pessoas > 0) {
-        res.status(409).json({
-          message: `${pessoas} pessoa(s) estão nesta função. Mude a função delas antes de arquivar.`,
-          code: "JOB_ROLE_HAS_PEOPLE",
-        });
+      const impedimento = await impedimentoDaFuncao(orgId, req.params.id);
+      if (impedimento) {
+        res.status(409).json(impedimento);
         return;
       }
 
@@ -708,13 +788,9 @@ class WorkplaceController {
   async archiveActivity(req: Request, res: Response) {
     try {
       const orgId = actorOrgId(req as AuthRequest);
-      const hazards = await prisma.hazard.count({
-        where: { organizationId: orgId, activityId: req.params.id, archivedAt: null },
-      });
-      if (hazards > 0) {
-        res.status(409).json({
-          message: `Esta atividade tem ${hazards} perigo(s) no inventário. Arquive-os antes, para o inventário não perder a origem.`,
-        });
+      const impedimento = await impedimentoDaAtividade(orgId, req.params.id);
+      if (impedimento) {
+        res.status(409).json(impedimento);
         return;
       }
       const row = await new Activity().update.one(

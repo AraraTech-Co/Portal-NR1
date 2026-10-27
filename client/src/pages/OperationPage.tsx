@@ -2,6 +2,7 @@ import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from 
 import {
   archiveJobRole,
   archiveSector,
+  fetchCanArchive,
   createActivity,
   createEstablishment,
   createJobRole,
@@ -363,13 +364,14 @@ export function OperationPage() {
                 {selectedSector && (
                   <NameActions
                     key={selectedSector.id}
-                    label="o setor"
+                    tipo="sector"
                     name={selectedSector.name}
                     canEdit={canEdit}
                     onRename={async (name) => {
                       await updateSector(selectedSector.id, { name });
                       await reload();
                     }}
+                    onCheckArchive={() => fetchCanArchive("sectors", selectedSector.id)}
                     onArchive={async () => {
                       await archiveSector(selectedSector.id);
                       await reload();
@@ -445,13 +447,14 @@ export function OperationPage() {
                         )}
                       </div>
                       <NameActions
-                        label="a função"
+                        tipo="job_role"
                         name={j.name}
                         canEdit={canEdit}
                         onRename={async (name) => {
                           await updateJobRole(j.id, { name });
                           await reload();
                         }}
+                        onCheckArchive={() => fetchCanArchive("job-roles", j.id)}
                         onArchive={async () => {
                           await archiveJobRole(j.id);
                           await reload();
