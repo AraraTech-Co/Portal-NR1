@@ -3,7 +3,7 @@ import { request } from "@/api/client";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
 import { NAV_GROUPS } from "@/layout/nav";
-import { ORG_ROLE_LABEL, PERMISSION_LABEL } from "@/lib/labels";
+import { avisoDoPapel, ORG_ROLE_LABEL, PERMISSION_LABEL } from "@/lib/labels";
 import "@/components/form.css";
 import "./pessoas-acessos.css";
 
@@ -390,6 +390,11 @@ export function PessoasEAcessos() {
                                 </label>
                               )}
                             </div>
+                            {avisoDoPapel(editing.org_role) && editing.org_role !== p.org_role && (
+                              <p className="form-hint is-warning" role="note">
+                                {avisoDoPapel(editing.org_role)}
+                              </p>
+                            )}
                             {/* Dizia que o papel na conta vencia o da empresa.
                                 Agora é um só, e é este. [OB-3] [S1-C] */}
                             <p className="muted">
