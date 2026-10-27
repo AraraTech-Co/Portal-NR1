@@ -15,6 +15,7 @@ import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
+import { canalPath, canalUrl } from "@/lib/canal";
 import { formatDay, ORG_ROLE_LABEL } from "@/lib/labels";
 import "@/components/data-table.css";
 import "@/components/form.css";
@@ -70,6 +71,7 @@ export function AccountPage() {
   const [creating, setCreating] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [canalCopiado, setCanalCopiado] = useState(false);
 
   const [decideRoles, setDecideRoles] = useState<
     Record<
@@ -139,6 +141,15 @@ export function AccountPage() {
       cancelled = true;
     };
   }, [reload, user?.account.id]);
+
+  /*
+    Um lugar só: o endereço mostrado e o endereço copiado têm de ser o mesmo,
+    e é a empresa da sessão que abre o canal — não a conta, que está ali ao
+    lado na mesma tela. [CB-63]
+  */
+  const canalDaEmpresa = user
+    ? canalUrl(window.location.origin, user.organization.id)
+    : "";
 
   async function onSwitch(accountId: string) {
     if (accountId === user?.account.id) return;
@@ -220,7 +231,7 @@ export function AccountPage() {
     <div>
       <PageHeader
         title="Conta e usuários"
-        description="Sessão, contas acessíveis, links de convite e pedidos de entrada."
+        description="Sessão, canal de denúncia, contas acessíveis, links de convite e pedidos de entrada."
       />
 
       {user && (
@@ -266,6 +277,62 @@ export function AccountPage() {
                 </tr>
               </tbody>
             </table>
+          </div>
+        </section>
+      )}
+
+      {user && (
+        <section className="form-section">
+          <h2>Canal de denúncia</h2>
+          <p className="muted">
+            {/*
+              O canal existia e o endereço não aparecia em tela nenhuma: o
+              identificador da empresa é um código de 36 caracteres, e a
+              empresa tinha de pedir o link ao suporte para divulgá-lo.
+              [CB-63]
+            */}
+            Este é o endereço do canal de {user.organization.name}. Ele abre
+            sem login: quem denuncia não precisa ter conta no portal, e o
+            relato anônimo não guarda quem escreveu. Divulgue onde a sua gente
+            vê — quadro de avisos, contracheque, intranet, contrato de
+            terceiro.
+          </p>
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "0.75rem",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "0.7rem 0.8rem",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius)",
+              background: "var(--muted)",
+            }}
+          >
+            <code style={{ wordBreak: "break-all", fontSize: "0.85rem" }}>
+              {canalDaEmpresa}
+            </code>
+            <div className="form-actions">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  void navigator.clipboard
+                    .writeText(canalDaEmpresa)
+                    .then(() => setCanalCopiado(true));
+                }}
+              >
+                {canalCopiado ? "Copiado" : "Copiar"}
+              </Button>
+              <Link
+                to={canalPath(user.organization.id)}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Abrir o canal
+              </Link>
+            </div>
           </div>
         </section>
       )}
