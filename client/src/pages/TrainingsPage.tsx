@@ -9,8 +9,12 @@ import {
 import { useAuth } from "@/auth/AuthContext";
 import { Chip } from "@/components/Chip";
 import { ListShell } from "@/components/ListShell";
-import { TRAINING_KIND_LABEL } from "@/api/trainings";
+import {
+  TRAINING_KIND_LABEL,
+  type DadosDoCertificadoDoTreinamento,
+} from "@/api/trainings";
 import { NewTrainingForm } from "./NewTrainingForm";
+import { TrainingCertificateData } from "./TrainingCertificateData";
 import { TrainingSessions } from "./TrainingSessions";
 import { ENROLLMENT_STATUS_LABEL, formatDay } from "@/lib/labels";
 import { isReadOnlyPermission, useModuleAccess } from "@/lib/module-access";
@@ -107,6 +111,26 @@ export function TrainingsPage() {
   const [openId, setOpenId] = useState<string | null>(null);
   // Registrar turma conclui gente: a lista de quem fez precisa recarregar.
   const [reloadKey, setReloadKey] = useState(0);
+  /* O que foi salvo agora, por treinamento: a lista não se recarrega. [B3-3-G] */
+  const [dadosSalvos, setDadosSalvos] = useState<
+    Record<string, DadosDoCertificadoDoTreinamento>
+  >({});
+  function dadosDo(r: {
+    id: string;
+    instructorName: string | null;
+    instructorQualification: string | null;
+    technicalResponsibleName: string | null;
+    technicalResponsibleQualification: string | null;
+  }): DadosDoCertificadoDoTreinamento {
+    return (
+      dadosSalvos[r.id] ?? {
+        instructor_name: r.instructorName,
+        instructor_qualification: r.instructorQualification,
+        technical_responsible_name: r.technicalResponsibleName,
+        technical_responsible_qualification: r.technicalResponsibleQualification,
+      }
+    );
+  }
 
   return (
     <ListShell
@@ -187,11 +211,21 @@ export function TrainingsPage() {
                     <tr className="training-expand">
                       <td colSpan={5}>
                         <div className="training-panel">
+                          <TrainingCertificateData
+                            trainingId={r.id}
+                            dados={dadosDo(r)}
+                            canEdit={canWrite}
+                            onSaved={(d) =>
+                              setDadosSalvos((atual) => ({ ...atual, [r.id]: d }))
+                            }
+                          />
                           <Enrollments trainingId={r.id} reloadKey={reloadKey} />
                           <TrainingSessions
                             trainingId={r.id}
                             kind={r.kind}
                             defaultMinutes={r.durationMinutes}
+                            defaultInstructor={dadosDo(r).instructor_name ?? ""}
+                            defaultQualification={dadosDo(r).instructor_qualification ?? ""}
                             canRecord={canWrite}
                             onRecorded={() => setReloadKey((n) => n + 1)}
                           />

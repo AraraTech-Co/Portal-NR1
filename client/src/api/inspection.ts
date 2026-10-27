@@ -106,6 +106,7 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   "contractor.risks_informed": "Riscos informados ao terceiro",
   "training.create": "Treinamento criado",
   "training.archive": "Treinamento arquivado",
+  "training.certificate_data": "Dados do certificado do treinamento alterados",
   "summon.create": "Convocação criada",
   "occupational_exam.create": "Exame ocupacional registrado",
   "employee_profile.create": "Ficha de colaborador criada",

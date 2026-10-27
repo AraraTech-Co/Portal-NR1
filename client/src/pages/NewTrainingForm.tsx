@@ -24,6 +24,11 @@ export function NewTrainingForm({ onCreated }: { onCreated: () => void }) {
   const [duration, setDuration] = useState("60");
   const [passingScore, setPassingScore] = useState("70");
   const [validity, setValidity] = useState("");
+  /* O que o certificado pede (NR-1 1.7.1.1). [B3-3-G] */
+  const [instrutor, setInstrutor] = useState("");
+  const [qualificacaoInstrutor, setQualificacaoInstrutor] = useState("");
+  const [responsavelTecnico, setResponsavelTecnico] = useState("");
+  const [qualificacaoResponsavel, setQualificacaoResponsavel] = useState("");
   const [perguntas, setPerguntas] = useState<Pergunta[]>([]);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -74,10 +79,18 @@ export function NewTrainingForm({ onCreated }: { onCreated: () => void }) {
         duration_minutes: Number(duration) || 60,
         passing_score: nota,
         validity_months: validity ? Number(validity) : undefined,
+        instructor_name: instrutor.trim() || undefined,
+        instructor_qualification: qualificacaoInstrutor.trim() || undefined,
+        technical_responsible_name: responsavelTecnico.trim() || undefined,
+        technical_responsible_qualification: qualificacaoResponsavel.trim() || undefined,
         questions: online && validas.length > 0 ? validas : undefined,
       });
       setTitle("");
       setSummary("");
+      setInstrutor("");
+      setQualificacaoInstrutor("");
+      setResponsavelTecnico("");
+      setQualificacaoResponsavel("");
       setPerguntas([]);
       setAberto(false);
       onCreated();
@@ -118,7 +131,7 @@ export function NewTrainingForm({ onCreated }: { onCreated: () => void }) {
         </label>
       </div>
       <label className="form-field">
-        Conteúdo
+        Conteúdo programático
         <textarea
           value={summary}
           onChange={(e) => setSummary(e.target.value)}
@@ -160,6 +173,46 @@ export function NewTrainingForm({ onCreated }: { onCreated: () => void }) {
           />
         </label>
       </div>
+
+      <fieldset className="form-grid">
+        <legend>Para o certificado</legend>
+        <p className="form-hint">
+          A NR-1 (1.7.1.1) pede no certificado o nome e a qualificação de quem
+          ministra e a assinatura do responsável técnico.
+          {online
+            ? " No curso a distância, quem ministra sai daqui."
+            : " No presencial, quem deu a aula é o da turma; o nome daqui vem sugerido."}
+        </p>
+        <div className="form-grid cols-2">
+          <label className="form-field">
+            Quem ministra
+            <input value={instrutor} onChange={(e) => setInstrutor(e.target.value)} />
+          </label>
+          <label className="form-field">
+            Qualificação de quem ministra
+            <input
+              value={qualificacaoInstrutor}
+              onChange={(e) => setQualificacaoInstrutor(e.target.value)}
+              placeholder="Ex.: Técnico em Segurança do Trabalho"
+            />
+          </label>
+          <label className="form-field">
+            Responsável técnico
+            <input
+              value={responsavelTecnico}
+              onChange={(e) => setResponsavelTecnico(e.target.value)}
+            />
+          </label>
+          <label className="form-field">
+            Qualificação do responsável técnico
+            <input
+              value={qualificacaoResponsavel}
+              onChange={(e) => setQualificacaoResponsavel(e.target.value)}
+              placeholder="Ex.: Engenheiro de Segurança do Trabalho"
+            />
+          </label>
+        </div>
+      </fieldset>
 
       {online && (
         <section>

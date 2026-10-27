@@ -74,16 +74,81 @@
   gap: 0.6rem;
 }
 
+.cert-sub {
+  display: block;
+  font-size: 0.8rem;
+  color: #6a6459;
+}
+
+/* As duas assinaturas do 1.7.1.1, com linha para assinar no papel. [B3-3-G] */
+.cert-signatures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 2.4rem 2rem;
+  margin-top: 3.2rem;
+}
+
+.cert-signature {
+  display: grid;
+  gap: 0.2rem;
+  font-size: 0.9rem;
+}
+
+.cert-signature-line {
+  display: block;
+  border-top: 1px solid #141414;
+  margin-bottom: 0.35rem;
+}
+
+.cert-pendente {
+  max-width: 48rem;
+  margin: 1rem auto 0;
+  padding: 0.7rem 0.9rem;
+  border-left: 3px solid var(--sem-warning-bd);
+  background: var(--sem-warning);
+  color: var(--sem-warning-fg);
+  font-size: 0.88rem;
+}
+
+/*
+  No papel, só o certificado. A regra escondia ".app-sidebar", que não
+  existe — a barra é ".sidebar" —, e a moldura da tela, com altura mínima de
+  uma tela inteira, empurrava uma segunda página em branco. [B3-3-G]
+*/
 @media print {
+  @page {
+    size: A4;
+    margin: 16mm 14mm;
+  }
+
   .cert-actions,
-  .app-sidebar,
-  .app-topbar {
+  .cert-pendente,
+  .sidebar,
+  .sidebar-desktop,
+  .sidebar-drawer,
+  .app-topbar,
+  .readonly-banner {
     display: none !important;
   }
+
+  .app-shell,
+  .app-main,
+  .app-content {
+    display: block !important;
+    min-height: 0 !important;
+    height: auto !important;
+    background: #fff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: none !important;
+  }
+
   .cert-sheet {
     border: none;
     padding: 0;
     max-width: none;
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 }
 
