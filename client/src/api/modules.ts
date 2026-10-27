@@ -139,6 +139,11 @@ export const fetchReferrals = () =>
       position: string;
       status: string;
       createdAt: string;
+      /* Quem decide a indicação precisa do contato e do motivo: sem eles a
+         tela mostrava um nome e uma vaga, e nada com que agir. [CB-64] */
+      email: string | null;
+      phone: string | null;
+      note: string | null;
     }>;
   }>("/api/referrals").then((d) => d.referrals);
 
@@ -309,7 +314,14 @@ export const fetchIdeas = () =>
       title: string;
       status: string;
       createdAt: string;
-      author: { name: string };
+      author: { id: string; name: string };
+      /* A ideia só aparecia pelo título, e a resposta não aparecia: quem
+         respondia não lia o que foi proposto, e quem propôs não via a
+         resposta. [CB-64] */
+      description: string;
+      decisionNote: string | null;
+      decidedAt: string | null;
+      decidedBy: { id: string; name: string } | null;
     }>;
   }>("/api/ideas").then((d) => d.ideas);
 
@@ -422,6 +434,36 @@ export const createIdea = (input: { title: string; description: string }) =>
     method: "POST",
     body: JSON.stringify(input),
   });
+
+/**
+ * Responder à ideia: pôr em análise, implantar ou recusar.
+ *
+ * A rota existe desde que o módulo nasceu; tela nenhuma a usava, e a ideia
+ * enviada ficava em "Nova" para sempre — enquanto o Início contava "ideias
+ * sem resposta" que não havia como responder. [CB-64]
+ */
+export const decideIdea = (
+  id: string,
+  input: { status: string; decision_note?: string },
+) =>
+  request<{ idea: { id: string; status: string } }>(
+    `/api/ideas/${encodeURIComponent(id)}/decide`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+
+/** Andamento da indicação: em processo, contratado ou descartada. [CB-64] */
+export const updateReferralStatus = (id: string, status: string) =>
+  request<{ referral: { id: string; status: string } }>(
+    `/api/referrals/${encodeURIComponent(id)}`,
+    { method: "PATCH", body: JSON.stringify({ status }) },
+  );
+
+/** "Já fiz este passo" — o progresso é de quem marca. [CB-64] */
+export const completeOnboardingStep = (id: string) =>
+  request<{ progress: { stepId: string; doneAt: string } }>(
+    `/api/onboarding-steps/${encodeURIComponent(id)}/complete`,
+    { method: "POST" },
+  );
 
 /** Registro de participação dos trabalhadores — NR-1 1.5.3.3. [CB-45] [B3-4-I] */
 export const createParticipation = (input: {

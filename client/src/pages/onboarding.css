@@ -1,0 +1,20 @@
+/*
+  No celular, o botão de marcar o passo ficava fora da tela: a tabela rolava
+  de lado e nada dizia isso. Quem chega abre o roteiro justamente no celular.
+  Em tela estreita, a ordem e a coluna da descrição saem — a lista já está em
+  ordem, e a descrição entra embaixo do título. [CB-64]
+*/
+.onboarding-descricao-embaixo {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .onboarding-table .onboarding-col-ordem,
+  .onboarding-table .onboarding-col-descricao {
+    display: none;
+  }
+
+  .onboarding-descricao-embaixo {
+    display: block;
+  }
+}
