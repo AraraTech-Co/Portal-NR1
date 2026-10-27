@@ -1,10 +1,12 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
+  fetchServiceOrder,
   fetchServiceOrders,
   issueServiceOrder,
   type JobRoleServiceOrder,
 } from "@/api/service-orders";
+import { useTextoDaOrdem } from "@/lib/useTextoDaOrdem";
 import { fetchEstablishments, type Establishment } from "@/api/operation";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
@@ -15,13 +17,6 @@ import { useModuleAccess } from "@/lib/module-access";
 import "@/components/data-table.css";
 import "@/components/form.css";
 import "./service-orders.css";
-
-const DEFAULT_DUTIES = `Cumprir as medidas de prevenção indicadas nesta ordem de serviço.
-Usar e conservar os equipamentos de proteção fornecidos pela empresa.
-Comunicar ao supervisor qualquer situação de risco, acidente ou quase-acidente.
-Colaborar com a organização na aplicação das normas de segurança e saúde.`;
-
-const DEFAULT_EMERGENCY = `Em caso de acidente ou emergência: interromper a tarefa, acionar o supervisor e seguir o plano de emergência do estabelecimento.`;
 
 function formatDateTime(value: string): string {
   const d = new Date(value);
@@ -38,8 +33,6 @@ function IssueForm({
   onIssued: () => Promise<void>;
 }) {
   const [jobRoleId, setJobRoleId] = useState("");
-  const [duties, setDuties] = useState(DEFAULT_DUTIES);
-  const [emergency, setEmergency] = useState(DEFAULT_EMERGENCY);
   const [responsibleName, setResponsibleName] = useState("");
   const [responsibleRole, setResponsibleRole] = useState("");
   const [saving, setSaving] = useState(false);
@@ -48,11 +41,31 @@ function IssueForm({
     null,
   );
 
+  /*
+    Trocar a unidade troca a lista: a função escolhida que saiu dela não
+    pode continuar valendo sem aparecer no campo. [B3-4-E]
+  */
   useEffect(() => {
-    if (!jobRoleId && roles[0]) setJobRoleId(roles[0].id);
+    const naLista = roles.some((r) => r.id === jobRoleId);
+    if (!naLista && roles[0]) setJobRoleId(roles[0].id);
   }, [roles, jobRoleId]);
 
   const escolhida = roles.find((r) => r.id === jobRoleId);
+  const vigenteId = escolhida?.current?.id ?? null;
+  const funcaoNaLista = escolhida !== undefined;
+
+  /* O texto começa do que a ordem vigente pede; o padrão, só na primeira. [B3-4-E] */
+  const {
+    duties,
+    setDuties,
+    emergency,
+    setEmergency,
+    fromVersion,
+    trazendoTexto,
+    erroTexto,
+  } = useTextoDaOrdem(jobRoleId, vigenteId, funcaoNaLista, (id) =>
+    fetchServiceOrder(id).then((d) => d.service_order),
+  );
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -134,21 +147,31 @@ function IssueForm({
           <textarea
             value={duties}
             onChange={(e) => setDuties(e.target.value)}
-            disabled={saving}
+            disabled={saving || trazendoTexto}
             rows={5}
             required
           />
           <span className="form-hint">
+            {trazendoTexto
+              ? "Trazendo o texto da ordem vigente…"
+              : fromVersion !== null
+                ? `Texto da v${fromVersion}, a vigente: mude só o que mudou.`
+                : "Texto padrão: é a primeira ordem desta função."}{" "}
             É o que a ordem de serviço dá a conhecer. Escreva na linguagem de
             quem faz a tarefa.
           </span>
+          {erroTexto && (
+            <span className="form-error" role="alert">
+              {erroTexto}
+            </span>
+          )}
         </label>
         <label className="form-field">
           O que fazer em emergência (opcional)
           <textarea
             value={emergency}
             onChange={(e) => setEmergency(e.target.value)}
-            disabled={saving}
+            disabled={saving || trazendoTexto}
             rows={3}
           />
         </label>
@@ -175,7 +198,7 @@ function IssueForm({
           </p>
         )}
         <div className="form-actions">
-          <Button type="submit" disabled={saving}>
+          <Button type="submit" disabled={saving || trazendoTexto}>
             {saving ? "Emitindo…" : "Emitir ordem de serviço"}
           </Button>
         </div>
