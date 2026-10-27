@@ -123,7 +123,7 @@ export function DocumentsPage() {
       <PageHeader
         title="Documentos do PGR"
         /* "append-only" não é palavra de quem usa a tela. [S2-K] */
-        description="Os três documentos exigidos: inventário de riscos, plano de ação e critérios do GRO. Cada emissão cria uma versão nova — nenhuma versão emitida é apagada ou alterada."
+        description="Os dois documentos que a NR-1 pede (1.5.7.1): inventário de riscos e plano de ação. Cada emissão cria uma versão nova — nenhuma versão emitida é apagada ou alterada."
       />
 
       {missing.length > 0 && (
@@ -140,8 +140,12 @@ export function DocumentsPage() {
       <section className="form-section">
         <h2>Documentos obrigatórios</h2>
         <p className="muted">
-          O MTE lista três: inventário de riscos, plano de ação e critérios do
-          GRO. Cada emissão gera uma nova versão assinada.
+          {/* A norma pede dois documentos; os critérios são conteúdo do
+              inventário, e o portal os cobrava como terceiro. [B3-4-J] */}
+          A NR-1 pede no mínimo dois (1.5.7.1): o inventário de riscos e o
+          plano de ação. Os critérios de avaliação e de decisão vão dentro do
+          inventário (1.5.7.3.2 "f"). Cada emissão gera uma nova versão
+          assinada.
         </p>
         <div className="data-table-wrap">
           <table className="data-table">
@@ -157,7 +161,7 @@ export function DocumentsPage() {
             <tbody>
               {(requiredTypes.length
                 ? requiredTypes
-                : Object.keys(PGR_TYPE_LABEL)
+                : ["INVENTORY", "ACTION_PLAN"]
               ).map((t) => {
                 const latest = latestByType.get(t);
                 return (
@@ -210,8 +214,8 @@ export function DocumentsPage() {
       <section className="form-section">
         <h2>Emitir nova versão</h2>
         <p className="muted">
-          A emissão congela o snapshot atual (inventário vivo, ações ou
-          critérios) com responsável e declaração de assinatura.
+          A emissão congela o retrato atual (o inventário, com os critérios de
+          avaliação, ou as ações) com responsável e declaração de assinatura.
         </p>
         <form className="form-grid" onSubmit={onIssue}>
           <div className="form-grid cols-2">
@@ -224,7 +228,7 @@ export function DocumentsPage() {
               >
                 {(requiredTypes.length
                   ? requiredTypes
-                  : Object.keys(PGR_TYPE_LABEL)
+                  : ["INVENTORY", "ACTION_PLAN"]
                 ).map((t) => (
                   <option key={t} value={t}>
                     {PGR_TYPE_LABEL[t] ?? t}
@@ -330,7 +334,7 @@ export function DocumentsPage() {
           description={
             canWrite
               ? "Use o formulário acima para gerar a primeira versão assinada."
-              : "Quando a empresa emitir o inventário, o plano de ação ou os critérios do GRO, eles aparecem aqui."
+              : "Quando a empresa emitir o inventário ou o plano de ação, eles aparecem aqui."
           }
         />
       )}

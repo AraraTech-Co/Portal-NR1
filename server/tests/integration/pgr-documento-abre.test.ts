@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import request from "supertest";
 import type { Express } from "express";
 import { createApp } from "../../src/app";
+import prisma from "../../src/model/prisma";
 
 /**
  * O documento do PGR emitido abre inteiro, para imprimir e salvar. [S2-C]
@@ -55,17 +56,42 @@ describe("documento do PGR emitido abre [S2-C]", () => {
     expect(doc.signatureStatement).toBeTruthy();
   });
 
-  it("plano de ação e critérios também abrem", async () => {
-    for (const type of ["ACTION_PLAN", "CRITERIA"]) {
-      const emitido = await emitir(type);
-      const res = await request(app).get(`/api/pgr-documents/${emitido.id}`).set(as(supervisor));
+  it("o plano de ação também abre", async () => {
+    const emitido = await emitir("ACTION_PLAN");
+    const res = await request(app).get(`/api/pgr-documents/${emitido.id}`).set(as(supervisor));
+    expect(res.status).toBe(200);
+    expect(res.body.document.type).toBe("ACTION_PLAN");
+  });
+
+  /*
+    Os critérios não se emitem mais à parte — vão no inventário — mas os
+    emitidos antes continuam abrindo: histórico não se apaga. [B3-4-J]
+  */
+  it("os critérios emitidos antes continuam abrindo", async () => {
+    const qualquer = await emitir("INVENTORY");
+    const base = await prisma.pgrDocument.findUniqueOrThrow({ where: { id: qualquer.id } });
+    const antigo = await prisma.pgrDocument.create({
+      data: {
+        organizationId: base.organizationId,
+        type: "CRITERIA",
+        version: 1000 + Math.floor(Math.random() * 100000),
+        content: { generated_at: new Date().toISOString(), methodologies: [] },
+        issuedById: base.issuedById,
+        responsibleName: "Técnico Responsável",
+        signatureStatement: base.signatureStatement,
+      },
+    });
+    try {
+      const res = await request(app).get(`/api/pgr-documents/${antigo.id}`).set(as(supervisor));
       expect(res.status).toBe(200);
-      expect(res.body.document.type).toBe(type);
+      expect(res.body.document.type).toBe("CRITERIA");
+    } finally {
+      await prisma.pgrDocument.delete({ where: { id: antigo.id } });
     }
   });
 
   it("outra organização não acha o documento; sem login, nada", async () => {
-    const emitido = await emitir("CRITERIA");
+    const emitido = await emitir("ACTION_PLAN");
     const outra = await request(app).get(`/api/pgr-documents/${emitido.id}`).set(as(outraOrg));
     expect(outra.status).toBe(404);
     const anonimo = await request(app).get(`/api/pgr-documents/${emitido.id}`);

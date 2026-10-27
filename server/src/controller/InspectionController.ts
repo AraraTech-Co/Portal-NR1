@@ -368,7 +368,7 @@ class InspectionController {
 
       const checks: Check[] = [];
 
-      // 1. Os três documentos do PGR (1.5.7.2) — e quem assinou cada um.
+      // 1. Os dois documentos do PGR (1.5.7.1) — e quem assinou cada um. [B3-4-J]
       const porTipo = new Map<string, (typeof documentos)[number]>();
       for (const d of documentos) {
         const atual = porTipo.get(d.type);
@@ -391,7 +391,7 @@ class InspectionController {
         check(
           "documentos",
           "Documentos do PGR",
-          "NR-1 1.5.7.2: inventário de riscos, plano de ação e critérios, datados e assinados.",
+          "NR-1 1.5.7.1: inventário de riscos (com os critérios de avaliação, 1.5.7.3.2 \"f\") e plano de ação, datados e assinados.",
           REQUIRED_PGR_DOCUMENTS.map((tipo) => {
             const doc = porTipo.get(tipo);
             const mudou = doc ? (mudancasDesde.get(doc.id) ?? 0) : 0;

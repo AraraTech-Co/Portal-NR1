@@ -16,12 +16,12 @@ async function login(app: Express, loginId: string) {
 }
 
 describe("compliance constants", () => {
-  it("requires the three PGR documents", () => {
-    expect([...REQUIRED_PGR_DOCUMENTS]).toEqual([
-      "INVENTORY",
-      "ACTION_PLAN",
-      "CRITERIA",
-    ]);
+  /*
+    A NR-1 pede dois documentos (1.5.7.1); os critérios são conteúdo do
+    inventário (1.5.7.3.2 "f"). [B3-4-J]
+  */
+  it("requires the two PGR documents", () => {
+    expect([...REQUIRED_PGR_DOCUMENTS]).toEqual(["INVENTORY", "ACTION_PLAN"]);
   });
 });
 
@@ -43,14 +43,14 @@ describe("PGR documents + inventory + change events", () => {
     expect(res.body.inventory.items[0]).toHaveProperty("exposed_workers_count");
   });
 
-  it("issues INVENTORY, ACTION_PLAN and CRITERIA as append-only versions", async () => {
+  it("issues INVENTORY and ACTION_PLAN as append-only versions", async () => {
     for (const type of REQUIRED_PGR_DOCUMENTS) {
       const issued = await request(app)
         .post("/api/pgr-documents")
         .set("Authorization", `Bearer ${token}`)
         .send({
           type,
-          establishment_id: type === "CRITERIA" ? null : EST_ID,
+          establishment_id: EST_ID,
           responsible_name: "Eng. Responsável Demo",
           responsible_role: "SESMT",
         });
@@ -66,7 +66,7 @@ describe("PGR documents + inventory + change events", () => {
       .set("Authorization", `Bearer ${token}`);
     expect(list.status).toBe(200);
     expect(list.body.required_types).toEqual([...REQUIRED_PGR_DOCUMENTS]);
-    expect(list.body.documents.length).toBeGreaterThanOrEqual(3);
+    expect(list.body.documents.length).toBeGreaterThanOrEqual(2);
 
     const again = await request(app)
       .post("/api/pgr-documents")

@@ -407,8 +407,24 @@ export function DocumentViewPage() {
 
         <div className="doc-body">
           {doc.type === "INVENTORY" && <Inventory content={doc.content as InventoryContent} />}
+          {/* Os critérios de avaliação e de decisão vão no inventário (1.5.7.3.2 "f"). [B3-4-J] */}
+          {doc.type === "INVENTORY" && (doc.content as InventoryContent).criteria && (
+            <section className="doc-criterios">
+              <h2>Critérios de avaliação e de tomada de decisão</h2>
+              <Criteria content={(doc.content as InventoryContent).criteria!} />
+            </section>
+          )}
           {doc.type === "ACTION_PLAN" && <ActionPlan content={doc.content as ActionPlanContent} />}
-          {doc.type === "CRITERIA" && <Criteria content={doc.content as CriteriaContent} />}
+          {doc.type === "CRITERIA" && (
+            <>
+              {/* Histórico não se apaga: o documento antigo abre, e diz o que mudou. [B3-4-J] */}
+              <p className="doc-sub doc-criterios-nota">
+                Emitido como documento à parte. Hoje os critérios de avaliação
+                vão dentro do inventário de riscos (NR-1 1.5.7.3.2 "f").
+              </p>
+              <Criteria content={doc.content as CriteriaContent} />
+            </>
+          )}
         </div>
 
         <footer className="doc-signature">

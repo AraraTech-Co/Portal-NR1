@@ -8,11 +8,11 @@ export const PGR_TYPE_LABEL: Record<string, string> = {
 
 export const PGR_TYPE_HINT: Record<string, string> = {
   INVENTORY:
-    "Retrato dos riscos: processo, atividade, perigo, exposição e classificação.",
+    "Retrato dos riscos: processo, atividade, perigo, exposição e classificação — e os critérios de avaliação e de decisão (1.5.7.3.2 \"f\").",
   ACTION_PLAN:
     "O que será feito, por quem, até quando e como se afere a eficácia.",
   CRITERIA:
-    "Gradações de severidade/probabilidade e critérios de decisão do GRO.",
+    "Emitido à parte antes de os critérios irem para dentro do inventário.",
 };
 
 export type PgrDocument = {
@@ -65,6 +65,8 @@ export async function issuePgrDocument(input: {
 
 export type InventoryContent = {
   generated_at: string;
+  /** Os critérios de avaliação e de decisão (1.5.7.3.2 "f"). Inventário emitido antes não os tem. [B3-4-J] */
+  criteria?: CriteriaContent;
   items: {
     hazard_id: string;
     description: string;

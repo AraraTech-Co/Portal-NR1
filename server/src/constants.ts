@@ -70,14 +70,18 @@ export const EVIDENCE_ALLOWED_MIME: Readonly<Record<string, string>> = {
 /**
  * Tipos de documento PGR que a organização precisa emitir.
  * Append-only (versão++); emissão exige responsável e declaração de assinatura.
+ *
+ * A NR-1 pede, no mínimo, dois documentos (1.5.7.1): o inventário e o plano
+ * de ação. Os critérios de avaliação e de tomada de decisão são conteúdo do
+ * inventário (1.5.7.3.2 "f"), não um terceiro documento — e o portal os
+ * cobrava como se fossem. Os critérios emitidos à parte continuam abrindo:
+ * histórico não se apaga. [B3-4-J]
  */
 export const REQUIRED_PGR_DOCUMENTS = [
-  /** Inventário de riscos — espelho vivo das avaliações validadas. */
+  /** Inventário de riscos — com os critérios de avaliação dentro. */
   PgrDocumentType.INVENTORY,
   /** Plano de ação — ações abertas/em andamento vinculadas a riscos. */
   PgrDocumentType.ACTION_PLAN,
-  /** Critérios de avaliação — metodologia adotada pela organização. */
-  PgrDocumentType.CRITERIA,
 ] as const;
 
 export type RequiredPgrDocument = (typeof REQUIRED_PGR_DOCUMENTS)[number];
