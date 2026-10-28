@@ -10,6 +10,13 @@ import {
 import { useAuth } from "@/auth/AuthContext";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
+import {
+  avisoAoGravar,
+  avisoAoValidar,
+  painelDaAvaliacao,
+  rotuloDeGravar,
+  textoDaPrevia,
+} from "@/lib/avaliacao";
 import { formatDay, RISK_LEVEL_LABEL } from "@/lib/labels";
 import "@/components/form.css";
 import "./assess-risk.css";
@@ -62,6 +69,14 @@ export function AssessRiskPanel({
   const [controlsConsidered, setControlsConsidered] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /*
+    Depois de validar, a tela não dizia nada, e logo abaixo aparecia o
+    formulário vazio com "Reavaliar": quem validou não tinha certeza de que
+    tinha validado. Agora a tela confirma, e a reavaliação fica atrás de um
+    botão. [B3-2-E]
+  */
+  const [aviso, setAviso] = useState<string | null>(null);
+  const [reavaliando, setReavaliando] = useState(false);
 
   const reload = useCallback(async () => {
     const d = await fetchAssessments(riskId);
@@ -96,6 +111,8 @@ export function AssessRiskPanel({
     }
     setBusy(true);
     setError(null);
+    setAviso(null);
+    const eraReavaliacao = validated != null;
     try {
       await createAssessment({
         risk_id: riskId,
@@ -111,6 +128,8 @@ export function AssessRiskPanel({
       setSeverityReason("");
       setProbabilityReason("");
       setControlsConsidered("");
+      setReavaliando(false);
+      setAviso(avisoAoGravar(eraReavaliacao));
       await reload();
       await onChanged?.();
     } catch (err) {
@@ -120,11 +139,13 @@ export function AssessRiskPanel({
     }
   }
 
-  async function onValidate(id: string) {
+  async function onValidate(avaliacao: Assessment) {
     setBusy(true);
     setError(null);
+    setAviso(null);
     try {
-      await validateAssessment(id);
+      await validateAssessment(avaliacao.id);
+      setAviso(avisoAoValidar(levelName(version, avaliacao.resultingLevel)));
       await reload();
       await onChanged?.();
     } catch (err) {
@@ -137,11 +158,25 @@ export function AssessRiskPanel({
   const draft = assessments?.find((a) => a.status === "DRAFT") ?? null;
   const validated = assessments?.find((a) => a.status === "VALIDATED") ?? null;
 
+  const painel = painelDaAvaliacao({
+    podeEscrever: canWrite,
+    temMetodologia: version != null,
+    temRascunho: draft != null,
+    temValidada: validated != null,
+    reavaliando,
+  });
+  const previa = textoDaPrevia(validated ? levelName(version, validated.resultingLevel) : null);
+
   return (
     <div className="assess">
       {error && (
         <p className="form-error" role="alert">
           {error}
+        </p>
+      )}
+      {aviso && (
+        <p className="assess-ok" role="status">
+          {aviso}
         </p>
       )}
 
@@ -172,14 +207,29 @@ export function AssessRiskPanel({
             (draft.assessorId === user?.id ? (
               <p className="muted">Você fez esta avaliação. Outra pessoa precisa validar.</p>
             ) : (
-              <Button type="button" disabled={busy} onClick={() => void onValidate(draft.id)}>
+              <Button type="button" disabled={busy} onClick={() => void onValidate(draft)}>
                 {busy ? "Validando…" : "Validar avaliação"}
               </Button>
             ))}
         </div>
       )}
 
-      {canWrite && !draft && version && (
+      {painel.botaoReavaliar && (
+        <div>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => {
+              setAviso(null);
+              setReavaliando(true);
+            }}
+          >
+            Fazer uma reavaliação
+          </Button>
+        </div>
+      )}
+
+      {painel.formulario && version && (
         <form className="form-grid" onSubmit={onSubmit}>
           <p className="muted assess-method">
             {methodologyName} · versão {version.version}
@@ -221,8 +271,9 @@ export function AssessRiskPanel({
             <p className="assess-preview">
               {preview ? (
                 <>
-                  Nível pela matriz:{" "}
+                  {previa.antes}{" "}
                   <Chip tone={levelTone(preview)}>{levelName(version, preview)}</Chip>
+                  {previa.depois}
                 </>
               ) : (
                 <span className="form-error">
@@ -253,8 +304,13 @@ export function AssessRiskPanel({
           </label>
           <div className="form-actions">
             <Button type="submit" disabled={busy || !preview}>
-              {busy ? "Salvando…" : validated ? "Reavaliar" : "Avaliar risco"}
+              {rotuloDeGravar(validated != null, busy)}
             </Button>
+            {validated && (
+              <Button type="button" variant="ghost" onClick={() => setReavaliando(false)}>
+                Cancelar
+              </Button>
+            )}
           </div>
         </form>
       )}

@@ -50,12 +50,29 @@ export const HAZARD_ORIGIN_LABEL: Record<string, string> = {
   OTHER: "Outra",
 };
 
+/*
+  Na ordem da NR-1: eliminar, reduzir, proteção coletiva, administrativas,
+  EPI. "Engenharia" não dizia a quem é do chão de fábrica que ali entra a
+  proteção coletiva: a proteção da máquina foi registrada como EPI e saiu
+  assim no inventário e na ordem de serviço. [B3-2-D]
+*/
 export const CONTROL_TYPE_LABEL: Record<string, string> = {
   ELIMINATION: "Eliminação",
   SUBSTITUTION: "Substituição",
-  ENGINEERING: "Engenharia",
+  ENGINEERING: "Proteção coletiva / EPC",
   ADMINISTRATIVE: "Administrativa",
-  PPE: "EPI",
+  PPE: "Proteção individual / EPI",
+};
+
+/** Uma linha de exemplo para cada tipo de medida, mostrada ao escolher. [B3-2-D] */
+export const CONTROL_TYPE_EXAMPLE: Record<string, string> = {
+  ELIMINATION: "Tira o perigo do trabalho. Ex.: mudar o processo para não usar o solvente.",
+  SUBSTITUTION: "Troca por algo menos perigoso. Ex.: tinta à base de água no lugar da tinta com solvente.",
+  ENGINEERING:
+    "Protege todos de uma vez, na máquina ou no ambiente. Ex.: proteção móvel com intertravamento, exaustão, guarda-corpo.",
+  ADMINISTRATIVE:
+    "Regra, procedimento ou organização do trabalho. Ex.: permissão de trabalho, rodízio, sinalização, treinamento.",
+  PPE: "Equipamento que cada pessoa usa no corpo. Ex.: luva, protetor auricular, óculos de segurança.",
 };
 
 export const CONTROL_STATUS_LABEL: Record<string, string> = {
@@ -428,3 +445,6 @@ export const LEAVE_STATUS_LABEL: Record<string, string> = {
   REJECTED: "Recusado",
   CANCELLED: "Cancelado",
 };
+
+/** "Onde incomoda", na queixa ergonômica: o lugar do corpo, não a frase. O servidor recusa acima disto. [B3-3-D] */
+export const ONDE_INCOMODA_MAX = 60;

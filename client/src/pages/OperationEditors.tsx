@@ -2,6 +2,7 @@ import { FormEvent, useState } from "react";
 import {
   archiveActivity,
   archiveEstablishment,
+  fetchCanArchive,
   updateActivity,
   updateEstablishment,
   type Activity,
@@ -10,6 +11,7 @@ import {
 } from "@/api/operation";
 import { Button } from "@/components/Button";
 import { Dialog } from "@/components/Dialog";
+import { artigoDe, conferirEArquivar, type PodeArquivar } from "@/lib/arquivar";
 
 /** Ações de editar e arquivar ficam em componentes próprios. [S2-G] [S1-H] */
 
@@ -17,17 +19,6 @@ function formatCnpj(value: string | null): string | null {
   const digits = value?.replace(/\D/g, "") ?? "";
   if (digits.length !== 14) return value;
   return digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5");
-}
-
-/** Arquivar pede confirmação; o servidor recusa se ainda houver algo embaixo. */
-async function confirmArchive(what: string, run: () => Promise<unknown>): Promise<string | null> {
-  if (!window.confirm(`Arquivar ${what}? Ele some das listas, mas o histórico fica.`)) return null;
-  try {
-    await run();
-    return null;
-  } catch (err) {
-    return err instanceof Error ? err.message : "Falha ao arquivar";
-  }
 }
 
 /** Estabelecimento selecionado: CNPJ e endereço, editar e arquivar. [S1-H] */
@@ -77,9 +68,12 @@ export function EstablishmentCard({
   }
 
   async function onArchive() {
-    const failure = await confirmArchive(`o estabelecimento “${establishment.name}”`, () =>
-      archiveEstablishment(establishment.id),
-    );
+    const failure = await conferirEArquivar({
+      tipo: "establishment",
+      nome: establishment.name,
+      conferir: () => fetchCanArchive("establishments", establishment.id),
+      arquivar: () => archiveEstablishment(establishment.id),
+    });
     if (failure) setError(failure);
     else await onChanged();
   }
@@ -106,7 +100,7 @@ export function EstablishmentCard({
               Endereço
               <textarea value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Rua, número, bairro, cidade/UF" />
             </label>
-            {error && <p className="form-error">{error}</p>}
+            {error && <p className="form-error" role="alert">{error}</p>}
             <div className="form-actions">
               <Button type="submit" disabled={saving}>
                 {saving ? "Salvando…" : "Salvar"}
@@ -128,7 +122,7 @@ export function EstablishmentCard({
           <dd>{establishment.address ?? <span className="muted">não informado</span>}</dd>
         </div>
       </dl>
-      {error && <p className="form-error">{error}</p>}
+      {error && <p className="form-error" role="alert">{error}</p>}
       {canEdit && (
         <div className="op-row-actions">
           <Button type="button" variant="secondary" size="compact" onClick={start}>
@@ -145,16 +139,18 @@ export function EstablishmentCard({
 
 /** Renomear e arquivar algo que só tem nome (setor, função). */
 export function NameActions({
-  label,
+  tipo,
   name,
   canEdit,
   onRename,
+  onCheckArchive,
   onArchive,
 }: {
-  label: string;
+  tipo: "sector" | "job_role";
   name: string;
   canEdit: boolean;
   onRename: (name: string) => Promise<void>;
+  onCheckArchive: () => Promise<PodeArquivar>;
   onArchive: () => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
@@ -183,7 +179,12 @@ export function NameActions({
   }
 
   async function archive() {
-    const failure = await confirmArchive(`${label} “${name}”`, onArchive);
+    const failure = await conferirEArquivar({
+      tipo,
+      nome: name,
+      conferir: onCheckArchive,
+      arquivar: onArchive,
+    });
     if (failure) setError(failure);
   }
 
@@ -191,7 +192,7 @@ export function NameActions({
     <div className="op-name-actions">
       {editing ? (
         <form className="op-quick-row" onSubmit={onSave}>
-          <input value={value} onChange={(e) => setValue(e.target.value)} aria-label={`Novo nome de ${label}`} autoFocus />
+          <input value={value} onChange={(e) => setValue(e.target.value)} aria-label={`Novo nome de ${artigoDe(tipo)}`} autoFocus />
           <Button type="submit" variant="secondary" disabled={saving}>
             Salvar
           </Button>
@@ -218,7 +219,7 @@ export function NameActions({
           </Button>
         </div>
       )}
-      {error && <p className="form-error">{error}</p>}
+      {error && <p className="form-error" role="alert">{error}</p>}
     </div>
   );
 }
@@ -268,7 +269,12 @@ export function ActivityCard({
   }
 
   async function onArchive() {
-    const failure = await confirmArchive(`a atividade “${activity.name}”`, () => archiveActivity(activity.id));
+    const failure = await conferirEArquivar({
+      tipo: "activity",
+      nome: activity.name,
+      conferir: () => fetchCanArchive("activities", activity.id),
+      arquivar: () => archiveActivity(activity.id),
+    });
     if (failure) setError(failure);
     else await onChanged();
   }
@@ -302,7 +308,7 @@ export function ActivityCard({
             ))}
           </fieldset>
         )}
-        {error && <p className="form-error">{error}</p>}
+        {error && <p className="form-error" role="alert">{error}</p>}
         <div className="form-actions">
           <Button type="submit" disabled={saving}>
             {saving ? "Salvando…" : "Salvar"}
@@ -336,7 +342,7 @@ export function ActivityCard({
         <p className="form-error">Sem descrição — corrija para o inventário saber de onde vem o risco.</p>
       )}
       {jobNames.length > 0 && <p className="muted">Quem executa: {jobNames.join(", ")}</p>}
-      {error && <p className="form-error">{error}</p>}
+      {error && <p className="form-error" role="alert">{error}</p>}
       {canEdit && (
         <div className="op-row-actions">
           <Button

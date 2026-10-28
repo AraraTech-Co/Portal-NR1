@@ -21,16 +21,18 @@ import { resolveAccessUntil } from "../helper/access-period";
 import type { AuthRequest } from "../types/auth";
 
 function fail(res: Response, err: unknown) {
-  const e = err as { status?: number; message?: string };
-  res.status(e.status || 500).json({ message: e.message || "Erro interno." });
+  const e = err as { status?: number; message?: string; code?: string };
+  res
+    .status(e.status || 500)
+    .json({ message: e.message || "Erro interno.", ...(e.code ? { code: e.code } : {}) });
 }
 
 function blank(v?: string | null) {
   return v && v.trim() !== "" ? v.trim() : null;
 }
 
-function httpError(status: number, message: string): Error {
-  return Object.assign(new Error(message), { status });
+function httpError(status: number, message: string, code?: string): Error {
+  return Object.assign(new Error(message), { status, ...(code ? { code } : {}) });
 }
 
 /**
@@ -603,16 +605,18 @@ class AccountInviteController {
               organizationId: request.account.organizationId,
               registration,
             },
-            select: { id: true },
+            select: { user: { select: { name: true } } },
           });
           if (taken) {
+            /*
+              A matrícula é escolhida por quem aprova, que já vê a lista de
+              pessoas da empresa: a recusa diz de quem ela é, para que se
+              escolha outra. Quem só tem o link não chega a esta rota. [B3-1-A]
+            */
             throw httpError(
-              /*
-                Dizer que a matrícula existe entrega a lista de matrículas a
-                quem tiver o link. A pessoa certa resolve com o RH. [CB-17]
-              */
               409,
-              "Não foi possível concluir o cadastro com estes dados. Fale com o RH da empresa.",
+              `A matrícula ${registration} já é de ${taken.user.name}. Escolha outra matrícula para este pedido.`,
+              "REGISTRATION_TAKEN",
             );
           }
         }
