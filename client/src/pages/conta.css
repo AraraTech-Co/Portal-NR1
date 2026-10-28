@@ -1,0 +1,43 @@
+/* As partes de Conta e usuários. [B2-1-I] */
+.conta-partes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.25rem 0 1.25rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.conta-parte {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--foreground);
+  padding: 0.4rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.conta-parte:hover {
+  background: var(--secondary);
+}
+
+.conta-parte.is-ativa {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.conta-parte-conta {
+  min-width: 1.25rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: var(--sem-warning);
+  color: var(--sem-warning-fg);
+  font-size: 0.75rem;
+  text-align: center;
+}
