@@ -156,7 +156,7 @@ export function ErgonomicComplaints({ onEvaluated }: { onEvaluated?: () => void 
           <textarea
             value={oQue}
             onChange={(e) => setOQue(e.target.value)}
-            placeholder="Ex.: dói o ombro ao abastecer a prateleira de cima, no fim do turno."
+            placeholder="Ex.: dói o ombro ao fixar a peça na placa do torno, no fim do turno."
             required
           />
         </label>
@@ -255,7 +255,7 @@ export function ErgonomicComplaints({ onEvaluated }: { onEvaluated?: () => void 
                         <input
                           value={escopo}
                           onChange={(e) => setEscopo(e.target.value)}
-                          placeholder="Ex.: abastecimento da prateleira alta — reposição"
+                          placeholder="Ex.: fixação de peças pesadas no torno — usinagem"
                           required
                         />
                       </label>

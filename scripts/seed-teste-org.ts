@@ -36,7 +36,6 @@ import {
   ActionStatus,
 } from "@prisma/client";
 import bcrypt from "bcryptjs";
-import { createHash } from "crypto";
 import { orgRoleToAccountRole } from "../server/src/helper/auth";
 
 const prisma = new PrismaClient();
@@ -135,12 +134,38 @@ function accessUntil(role: Role): Date | null {
   return d;
 }
 
-function accessCodeHash(plain: string): string {
-  return createHash("sha256").update(plain).digest("hex");
-}
+/*
+  A fábrica de teste, e não uma loja: o portal é de NR-1 para a indústria, e
+  quem testa via exemplos de varejo em todas as telas. [OB-11]
+*/
+const SETOR = {
+  description: "Torneamento e fresagem de peças metálicas",
+  processDescription: "Usinagem CNC de peças sob encomenda",
+  environmentDescription: "Galpão industrial com ventilação natural e piso de concreto",
+};
+const PERIGO = {
+  description: "Projeção de cavaco e contato com a placa girando",
+  source: "Torno CNC",
+  consequences: "Corte, lesão nos olhos, esmagamento da mão",
+  exposedGroup: "Operadores de máquinas",
+};
+const EMERGENCIA = {
+  scenario: "Evacuação por incêndio — Fábrica Teste",
+  firstAidMeans: "Kit de primeiros socorros e lava-olhos na usinagem",
+  responsibles: "Supervisor de produção",
+  evacuationPlan: "Saída pelo portão lateral → pátio de estacionamento",
+};
+
+/*
+  A consulta da denúncia compara o código com bcrypt, e o protocolo segue o
+  formato que o portal gera (CX- e quatro dígitos). Gravado em SHA-256, como
+  era, o exemplo nunca podia ser acompanhado. [OB-11]
+*/
+const DENUNCIA_DE_EXEMPLO = { protocolo: "CX-0001", codigo: "ACESSO-TESTE" };
 
 async function main() {
   const passwordHash = await bcrypt.hash(PASSWORD, 10);
+  const codigoDaDenuncia = await bcrypt.hash(DENUNCIA_DE_EXEMPLO.codigo, 10);
 
   const org = await prisma.organization.upsert({
     where: { id: ORG_ID },
@@ -285,11 +310,11 @@ async function main() {
 
   const establishment = await prisma.establishment.upsert({
     where: { id: EST_ID },
-    update: { name: "Loja Teste Centro", organizationId: org.id },
+    update: { name: "Fábrica Teste Centro", organizationId: org.id },
     create: {
       id: EST_ID,
       organizationId: org.id,
-      name: "Loja Teste Centro",
+      name: "Fábrica Teste Centro",
       taxId: org.taxId,
       address: "Rua Teste, 100 — Americana/SP",
     },
@@ -297,40 +322,52 @@ async function main() {
 
   const sector = await prisma.sector.upsert({
     where: { id: SECTOR_ID },
-    update: { name: "Vendas", establishmentId: establishment.id },
+    update: {
+      name: "Usinagem",
+      establishmentId: establishment.id,
+      description: SETOR.description,
+      processDescription: SETOR.processDescription,
+      environmentDescription: SETOR.environmentDescription,
+    },
     create: {
       id: SECTOR_ID,
       organizationId: org.id,
       establishmentId: establishment.id,
-      name: "Vendas",
-      description: "Atendimento e caixa",
-      processDescription: "Atendimento ao público",
-      environmentDescription: "Loja climatizada",
+      name: "Usinagem",
+      ...SETOR,
     },
   });
 
   const jobRole = await prisma.jobRole.upsert({
     where: { id: JOB_ID },
-    update: { name: "Vendedor", sectorId: sector.id },
+    update: {
+      name: "Operador de máquinas",
+      sectorId: sector.id,
+      description: "Prepara, opera e confere peças no torno e na fresadora CNC",
+    },
     create: {
       id: JOB_ID,
       organizationId: org.id,
       sectorId: sector.id,
-      name: "Vendedor",
-      description: "Atende clientes e opera PDV",
+      name: "Operador de máquinas",
+      description: "Prepara, opera e confere peças no torno e na fresadora CNC",
     },
   });
 
   const activity = await prisma.activity.upsert({
     where: { id: ACT_ID },
-    update: { name: "Atendimento de balcão", sectorId: sector.id },
+    update: {
+      name: "Operação do torno CNC",
+      sectorId: sector.id,
+      description: "Fixa a peça, opera o torno e retira a peça usinada",
+    },
     create: {
       id: ACT_ID,
       organizationId: org.id,
       establishmentId: establishment.id,
       sectorId: sector.id,
-      name: "Atendimento de balcão",
-      description: "Orientação e venda no balcão",
+      name: "Operação do torno CNC",
+      description: "Fixa a peça, opera o torno e retira a peça usinada",
     },
   });
 
@@ -347,15 +384,12 @@ async function main() {
 
   const hazard = await prisma.hazard.upsert({
     where: { id: "aaaaaaaa-0001-4000-8000-000000000020" },
-    update: { description: "Queda de mercadoria em altura" },
+    update: { ...PERIGO },
     create: {
       id: "aaaaaaaa-0001-4000-8000-000000000020",
       organizationId: org.id,
       activityId: activity.id,
-      description: "Queda de mercadoria em altura",
-      source: "Prateleiras altas",
-      consequences: "Contusão / trauma",
-      exposedGroup: "Vendedores e estoquistas",
+      ...PERIGO,
       exposedWorkersCount: 8,
       category: HazardCategory.ACCIDENT,
       status: HazardStatus.IDENTIFIED,
@@ -366,12 +400,12 @@ async function main() {
 
   const risk = await prisma.risk.upsert({
     where: { id: "aaaaaaaa-0001-4000-8000-000000000021" },
-    update: { description: "Lesão por impacto de volume" },
+    update: { description: "Corte ou lesão nos olhos por cavaco" },
     create: {
       id: "aaaaaaaa-0001-4000-8000-000000000021",
       organizationId: org.id,
       hazardId: hazard.id,
-      description: "Lesão por impacto de volume",
+      description: "Corte ou lesão nos olhos por cavaco",
     },
   });
 
@@ -396,13 +430,13 @@ async function main() {
 
   await prisma.controlMeasure.upsert({
     where: { id: "aaaaaaaa-0001-4000-8000-000000000023" },
-    update: {},
+    update: { description: "Proteção móvel da placa com intertravamento" },
     create: {
       id: "aaaaaaaa-0001-4000-8000-000000000023",
       organizationId: org.id,
       riskId: risk.id,
       type: ControlType.ENGINEERING,
-      description: "Trava de segurança nas prateleiras",
+      description: "Proteção móvel da placa com intertravamento",
       status: ControlStatus.IMPLEMENTED,
       implementedAt: new Date(),
     },
@@ -410,11 +444,11 @@ async function main() {
 
   await prisma.action.upsert({
     where: { id: "aaaaaaaa-0001-4000-8000-000000000030" },
-    update: {},
+    update: { title: "Instalar o anteparo de cavaco no torno 2" },
     create: {
       id: "aaaaaaaa-0001-4000-8000-000000000030",
       organizationId: org.id,
-      title: "Instalar travas nas gondolas",
+      title: "Instalar o anteparo de cavaco no torno 2",
       description: "Ação mock do inventário",
       status: ActionStatus.IN_PROGRESS,
       priority: ActionPriority.HIGH,
@@ -428,17 +462,20 @@ async function main() {
 
   await prisma.aep.upsert({
     where: { id: "aaaaaaaa-0001-4000-8000-000000000031" },
-    update: {},
+    update: {
+      scopeDescription: "Posto do torno CNC — fábrica teste",
+      findings: "Trabalho em pé prolongado; elevação de braço ao fixar peças pesadas na placa.",
+    },
     create: {
       id: "aaaaaaaa-0001-4000-8000-000000000031",
       organizationId: org.id,
       establishmentId: establishment.id,
       sectorId: sector.id,
       activityId: activity.id,
-      scopeDescription: "Posto de atendimento — loja teste",
+      scopeDescription: "Posto do torno CNC — fábrica teste",
       method: AepMethod.OBSERVATION,
       methodRationale: "Observação direta do posto",
-      findings: "Postura em pé prolongada; ruído moderado.",
+      findings: "Trabalho em pé prolongado; elevação de braço ao fixar peças pesadas na placa.",
       status: AepStatus.CONCLUDED,
       conductedById: sstId,
       concludedAt: new Date(),
@@ -448,13 +485,13 @@ async function main() {
 
   await prisma.occurrence.upsert({
     where: { id: "aaaaaaaa-0001-4000-8000-000000000032" },
-    update: {},
+    update: { description: "Quase atingido por cavaco ao abrir a porta do torno com a placa girando" },
     create: {
       id: "aaaaaaaa-0001-4000-8000-000000000032",
       organizationId: org.id,
       establishmentId: establishment.id,
       type: OccurrenceType.DANGEROUS_EVENT,
-      description: "Quase queda de caixa do alto da gondola",
+      description: "Quase atingido por cavaco ao abrir a porta do torno com a placa girando",
       occurredAt: new Date(Date.now() - 3 * 86400000),
       reportedById: colabId,
     },
@@ -462,15 +499,12 @@ async function main() {
 
   const emergency = await prisma.emergencyProcedure.upsert({
     where: { id: "aaaaaaaa-0001-4000-8000-000000000033" },
-    update: {},
+    update: { ...EMERGENCIA },
     create: {
       id: "aaaaaaaa-0001-4000-8000-000000000033",
       organizationId: org.id,
       establishmentId: establishment.id,
-      scenario: "Evacuação por incêndio — Loja Teste",
-      firstAidMeans: "Kit primeiros socorros no caixa",
-      responsibles: "Supervisor de loja",
-      evacuationPlan: "Saída pela porta principal → estacionamento",
+      ...EMERGENCIA,
       drillFrequencyMonths: 12,
     },
   });
@@ -647,14 +681,14 @@ async function main() {
 
   await prisma.referral.upsert({
     where: { id: "aaaaaaaa-0001-4000-8000-000000000044" },
-    update: {},
+    update: { position: "Operador de máquinas" },
     create: {
       id: "aaaaaaaa-0001-4000-8000-000000000044",
       organizationId: org.id,
       referrerUserId: supervisorId,
       candidateName: "Ana Candidata",
       email: "ana@exemplo.com",
-      position: "Vendedor",
+      position: "Operador de máquinas",
       status: ReferralStatus.RECEIVED,
       note: "Indicação mock",
     },
@@ -766,14 +800,14 @@ async function main() {
 
   await prisma.participationRecord.upsert({
     where: { id: "aaaaaaaa-0001-4000-8000-000000000050" },
-    update: {},
+    update: { description: "Pauta: proteções das máquinas da usinagem" },
     create: {
       id: "aaaaaaaa-0001-4000-8000-000000000050",
       organizationId: org.id,
       establishmentId: establishment.id,
       type: ParticipationType.MEETING,
       subject: "Reunião CIPA mock",
-      description: "Pauta: riscos de estoque",
+      description: "Pauta: proteções das máquinas da usinagem",
       occurredAt: new Date(Date.now() - 10 * 86400000),
       recordedById: sstId,
       participantsCount: 5,
@@ -782,15 +816,16 @@ async function main() {
 
   await prisma.ethicsReport.upsert({
     where: { id: "aaaaaaaa-0001-4000-8000-000000000051" },
-    update: {},
+    /* Corrige o exemplo já gravado com o código em SHA-256. */
+    update: { protocol: DENUNCIA_DE_EXEMPLO.protocolo, accessCodeHash: codigoDaDenuncia },
     create: {
       id: "aaaaaaaa-0001-4000-8000-000000000051",
       organizationId: org.id,
-      protocol: "CX-TESTE01",
+      protocol: DENUNCIA_DE_EXEMPLO.protocolo,
       category: ReportCategory.MISCONDUCT,
       description: "Relato mock anônimo para o comitê",
       isAnonymous: true,
-      accessCodeHash: accessCodeHash("ACESSO-TESTE"),
+      accessCodeHash: codigoDaDenuncia,
       status: ReportStatus.IN_ANALYSIS,
       establishmentId: establishment.id,
     },
@@ -821,13 +856,16 @@ async function main() {
 
   await prisma.idea.upsert({
     where: { id: "aaaaaaaa-0001-4000-8000-000000000054" },
-    update: {},
+    update: {
+      title: "Faixa de piso em volta dos tornos",
+      description: "Ideia mock: marcar no piso a área de circulação perto das máquinas",
+    },
     create: {
       id: "aaaaaaaa-0001-4000-8000-000000000054",
       organizationId: org.id,
       authorUserId: colabId,
-      title: "Sinalização no estoque",
-      description: "Ideia mock: faixas de piso no corredor",
+      title: "Faixa de piso em volta dos tornos",
+      description: "Ideia mock: marcar no piso a área de circulação perto das máquinas",
       status: IdeaStatus.NEW,
     },
   });
@@ -897,11 +935,11 @@ async function main() {
 
   await prisma.summon.upsert({
     where: { id: "aaaaaaaa-0001-4000-8000-000000000057" },
-    update: {},
+    update: { title: "DDS — proteções do torno" },
     create: {
       id: "aaaaaaaa-0001-4000-8000-000000000057",
       organizationId: org.id,
-      title: "DDS — segurança no estoque",
+      title: "DDS — proteções do torno",
       description: "Convocação mock",
       scheduledFor: new Date(Date.now() + 2 * 86400000),
       location: "Sala de reunião",
@@ -911,7 +949,13 @@ async function main() {
 
   console.log(
     JSON.stringify(
-      { ok: true, org: org.name, account: account.name, users: created },
+      {
+        ok: true,
+        org: org.name,
+        account: account.name,
+        users: created,
+        denuncia_de_exemplo: DENUNCIA_DE_EXEMPLO,
+      },
       null,
       2,
     ),
