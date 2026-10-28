@@ -13,6 +13,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
 import { formatDay, OCCURRENCE_TYPE_LABEL } from "@/lib/labels";
 import { abrePelaLinha } from "@/lib/linha-que-abre";
+import { useModuleAccess } from "@/lib/module-access";
 import "@/components/data-table.css";
 import "@/components/form.css";
 import { LoadingState } from "@/components/LoadingState";
@@ -46,6 +47,8 @@ function isAnalyzed(row: OccurrenceRow): boolean {
 
 export function OccurrencesPage() {
   const navigate = useNavigate();
+  /* Quem só consulta não vê o formulário que o servidor recusaria. [S1-E] */
+  const { canWrite } = useModuleAccess("ocorrencias");
   const [rows, setRows] = useState<OccurrenceRow[]>([]);
   const [establishments, setEstablishments] = useState<Establishment[]>([]);
   const [risks, setRisks] = useState<RiskOption[]>([]);
@@ -148,7 +151,11 @@ export function OccurrencesPage() {
     <div>
       <PageHeader
         title="Ocorrências"
-        description="Registre o que aconteceu e, depois, escreva a análise. Vale também para o susto que não machucou ninguém."
+        description={
+          canWrite
+            ? "Registre o que aconteceu e, depois, escreva a análise. Vale também para o susto que não machucou ninguém."
+            : "O que aconteceu na empresa, com a análise de cada ocorrência."
+        }
       />
 
       {pendingCount > 0 && (
@@ -164,91 +171,93 @@ export function OccurrencesPage() {
         </p>
       )}
 
-      <section className="form-section">
-        <h2>Registrar ocorrência</h2>
-        <p className="muted">
-          Registre rápido com o que se sabe agora. A análise completa fica na
-          tela da ocorrência.
-        </p>
-        <form className="form-grid" onSubmit={onSubmit}>
-          <div className="form-grid cols-2">
+      {canWrite && (
+        <section className="form-section">
+          <h2>Registrar ocorrência</h2>
+          <p className="muted">
+            Registre rápido com o que se sabe agora. A análise completa fica na
+            tela da ocorrência.
+          </p>
+          <form className="form-grid" onSubmit={onSubmit}>
+            <div className="form-grid cols-2">
+              <label className="form-field">
+                O que foi
+                <select
+                  value={formType}
+                  onChange={(e) => setFormType(e.target.value)}
+                  disabled={saving}
+                >
+                  {Object.entries(OCCURRENCE_TYPE_LABEL).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                <span className="form-hint">{TYPE_HINT[formType]}</span>
+              </label>
+              <label className="form-field">
+                Quando aconteceu
+                <input
+                  type="datetime-local"
+                  value={occurredAt}
+                  onChange={(e) => setOccurredAt(e.target.value)}
+                  disabled={saving}
+                  required
+                />
+              </label>
+            </div>
             <label className="form-field">
-              O que foi
-              <select
-                value={formType}
-                onChange={(e) => setFormType(e.target.value)}
-                disabled={saving}
-              >
-                {Object.entries(OCCURRENCE_TYPE_LABEL).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-              <span className="form-hint">{TYPE_HINT[formType]}</span>
-            </label>
-            <label className="form-field">
-              Quando aconteceu
-              <input
-                type="datetime-local"
-                value={occurredAt}
-                onChange={(e) => setOccurredAt(e.target.value)}
+              O que aconteceu
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
                 disabled={saving}
                 required
+                placeholder="Descreva o fato com o que se sabe agora."
               />
             </label>
-          </div>
-          <label className="form-field">
-            O que aconteceu
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              disabled={saving}
-              required
-              placeholder="Descreva o fato com o que se sabe agora."
-            />
-          </label>
-          <div className="form-grid cols-2">
-            <label className="form-field">
-              Estabelecimento (opcional)
-              <select
-                value={establishmentId}
-                onChange={(e) => setEstablishmentId(e.target.value)}
-                disabled={saving}
-              >
-                <option value="">—</option>
-                {establishments.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="form-field">
-              Risco relacionado (opcional)
-              <select
-                value={riskId}
-                onChange={(e) => setRiskId(e.target.value)}
-                disabled={saving}
-              >
-                <option value="">—</option>
-                {risksDaUnidade.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.description}
-                    {r.establishment ? ` — ${r.establishment.name}` : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          {formError && <p className="form-error">{formError}</p>}
-          <div className="form-actions">
-            <Button type="submit" disabled={saving}>
-              {saving ? "Salvando…" : "Registrar"}
-            </Button>
-          </div>
-        </form>
-      </section>
+            <div className="form-grid cols-2">
+              <label className="form-field">
+                Estabelecimento (opcional)
+                <select
+                  value={establishmentId}
+                  onChange={(e) => setEstablishmentId(e.target.value)}
+                  disabled={saving}
+                >
+                  <option value="">—</option>
+                  {establishments.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="form-field">
+                Risco relacionado (opcional)
+                <select
+                  value={riskId}
+                  onChange={(e) => setRiskId(e.target.value)}
+                  disabled={saving}
+                >
+                  <option value="">—</option>
+                  {risksDaUnidade.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.description}
+                      {r.establishment ? ` — ${r.establishment.name}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            {formError && <p className="form-error">{formError}</p>}
+            <div className="form-actions">
+              <Button type="submit" disabled={saving}>
+                {saving ? "Salvando…" : "Registrar"}
+              </Button>
+            </div>
+          </form>
+        </section>
+      )}
 
       <div className="filter-bar">
         <button
@@ -318,7 +327,11 @@ export function OccurrencesPage() {
       {!loading && !error && filtered.length === 0 && (
         <EmptyState
           title="Nenhuma ocorrência neste filtro"
-          description="Use o formulário acima para registrar a primeira."
+          description={
+            canWrite
+              ? "Use o formulário acima para registrar a primeira."
+              : "Nenhuma ocorrência registrada com este filtro."
+          }
         />
       )}
 
