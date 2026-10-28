@@ -75,4 +75,15 @@
   .readonly-banner {
     display: none;
   }
+
+  /*
+    O fundo da aplicação saía em volta do que se imprime — embaixo do último
+    bloco do PGR, em volta do certificado — quando o navegador imprime as
+    cores de fundo. Vale para toda página impressa. [B3-2-C] [B2-3-C]
+  */
+  html,
+  body,
+  #root {
+    background: #fff !important;
+  }
 }
