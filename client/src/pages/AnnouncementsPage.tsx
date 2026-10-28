@@ -258,7 +258,7 @@ export function AnnouncementsPage() {
                 onChange={(e) => setBody(e.target.value)}
                 required
                 minLength={10}
-                placeholder={"## Título\n\nTexto do aviso, **negrito**, listas…"}
+                placeholder="Ex.: A partir de segunda-feira, o uso de óculos de segurança é obrigatório em toda a usinagem."
               />
             </label>
             <fieldset className="mural-units">
@@ -323,7 +323,12 @@ export function AnnouncementsPage() {
                   type="date"
                   value={happensAt}
                   onChange={(e) => setHappensAt(e.target.value)}
+                  aria-describedby="mural-data-dica"
                 />
+                {/* Parecia a data de publicação. [S3-I] */}
+                <span id="mural-data-dica" className="form-hint">
+                  Para aviso de reunião, treinamento ou outro evento. O aviso sai assim que você publica.
+                </span>
               </label>
               <label className="form-field">
                 Expira em (opcional)
@@ -659,6 +664,9 @@ export function AnnouncementsPage() {
                 defaultValue={corrigindo.happensAt?.slice(0, 10) ?? ""}
                 disabled={salvandoConserto}
               />
+              <span className="form-hint">
+                Para aviso de reunião, treinamento ou outro evento. A correção sai assim que você salva.
+              </span>
             </label>
             {erroDoConserto && (
               <p className="form-error" role="alert">
