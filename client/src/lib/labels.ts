@@ -114,6 +114,22 @@ export const ANNOUNCEMENT_KIND_LABEL: Record<string, string> = {
 };
 
 /** Papéis de organização (Membership.role). */
+/**
+ * O aviso de quem recebe acesso total, mostrado ao escolher o papel — no
+ * link de convite, na aprovação do pedido e em Mudar papel. O aviso ficava
+ * no seletor do papel na conta, que saiu quando o papel virou um só; escolher
+ * "Dono da conta" passou a não avisar nada. [CB-52]
+ */
+export function avisoDoPapel(papel: string | null | undefined): string | null {
+  if (papel === "OWNER") {
+    return "Dono da conta tem acesso total: vê e muda tudo, inclusive pessoas, papéis e convites. Escolha só para quem responde pela empresa.";
+  }
+  if (papel === "MASTER") {
+    return "Master tem acesso total a todas as contas da empresa. Escolha só para quem responde pela empresa inteira.";
+  }
+  return null;
+}
+
 export const ORG_ROLE_LABEL: Record<string, string> = {
   MASTER: "Master (todas as contas)",
   /** Dono de uma conta; MASTER alcança todas as contas da empresa. [OB-3] */

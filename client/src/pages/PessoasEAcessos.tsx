@@ -7,7 +7,7 @@ import { NAV_GROUPS } from "@/layout/nav";
   A forma comum do portal: o dia do desligamento, gravado sem hora, sai como
   o dia de calendário, e não como o instante passado para o fuso. [B3-1-E]
 */
-import { formatDay, ORG_ROLE_LABEL, PERMISSION_LABEL } from "@/lib/labels";
+import { avisoDoPapel, formatDay, ORG_ROLE_LABEL, PERMISSION_LABEL } from "@/lib/labels";
 import "@/components/form.css";
 import "./pessoas-acessos.css";
 
@@ -390,6 +390,11 @@ export function PessoasEAcessos() {
                                 </label>
                               )}
                             </div>
+                            {avisoDoPapel(editing.org_role) && editing.org_role !== p.org_role && (
+                              <p className="form-hint is-warning" role="note">
+                                {avisoDoPapel(editing.org_role)}
+                              </p>
+                            )}
                             {/* Dizia que o papel na conta vencia o da empresa.
                                 Agora é um só, e é este. [OB-3] [S1-C] */}
                             <p className="muted">

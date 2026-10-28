@@ -17,7 +17,7 @@ import { Chip } from "@/components/Chip";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
 import { canalPath, canalUrl } from "@/lib/canal";
-import { formatDay, ORG_ROLE_LABEL } from "@/lib/labels";
+import { avisoDoPapel, formatDay, ORG_ROLE_LABEL } from "@/lib/labels";
 import "@/components/data-table.css";
 import "@/components/form.css";
 import { LoadingState } from "@/components/LoadingState";
@@ -533,6 +533,11 @@ export function AccountPage() {
                                 </option>
                               ))}
                             </select>
+                            {avisoDoPapel(decideRoles[r.id]?.org_role) && (
+                              <span className="form-hint is-warning" role="note">
+                                {avisoDoPapel(decideRoles[r.id]?.org_role)}
+                              </span>
+                            )}
                             {decideRoles[r.id]?.org_role === "FISCAL" && (
                               <label className="form-field">
                                 Acesso até
@@ -681,6 +686,11 @@ export function AccountPage() {
                     ))}
                   </select>
                 </label>
+                {avisoDoPapel(fixedOrgRole) && (
+                  <p className="form-hint is-warning" role="note">
+                    {avisoDoPapel(fixedOrgRole)} Todos que usarem este link entram com ele.
+                  </p>
+                )}
               </div>
             )}
             {formError && <p className="form-error">{formError}</p>}
