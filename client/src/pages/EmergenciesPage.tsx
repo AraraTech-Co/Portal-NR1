@@ -26,7 +26,6 @@ import { CRITERIO_HINT, CRITERIO_LABEL, formatDay } from "@/lib/labels";
 import { useModuleAccess } from "@/lib/module-access";
 import "@/components/data-table.css";
 import "@/components/form.css";
-import type { OrgMember } from "@/api/org-members";
 const DRILL_LABEL: Record<DrillStatus, string> = {
   NO_SCHEDULE: "Sem periodicidade",
   NEVER_DONE: "Nunca feito",
@@ -64,7 +63,6 @@ export function EmergenciesPage() {
   const [scenario, setScenario] = useState("");
   const [firstAidMeans, setFirstAidMeans] = useState("");
   const [responsibleIds, setResponsibleIds] = useState<string[]>([]);
-  const [responsibleMembers, setResponsibleMembers] = useState<OrgMember[]>([]);
   const [responsiblesExtra, setResponsiblesExtra] = useState("");
   const [evacuationPlan, setEvacuationPlan] = useState("");
   const [largeScaleMeasures, setLargeScaleMeasures] = useState("");
@@ -152,22 +150,23 @@ export function EmergenciesPage() {
     setSaving(true);
     setFormError(null);
     try {
-      const fromPeople = responsibleMembers.map((m) => m.name).join(", ");
-      const responsibles = [fromPeople, responsiblesExtra.trim()]
-        .filter(Boolean)
-        .join(fromPeople && responsiblesExtra.trim() ? " — " : "");
+      /*
+        As pessoas vão ligadas ao cadastro, não como nomes num texto: assim o
+        plano avisa quando uma delas sai da empresa. O texto fica para quem é
+        de fora. [B3-4-B]
+      */
       await createEmergencyProcedure({
         establishmentId,
         scenario: scenario.trim(),
         firstAidMeans: firstAidMeans.trim(),
-        responsibles,
+        responsibles: responsiblesExtra.trim() || undefined,
+        responsibleUserIds: responsibleIds,
         evacuationPlan: evacuationPlan.trim(),
         largeScaleMeasures: largeScaleMeasures.trim() || undefined,
       });
       setScenario("");
       setFirstAidMeans("");
       setResponsibleIds([]);
-      setResponsibleMembers([]);
       setResponsiblesExtra("");
       setEvacuationPlan("");
       setLargeScaleMeasures("");
@@ -340,14 +339,12 @@ export function EmergenciesPage() {
                 value={responsibleIds}
                 disabled={saving}
                 required
-                onChange={(ids, members) => {
-                  setResponsibleIds(ids);
-                  setResponsibleMembers(members);
-                }}
+                onChange={(ids) => setResponsibleIds(ids)}
               />
               <p className="form-hint">
-                Selecione as pessoas cadastradas. Se precisar citar brigada ou
-                funções sem usuário, use o campo abaixo.
+                As pessoas da empresa ficam ligadas ao cadastro: se uma delas
+                sair, o plano avisa. Quem é de fora (brigada terceirizada,
+                bombeiros) vai no campo abaixo.
               </p>
               <input
                 value={responsiblesExtra}
@@ -436,6 +433,15 @@ export function EmergenciesPage() {
                   >
                     <td>
                       <strong>{p.scenario}</strong>
+                      {(p.responsibles_out ?? 0) > 0 && (
+                        <div>
+                          <Chip tone="danger">
+                            {p.responsibles_out === 1
+                              ? "Responsável desligado ou sem acesso"
+                              : `${p.responsibles_out} responsáveis desligados ou sem acesso`}
+                          </Chip>
+                        </div>
+                      )}
                     </td>
                     <td className="muted">{p.establishment.name}</td>
                     <td className="muted">{p._count.drills}</td>
@@ -477,12 +483,37 @@ export function EmergenciesPage() {
                                 <span className="muted">não registrado</span>
                               )}
                             </p>
-                            <p>
-                              <strong>Responsáveis:</strong>{" "}
-                              {aberto.responsibles ?? (
-                                <span className="muted">não registrado</span>
+                            <div>
+                              <strong>Responsáveis:</strong>
+                              {aberto.responsible_people.length === 0 && !aberto.responsibles && (
+                                <span className="muted"> não registrado</span>
                               )}
-                            </p>
+                              {aberto.responsible_people.length > 0 && (
+                                <ul className="plano-responsaveis">
+                                  {aberto.responsible_people.map((pessoa) => (
+                                    <li key={pessoa.id}>
+                                      {pessoa.name}
+                                      {pessoa.situacao !== "ativo" && (
+                                        <>
+                                          {" "}
+                                          <Chip tone="danger">
+                                            {pessoa.situacao === "desligado" ? "Desligado" : "Sem acesso"}
+                                            {pessoa.desde ? ` desde ${formatDay(pessoa.desde)}` : ""}
+                                          </Chip>{" "}
+                                          <span className="muted">— escolha outra pessoa para o plano.</span>
+                                        </>
+                                      )}
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                              {aberto.responsibles && (
+                                <p className="plano-responsaveis-texto">
+                                  {aberto.responsible_people.length > 0 ? "Também: " : " "}
+                                  {aberto.responsibles}
+                                </p>
+                              )}
+                            </div>
                             <p>
                               <strong>Abandono do local:</strong>{" "}
                               {aberto.evacuationPlan ?? (

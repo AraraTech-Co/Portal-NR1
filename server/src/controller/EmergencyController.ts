@@ -20,12 +20,80 @@ import { sendPrivateFile } from "../helper/send-private-file";
 import type { AuthRequest } from "../types/auth";
 
 function fail(res: Response, err: unknown) {
-  const e = err as { status?: number; message?: string };
-  res.status(e.status || 500).json({ message: e.message || "Erro interno." });
+  const e = err as { status?: number; message?: string; code?: string };
+  res
+    .status(e.status || 500)
+    .json({ message: e.message || "Erro interno.", ...(e.code ? { code: e.code } : {}) });
 }
 
 function blank(v?: string | null) {
   return v && v.trim() !== "" ? v.trim() : null;
+}
+
+function httpError(status: number, message: string, code?: string): Error {
+  return Object.assign(new Error(message), { status, ...(code ? { code } : {}) });
+}
+
+/*
+  Os responsáveis da empresa ficam ligados ao cadastro: gravados como texto,
+  o nome de quem foi desligado continuava no plano sem aviso. O texto fica
+  para quem é de fora (brigada terceirizada, bombeiros). [B3-4-B]
+*/
+async function responsaveisValidos(orgId: string, bruto: unknown): Promise<string[] | undefined> {
+  if (bruto === undefined) return undefined;
+  if (!Array.isArray(bruto) || bruto.some((x) => typeof x !== "string")) {
+    throw httpError(400, "responsible_user_ids deve ser uma lista de pessoas.");
+  }
+  const ids = [...new Set(bruto as string[])];
+  if (ids.length === 0) return [];
+  const ativos = await prisma.membership.findMany({
+    where: {
+      organizationId: orgId,
+      userId: { in: ids },
+      suspendedAt: null,
+      user: { active: true },
+    },
+    select: { userId: true },
+  });
+  if (ativos.length !== ids.length) {
+    throw httpError(
+      400,
+      "Responsável tem de ser pessoa da empresa com acesso ativo. Quem foi desligado ou está sem acesso não entra no plano.",
+      "RESPONSIBLE_NOT_ACTIVE",
+    );
+  }
+  return ids;
+}
+
+type SituacaoDoResponsavel = "ativo" | "desligado" | "sem_acesso";
+
+/** A situação de cada responsável ligado, para a tela avisar de quem saiu. */
+async function situacaoDosResponsaveis(orgId: string, userIds: string[]) {
+  const mapa = new Map<string, { situacao: SituacaoDoResponsavel; desde: Date | null }>();
+  if (userIds.length === 0) return mapa;
+  const [membros, fichas] = await Promise.all([
+    prisma.membership.findMany({
+      where: { organizationId: orgId, userId: { in: userIds } },
+      select: { userId: true, suspendedAt: true, suspensionReason: true, user: { select: { active: true } } },
+    }),
+    prisma.employeeProfile.findMany({
+      where: { organizationId: orgId, userId: { in: userIds } },
+      select: { userId: true, dismissedAt: true },
+    }),
+  ]);
+  const desligamento = new Map(fichas.map((f) => [f.userId, f.dismissedAt]));
+  for (const id of userIds) {
+    const m = membros.find((x) => x.userId === id);
+    const saiu = desligamento.get(id) ?? null;
+    if (saiu || m?.suspensionReason === "DISMISSAL") {
+      mapa.set(id, { situacao: "desligado", desde: saiu ?? m?.suspendedAt ?? null });
+    } else if (!m || m.suspendedAt || !m.user.active) {
+      mapa.set(id, { situacao: "sem_acesso", desde: m?.suspendedAt ?? null });
+    } else {
+      mapa.set(id, { situacao: "ativo", desde: null });
+    }
+  }
+  return mapa;
 }
 
 class EmergencyController {
@@ -43,6 +111,7 @@ class EmergencyController {
         orderBy: { updatedAt: "desc" },
         include: {
           establishment: { select: { id: true, name: true } },
+          responsiblePeople: { select: { userId: true } },
           _count: { select: { drills: true } },
           drills: {
             orderBy: { performedAt: "desc" },
@@ -51,9 +120,17 @@ class EmergencyController {
           },
         },
       });
+      const situacoes = await situacaoDosResponsaveis(
+        orgId,
+        [...new Set(rows.flatMap((p) => p.responsiblePeople.map((r) => r.userId)))],
+      );
       res.json({
-        procedures: rows.map((p) => ({
+        procedures: rows.map(({ responsiblePeople, ...p }) => ({
           ...p,
+          /** Quantos responsáveis ligados saíram ou estão sem acesso. [B3-4-B] */
+          responsibles_out: responsiblePeople.filter(
+            (r) => situacoes.get(r.userId)?.situacao !== "ativo",
+          ).length,
           last_drill_at: p.drills[0]?.performedAt ?? null,
           drill_frequency_months:
             p.drillFrequencyMonths ?? EMERGENCY_DRILL_FREQUENCY_MONTHS_DEFAULT,
@@ -72,6 +149,10 @@ class EmergencyController {
         where: { id: req.params.id, organizationId: orgId },
         include: {
           establishment: { select: { id: true, name: true } },
+          responsiblePeople: {
+            orderBy: { createdAt: "asc" },
+            select: { user: { select: { id: true, name: true } } },
+          },
           drills: {
             orderBy: { performedAt: "desc" },
             include: {
@@ -97,9 +178,20 @@ class EmergencyController {
         res.status(404).json({ message: "Procedimento não encontrado." });
         return;
       }
+      const { responsiblePeople, ...resto } = procedure;
+      const situacoes = await situacaoDosResponsaveis(
+        orgId,
+        responsiblePeople.map((r) => r.user.id),
+      );
       res.json({
         procedure: {
-          ...procedure,
+          ...resto,
+          responsible_people: responsiblePeople.map((r) => ({
+            id: r.user.id,
+            name: r.user.name,
+            situacao: situacoes.get(r.user.id)?.situacao ?? "sem_acesso",
+            desde: situacoes.get(r.user.id)?.desde ?? null,
+          })),
           drill_frequency_months:
             procedure.drillFrequencyMonths ??
             EMERGENCY_DRILL_FREQUENCY_MONTHS_DEFAULT,
@@ -122,6 +214,7 @@ class EmergencyController {
         evacuation_plan,
         large_scale_measures,
         drill_frequency_months,
+        responsible_user_ids,
       } = req.body as {
         establishment_id?: string;
         scenario?: string;
@@ -130,6 +223,7 @@ class EmergencyController {
         evacuation_plan?: string;
         large_scale_measures?: string;
         drill_frequency_months?: number;
+        responsible_user_ids?: unknown;
       };
 
       if (!establishment_id || !scenario?.trim()) {
@@ -143,10 +237,11 @@ class EmergencyController {
       const firstAidMeans = blank(first_aid_means);
       const responsiblesText = blank(responsibles);
       const evacuationPlan = blank(evacuation_plan);
-      if (!firstAidMeans || !responsiblesText || !evacuationPlan) {
+      const pessoas = (await responsaveisValidos(orgId, responsible_user_ids)) ?? [];
+      if (!firstAidMeans || (!responsiblesText && pessoas.length === 0) || !evacuationPlan) {
         res.status(400).json({
           message:
-            "Informe first_aid_means, responsibles e evacuation_plan (NR-1 1.5.6.2 a).",
+            "Informe os primeiros socorros, os responsáveis (pessoas da empresa ou, para quem é de fora, o texto) e o abandono do local (NR-1 1.5.6.2 a).",
         });
         return;
       }
@@ -184,13 +279,19 @@ class EmergencyController {
           drill_frequency_months ?? EMERGENCY_DRILL_FREQUENCY_MONTHS_DEFAULT,
       });
 
+      if (pessoas.length > 0) {
+        await prisma.emergencyProcedureResponsible.createMany({
+          data: pessoas.map((id) => ({ procedureId: procedure.id, userId: id })),
+        });
+      }
+
       await writeAudit({
         organizationId: orgId,
         actorId: userId,
         action: "emergency_procedure.create",
         entityType: "EmergencyProcedure",
         entityId: procedure.id,
-        after: { scenario: procedure.scenario },
+        after: { scenario: procedure.scenario, responsible_user_ids: pessoas },
       });
 
       res.status(201).json({ procedure });
@@ -230,6 +331,24 @@ class EmergencyController {
         return;
       }
 
+      const pessoas = await responsaveisValidos(orgId, body.responsible_user_ids);
+      const textoDepois =
+        body.responsibles !== undefined ? blank(body.responsibles as string) : current.responsibles;
+      const pessoasDepois =
+        pessoas ??
+        (
+          await prisma.emergencyProcedureResponsible.findMany({
+            where: { procedureId: current.id },
+            select: { userId: true },
+          })
+        ).map((r) => r.userId);
+      if (!textoDepois && pessoasDepois.length === 0) {
+        res.status(400).json({
+          message: "O plano precisa de ao menos um responsável: uma pessoa da empresa ou, para quem é de fora, o texto.",
+        });
+        return;
+      }
+
       const procedure = await new EmergencyProcedure().update.one(
         { id: current.id, organizationId: orgId },
         {
@@ -254,12 +373,22 @@ class EmergencyController {
         },
       );
 
+      if (pessoas !== undefined) {
+        await prisma.$transaction([
+          prisma.emergencyProcedureResponsible.deleteMany({ where: { procedureId: current.id } }),
+          prisma.emergencyProcedureResponsible.createMany({
+            data: pessoas.map((id) => ({ procedureId: current.id, userId: id })),
+          }),
+        ]);
+      }
+
       await writeAudit({
         organizationId: orgId,
         actorId: userId,
         action: "emergency_procedure.update",
         entityType: "EmergencyProcedure",
         entityId: current.id,
+        ...(pessoas !== undefined ? { after: { responsible_user_ids: pessoas } } : {}),
       });
 
       res.json({ procedure });

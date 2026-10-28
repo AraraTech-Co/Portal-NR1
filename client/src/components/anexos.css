@@ -87,3 +87,15 @@
   flex-wrap: wrap;
   gap: 0.2rem;
 }
+
+/* Os responsáveis da empresa, um por linha, com quem saiu marcado. [B3-4-B] */
+.plano-responsaveis {
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.plano-responsaveis-texto {
+  margin: 0.35rem 0 0;
+}

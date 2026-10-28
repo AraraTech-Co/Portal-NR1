@@ -13,9 +13,20 @@ export type EmergencyProcedure = {
   archivedAt: string | null;
   establishment: { id: string; name: string };
   _count: { drills: number };
+  /** Quantos responsáveis ligados saíram ou estão sem acesso. [B3-4-B] */
+  responsibles_out?: number;
+};
+
+/** Pessoa da empresa responsável pelo plano, e se ainda está na empresa. [B3-4-B] */
+export type ResponsavelDaEmergencia = {
+  id: string;
+  name: string;
+  situacao: "ativo" | "desligado" | "sem_acesso";
+  desde: string | null;
 };
 
 export type EmergencyProcedureDetail = EmergencyProcedure & {
+  responsible_people: ResponsavelDaEmergencia[];
   drills: {
     id: string;
     performedAt: string;
@@ -46,7 +57,10 @@ export async function createEmergencyProcedure(input: {
   establishmentId: string;
   scenario: string;
   firstAidMeans: string;
-  responsibles: string;
+  /** Quem é de fora da empresa (brigada terceirizada, bombeiros). */
+  responsibles?: string;
+  /** As pessoas da empresa, ligadas ao cadastro. [B3-4-B] */
+  responsibleUserIds: string[];
   evacuationPlan: string;
   largeScaleMeasures?: string;
   drillFrequencyMonths?: number;
@@ -58,6 +72,7 @@ export async function createEmergencyProcedure(input: {
       scenario: input.scenario,
       first_aid_means: input.firstAidMeans,
       responsibles: input.responsibles,
+      responsible_user_ids: input.responsibleUserIds,
       evacuation_plan: input.evacuationPlan,
       large_scale_measures: input.largeScaleMeasures,
       drill_frequency_months: input.drillFrequencyMonths,
