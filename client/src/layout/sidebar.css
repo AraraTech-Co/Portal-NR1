@@ -147,6 +147,11 @@
   background: var(--sidebar-accent);
 }
 
+/* O link de trocar a senha com a mesma cara do Sair. [B2-1-G] */
+.sidebar-senha {
+  display: block;
+}
+
 .sidebar-drawer {
   position: fixed;
   inset: 0;
