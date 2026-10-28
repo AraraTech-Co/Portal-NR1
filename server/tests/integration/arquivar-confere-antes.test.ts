@@ -112,6 +112,27 @@ describe("o servidor diz se pode, sem arquivar [B3-1-C]", () => {
     });
   }
 
+  it("setor com função e sem atividade: diz que tem função, e não arquiva [B2-1-H] [CB-55]", async () => {
+    const setor = (
+      await request(app).post("/api/sectors").set(as(sst.token)).send({ establishment_id: ids.est, name: `Só funções ${SUFIXO}` })
+    ).body.sector;
+    const funcao = (
+      await request(app).post("/api/job-roles").set(as(sst.token)).send({ sector_id: setor.id, name: `Ajudante ${SUFIXO}` })
+    ).body.job_role;
+
+    const pode = await conferir("sectors", setor.id);
+    expect(pode.body).toMatchObject({ can_archive: false, code: "SECTOR_HAS_JOB_ROLES" });
+    expect(pode.body.message).toMatch(/1 função/);
+    const arquivar = await request(app).delete(`/api/sectors/${setor.id}`).set(as(sst.token));
+    expect(arquivar.status).toBe(409);
+    expect(arquivar.body.code).toBe("SECTOR_HAS_JOB_ROLES");
+
+    /* Arquivada a função, o setor sai. */
+    expect((await request(app).delete(`/api/job-roles/${funcao.id}`).set(as(sst.token))).status).toBe(200);
+    expect((await conferir("sectors", setor.id)).body).toEqual({ can_archive: true });
+    expect((await request(app).delete(`/api/sectors/${setor.id}`).set(as(sst.token))).status).toBe(200);
+  });
+
   it("quando pode, diz que pode — e não arquiva", async () => {
     const res = await conferir("job-roles", ids.funcaoLivre);
     expect(res.status).toBe(200);

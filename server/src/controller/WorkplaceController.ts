@@ -44,15 +44,31 @@ async function impedimentoDoEstabelecimento(orgId: string, id: string): Promise<
 }
 
 async function impedimentoDoSetor(orgId: string, id: string): Promise<Impedimento | null> {
-  const activities = await prisma.activity.count({
-    where: { organizationId: orgId, sectorId: id, archivedAt: null },
-  });
-  return activities > 0
-    ? {
-        message: `Este setor ainda tem ${activities} atividade(s) ativa(s). Arquive as atividades antes.`,
-        code: "SECTOR_HAS_ACTIVITIES",
-      }
-    : null;
+  const [activities, funcoes] = await Promise.all([
+    prisma.activity.count({
+      where: { organizationId: orgId, sectorId: id, archivedAt: null },
+    }),
+    prisma.jobRole.count({
+      where: { organizationId: orgId, sectorId: id, archivedAt: null },
+    }),
+  ]);
+  if (activities > 0) {
+    return {
+      message: `Este setor ainda tem ${activities} atividade(s) ativa(s). Arquive as atividades antes.`,
+      code: "SECTOR_HAS_ACTIVITIES",
+    };
+  }
+  /*
+    Setor com funções e sem atividades era arquivado, e as funções ficavam
+    ativas fora da tela de Operação, sem como chegar a elas. [B2-1-H] [CB-55]
+  */
+  if (funcoes > 0) {
+    return {
+      message: `Este setor ainda tem ${funcoes} função(ões) ativa(s). Arquive as funções antes.`,
+      code: "SECTOR_HAS_JOB_ROLES",
+    };
+  }
+  return null;
 }
 
 /*
