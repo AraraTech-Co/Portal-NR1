@@ -249,7 +249,7 @@
     "documentos_pgr": "read",
     "terceiros": "read",
     "colaboradores": "read",
-    "documentos_rh": "read",
+    "documentos_rh": "none",
     "holerites": "none",
     "ferias": "none",
     "ponto": "none",
