@@ -34,11 +34,19 @@ export type PgrDocument = {
   outdated?: boolean;
 };
 
+export type ResponsavelDaEmpresa = {
+  name: string;
+  role: string | null;
+  registration: string | null;
+};
+
 export async function fetchPgrDocuments(type?: string) {
   const qs = type ? `?type=${encodeURIComponent(type)}` : "";
   return request<{
     documents: PgrDocument[];
     required_types: string[];
+    /** O Responsável pelo PGR de Configurações, para vir sugerido. [CB-57] */
+    default_responsible: ResponsavelDaEmpresa | null;
   }>(`/api/pgr-documents${qs}`);
 }
 

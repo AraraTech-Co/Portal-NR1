@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   fetchOrgMembers,
   type OrgMember,
 } from "@/api/org-members";
+import { filtrarPessoas } from "@/lib/busca-de-pessoas";
 import "./people-picker.css";
 
 export type OrgMemberOption = OrgMember;
@@ -126,6 +127,9 @@ function MultiPeoplePicker({
   required?: boolean;
 }) {
   const selected = new Set(value);
+  /* A mesma busca da turma de treinamento. [B3-3-E] */
+  const [busca, setBusca] = useState("");
+  const filtrados = useMemo(() => filtrarPessoas(members, busca), [members, busca]);
 
   function toggle(id: string) {
     const next = selected.has(id)
@@ -143,23 +147,42 @@ function MultiPeoplePicker({
         <p className="form-hint">{emptyLabel}</p>
       )}
       {!error && !loading && members.length > 0 && (
-        <div
-          className="people-picker-list"
-          role="group"
-          aria-required={required || undefined}
-        >
-          {members.map((m) => (
-            <label key={m.id} className="people-picker-option">
-              <input
-                type="checkbox"
-                checked={selected.has(m.id)}
-                disabled={disabled}
-                onChange={() => toggle(m.id)}
-              />
-              <span>{memberLabel(m)}</span>
-            </label>
-          ))}
-        </div>
+        <>
+          <div className="people-picker-search">
+            <input
+              type="search"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar por nome, matrícula ou função"
+              aria-label="Buscar pessoa por nome, matrícula ou função"
+            />
+            <span className="form-hint" aria-live="polite">
+              {value.length === 0
+                ? "ninguém marcado"
+                : value.length === 1
+                  ? "1 pessoa marcada"
+                  : `${value.length} pessoas marcadas`}
+            </span>
+          </div>
+          <div
+            className="people-picker-list"
+            role="group"
+            aria-required={required || undefined}
+          >
+            {filtrados.length === 0 && <p className="form-hint">Ninguém com esse termo.</p>}
+            {filtrados.map((m) => (
+              <label key={m.id} className="people-picker-option">
+                <input
+                  type="checkbox"
+                  checked={selected.has(m.id)}
+                  disabled={disabled}
+                  onChange={() => toggle(m.id)}
+                />
+                <span>{memberLabel(m)}</span>
+              </label>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );

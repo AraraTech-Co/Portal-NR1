@@ -222,7 +222,7 @@ export function InventoryPage() {
                 <th>Perigo</th>
                 <th>Risco</th>
                 <th>Nível</th>
-                <th>Status</th>
+                <th>Situação</th>
                 {/* De onde vem e quanta gente pega. [S2-H] */}
                 <th>Atividade</th>
                 <th>Expostos</th>

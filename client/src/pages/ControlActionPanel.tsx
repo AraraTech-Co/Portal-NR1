@@ -14,6 +14,7 @@ import {
   ACTION_PRIORITY_LABEL,
   ACTION_STATUS_LABEL,
   CONTROL_STATUS_LABEL,
+  CONTROL_TYPE_EXAMPLE,
   CONTROL_TYPE_LABEL,
   CRITERIO_HINT,
   CRITERIO_LABEL,
@@ -278,7 +279,12 @@ export function ControlActionPanel({
 
       {canWrite && (
         <form className="ctrl-add" onSubmit={onAddControl}>
-          <select value={controlType} onChange={(e) => setControlType(e.target.value)} aria-label="Tipo da medida">
+          <select
+            value={controlType}
+            onChange={(e) => setControlType(e.target.value)}
+            aria-label="Tipo da medida"
+            aria-describedby="ctrl-tipo-exemplo"
+          >
             {Object.entries(CONTROL_TYPE_LABEL).map(([id, label]) => (
               <option key={id} value={id}>
                 {label}
@@ -294,6 +300,9 @@ export function ControlActionPanel({
           <Button type="submit" variant="secondary" disabled={savingControl || !controlDescription.trim()}>
             Adicionar medida
           </Button>
+          <p id="ctrl-tipo-exemplo" className="form-hint ctrl-tipo-exemplo">
+            <strong>{CONTROL_TYPE_LABEL[controlType]}:</strong> {CONTROL_TYPE_EXAMPLE[controlType]}
+          </p>
         </form>
       )}
 

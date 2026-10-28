@@ -1,0 +1,39 @@
+.queixas {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+/* min-width: 0 deixa o cartão encolher até a largura da tela. [B3-3-D] */
+.queixa {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+}
+
+.queixa-etiquetas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.chip-quebra {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
+
+.queixa-onde {
+  margin: 0.5rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+.queixa-texto {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-width: 70ch;
+}

@@ -244,7 +244,8 @@ describe("o convite não entrega a conta sem querer [B2-1-A] [CB-17]", () => {
         registration: existente!.registration,
       });
     expect(decisao.status).toBe(409);
-    expect(decisao.body.message).toMatch(/Fale com o RH/i);
+    /* Quem aprova digitou a matrícula e vê as pessoas: a recusa diz de quem é. [B3-1-A] */
+    expect(decisao.body.code).toBe("REGISTRATION_TAKEN");
 
     await prisma.accountJoinRequest.deleteMany({
       where: { id: pedido.body.request_id },

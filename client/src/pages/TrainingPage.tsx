@@ -49,6 +49,12 @@ export function TrainingPage() {
   const [erroProva, setErroProva] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState(false);
   const [erroConfirmar, setErroConfirmar] = useState<string | null>(null);
+  /*
+    Refazer o curso concluído: o aviso mandava refazer, e não havia botão.
+    O certificado que a pessoa tem continua valendo enquanto ela refaz.
+    [CB-31] [CB-65]
+  */
+  const [refazendo, setRefazendo] = useState(false);
 
   const load = useCallback(async () => {
     const data = await fetchTraining(id);
@@ -97,6 +103,7 @@ export function TrainingPage() {
         training.questions.map((q) => ({ question_id: q.id, index: respostas[q.id]! })),
       );
       setResultado(res);
+      if (res.passed) setRefazendo(false);
       await load();
     } catch (err) {
       setErroProva(err instanceof Error ? err.message : "Falha ao enviar");
@@ -140,6 +147,8 @@ export function TrainingPage() {
   const slides = training.slides;
   const total = slides.length;
   const naProva = passo > total;
+  /** O conteúdo e a prova aparecem para quem ainda não concluiu, ou refaz. */
+  const emCurso = !concluido || refazendo;
 
   return (
     <div className="tr-page">
@@ -197,6 +206,25 @@ export function TrainingPage() {
                 Este certificado foi emitido antes da nota mínima atual. Vale
                 até o vencimento; para renovar, refaça o treinamento.
               </p>
+            )}
+            {!matricula.below_minimum && matricula.can_retake && matricula.expiresAt && (
+              <p className="tr-retry">
+                Este certificado venceu em {formatDay(matricula.expiresAt)}. Refaça o
+                treinamento para ter um novo.
+              </p>
+            )}
+            {matricula.can_retake && !soConsulta && !presencial && !refazendo && (
+              <div className="form-actions">
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setRefazendo(true);
+                    void comecar();
+                  }}
+                >
+                  Refazer o treinamento
+                </Button>
+              </div>
             )}
           </div>
         </section>
@@ -290,7 +318,7 @@ export function TrainingPage() {
         </section>
       )}
 
-      {!presencial && !concluido && passo > 0 && !naProva && (
+      {!presencial && emCurso && passo > 0 && !naProva && (
         <section className="form-section tr-slide">
           <p className="tr-progress">
             {passo} de {total}
@@ -314,7 +342,7 @@ export function TrainingPage() {
         </section>
       )}
 
-      {!presencial && !concluido && naProva && (
+      {!presencial && emCurso && naProva && (
         <section className="form-section">
           <h2>Prova</h2>
           {training.questions.length === 0 ? (

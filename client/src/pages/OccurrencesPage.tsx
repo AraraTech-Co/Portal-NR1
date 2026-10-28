@@ -12,6 +12,7 @@ import { Chip } from "@/components/Chip";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
 import { formatDay, OCCURRENCE_TYPE_LABEL } from "@/lib/labels";
+import { abrePelaLinha } from "@/lib/linha-que-abre";
 import { useModuleAccess } from "@/lib/module-access";
 import "@/components/data-table.css";
 import "@/components/form.css";
@@ -353,7 +354,25 @@ export function OccurrencesPage() {
               {filtered.map((row) => {
                 const analyzed = isAnalyzed(row);
                 return (
-                  <tr key={row.id} className="is-clickable">
+                  <tr
+                    key={row.id}
+                    className="is-clickable"
+                    /*
+                      A linha inteira abre, como no Comitê de ética. A data
+                      continua link: é por ela que se chega pelo teclado e
+                      se abre em outra aba. [B3-2-B]
+                    */
+                    onClick={(e) => {
+                      if (
+                        abrePelaLinha(
+                          e.target as Element,
+                          window.getSelection()?.toString() ?? "",
+                        )
+                      ) {
+                        navigate(`/ocorrencias/${row.id}`);
+                      }
+                    }}
+                  >
                     <td>
                       <Link to={`/ocorrencias/${row.id}`}>
                         {formatDay(row.occurredAt)}

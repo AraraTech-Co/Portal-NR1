@@ -82,7 +82,14 @@ class PeopleAccessController {
             email: m.user.email,
             active: situacao === "active",
             status: situacao,
-            status_since: m.suspendedAt ?? profile?.dismissedAt ?? m.accessExpiresAt,
+            /*
+              "Desligado desde" é a data do desligamento, não o instante em
+              que o RH o registrou — a ficha mostra a mesma data. [B3-1-E]
+            */
+            status_since:
+              situacao === "dismissed"
+                ? (profile?.dismissedAt ?? m.suspendedAt)
+                : (m.suspendedAt ?? profile?.dismissedAt ?? m.accessExpiresAt),
             status_by:
               m.suspendedBy?.name ?? profile?.dismissedBy?.name ?? null,
             must_change_password: m.user.mustChangePassword,
