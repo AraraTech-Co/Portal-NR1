@@ -17,6 +17,7 @@ import "./import-people.css";
 import {
   CABECALHO_OFICIAL,
   lerLinhas,
+  lerPlanilha,
   type FuncaoDaEmpresa,
 } from "@/lib/planilha";
 
@@ -43,24 +44,6 @@ function tone(status: string): "success" | "info" | "neutral" | "danger" {
  * pessoas. O exemplo ficou na explicação da tela. [B2-1-D]
  */
 const MODELO = CABECALHO_OFICIAL.join(";");
-
-/**
- * Lê o arquivo da planilha como texto.
- *
- * O Excel em português salva CSV em Windows-1252 quando não se escolhe "CSV
- * UTF-8": lido como UTF-8, "José" vira "Jos\uFFFD". Com BOM, é UTF-8 e pronto;
- * sem BOM, tenta UTF-8 e, se aparecer caractere de substituição, lê de novo
- * em Windows-1252. [B3-1-B]
- */
-export async function lerPlanilha(arquivo: File): Promise<string> {
-  const bytes = new Uint8Array(await arquivo.arrayBuffer());
-  const temBom = bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf;
-  const comoUtf8 = new TextDecoder("utf-8").decode(bytes);
-  if (temBom || !comoUtf8.includes("\uFFFD")) {
-    return temBom ? comoUtf8.slice(1) : comoUtf8;
-  }
-  return new TextDecoder("windows-1252").decode(bytes);
-}
 
 function baixarModelo() {
   /*

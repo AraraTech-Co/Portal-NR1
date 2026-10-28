@@ -326,3 +326,24 @@ export function lerLinhas(
   return { rows, problems };
 }
 
+
+/**
+ * Lê o arquivo da planilha como texto.
+ *
+ * O Excel em português salva CSV em Windows-1252 quando não se escolhe "CSV
+ * UTF-8": lido como UTF-8, "José" vira "Jos\uFFFD". Com BOM, é UTF-8 e pronto;
+ * sem BOM, tenta UTF-8 e, se aparecer caractere de substituição, lê de novo
+ * em Windows-1252. [B3-1-B]
+ *
+ * O `TextDecoder` já tira o BOM sozinho. Cortar mais um caractere, como se
+ * fazia, comia a primeira letra do arquivo: "nome" virava "ome", e toda
+ * linha saía "sem nome" — no próprio modelo baixado do portal e em todo
+ * "CSV UTF-8" do Excel.
+ */
+export async function lerPlanilha(arquivo: Blob): Promise<string> {
+  const bytes = new Uint8Array(await arquivo.arrayBuffer());
+  const temBom = bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf;
+  const comoUtf8 = new TextDecoder("utf-8").decode(bytes);
+  if (temBom || !comoUtf8.includes("\uFFFD")) return comoUtf8;
+  return new TextDecoder("windows-1252").decode(bytes);
+}
