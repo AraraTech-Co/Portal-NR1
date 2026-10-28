@@ -25,8 +25,9 @@ function AsideWaves() {
 
 export function LoginPage() {
   const { user, booting, login } = useAuth();
-  const [loginId, setLoginId] = useState("admin");
-  const [password, setPassword] = useState("admin123");
+  // A tela abre vazia: nenhum usuário nem senha vem escrito no código.
+  const [loginId, setLoginId] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
