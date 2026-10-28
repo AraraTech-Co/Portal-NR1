@@ -6,7 +6,7 @@ import { writeAudit } from "../helper/audit";
 import { notify, notifyMany } from "../helper/notify";
 import { canHandleErgonomicComplaint } from "../helper/module-access";
 import { usersWhoHandleErgonomicComplaints } from "../helper/module-managers";
-import { AEP_METHOD_DEFAULT, AEP_STATUSES } from "../constants";
+import { AEP_METHOD_DEFAULT, AEP_STATUSES, BODY_PART_MAX } from "../constants";
 import type { AuthRequest } from "../types/auth";
 
 function fail(res: Response, err: unknown) {
@@ -98,6 +98,21 @@ class ErgonomicComplaintController {
       }
 
       /*
+        "Onde incomoda" é o lugar do corpo, em poucas palavras; a frase vai
+        em "O que incomoda". O cartão da queixa mostra o lugar numa linha.
+        [B3-3-D]
+      */
+      const onde = blank(body_part);
+      if (onde && onde.length > BODY_PART_MAX) {
+        res.status(400).json({
+          code: "BODY_PART_TOO_LONG",
+          message: `Em "Onde incomoda", escreva só o lugar do corpo, em até ${BODY_PART_MAX} caracteres. O resto vai em "O que incomoda".`,
+          limit: BODY_PART_MAX,
+        });
+        return;
+      }
+
+      /*
         A unidade e a função ficam gravadas como estão hoje: a pessoa pode
         mudar de função, e a queixa continua sendo sobre o trabalho que ela
         fazia quando doeu.
@@ -119,7 +134,7 @@ class ErgonomicComplaintController {
           organizationId: orgId,
           userId,
           description: blank(description)!,
-          bodyPart: blank(body_part),
+          bodyPart: onde,
           jobRoleName: ficha?.jobRole?.name ?? null,
           establishmentId: ficha?.jobRole?.sector.establishmentId ?? null,
         },
