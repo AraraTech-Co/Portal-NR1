@@ -336,8 +336,33 @@
   }
 
   /* Agora que é bloco, isto é respeitado. */
-  .doc-item,
   .doc-signature {
+    break-inside: avoid;
+  }
+
+  /*
+    O perigo pode atravessar a página. Inteiro e sem quebra, o que não cabia
+    numa página ia todo para a seguinte e deixava a anterior em branco — a
+    primeira página saía só com o cabeçalho do documento. O título e os dados
+    do perigo ficam juntos e presos ao começo da tabela; a linha do risco se
+    parte entre uma medida e outra, nunca no meio de uma, e o cabeçalho da
+    tabela se repete na página nova.
+  */
+  .doc-item {
+    break-inside: auto;
+  }
+
+  .doc-item > h3,
+  .doc-item > .doc-facts {
+    break-inside: avoid;
+    break-after: avoid;
+  }
+
+  .doc-table tr {
+    break-inside: auto;
+  }
+
+  .doc-table li {
     break-inside: avoid;
   }
 
