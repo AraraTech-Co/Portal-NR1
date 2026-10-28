@@ -345,4 +345,19 @@
   .doc-signature {
     break-before: auto;
   }
+
+  /*
+    Em bloco, o nome, o cargo e o registro — que são inline — saíam colados
+    na mesma linha ("Eng. Responsável DemoSESMT"). Cada um na sua linha,
+    como na tela.
+  */
+  .doc-signer > * {
+    display: block;
+  }
+
+  /* O título não fica sozinho no pé da página, longe do que ele abre. */
+  .doc-paper h2,
+  .doc-paper h3 {
+    break-after: avoid;
+  }
 }

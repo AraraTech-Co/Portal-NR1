@@ -1,6 +1,7 @@
 import { HazardCategory } from "@prisma/client";
 import { Request, Response } from "express";
 import prisma from "../model/prisma";
+import { formatCalendarDay } from "../helper/calendar-day";
 import { PreliminarySurvey } from "../model/schema/PreliminarySurvey/PreliminarySurvey";
 import { Establishment } from "../model/schema/Establishment/Establishment";
 import { Activity } from "../model/schema/Activity/Activity";
@@ -240,6 +241,13 @@ class PreliminarySurveyController {
 
         let hazard = null;
         let action = null;
+        /*
+          A origem ia para o inventário com o identificador interno do
+          levantamento e do item, e a situação em inglês ("Preliminar ·
+          deferred · item 5994…"), e saía assim no documento assinado. Agora
+          diz o dia do levantamento e o que foi decidido. [B2-1-C]
+        */
+        const origem = `Levantamento preliminar de ${formatCalendarDay(survey.conductedAt)}`;
 
         // 1.5.4.2.1.3: sem medida imediata → plano de ação + inventário (Hazard).
         if (outcome === SURVEY_OUTCOMES.DEFERRED_TO_ACTION_PLAN) {
@@ -248,11 +256,11 @@ class PreliminarySurveyController {
               organizationId: orgId,
               activityId: activityId!,
               description: description.trim(),
-              source: `Levantamento preliminar ${survey.id}`,
+              source: `${origem}, sem medida imediata`,
               category: hazardCategory,
               origin: HAZARD_ORIGINS.ROUTINE_REVIEW,
               status: HAZARD_STATUSES.IDENTIFIED,
-              monitoringData: `Preliminar · deferred · item ${item.id}`,
+              monitoringData: null,
               createdById: userId,
             },
           });
@@ -261,9 +269,8 @@ class PreliminarySurveyController {
               organizationId: orgId,
               title: `Medida diferida: ${description.trim().slice(0, 120)}`,
               description:
-                `Origem: levantamento preliminar (NR-1 1.5.4.2.1.3).\n` +
-                `Item: ${item.id}\n` +
-                `Perigo: ${hazard.id}`,
+                `Origem: ${origem.toLowerCase()}, sem medida imediata (NR-1 1.5.4.2.1.3).\n` +
+                `Perigo: ${description.trim()}`,
               sourceType: ACTION_SOURCE_TYPES.MANUAL,
               priority: SURVEY_DEFERRED_ACTION_PRIORITY,
               createdById: userId,
@@ -278,11 +285,11 @@ class PreliminarySurveyController {
               organizationId: orgId,
               activityId: activityId!,
               description: description.trim(),
-              source: `Levantamento preliminar ${survey.id}`,
+              source: `${origem}, para avaliação completa`,
               category: hazardCategory,
               origin: HAZARD_ORIGINS.ROUTINE_REVIEW,
               status: HAZARD_STATUSES.IDENTIFIED,
-              monitoringData: `Preliminar · escalated · item ${item.id}`,
+              monitoringData: null,
               createdById: userId,
             },
           });
