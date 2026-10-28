@@ -268,7 +268,10 @@ export function AccountPage() {
                   <th>Senha</th>
                   <td>
                     {/* Trocar a própria senha, sem depender de ninguém. [B2-1-G] */}
-                    <Link to="/trocar-senha">Trocar minha senha</Link>
+                    {/* Parecia texto comum. [B2-1-G] */}
+                    <Link to="/trocar-senha" className="btn btn-secondary btn-compact">
+                      Trocar minha senha
+                    </Link>
                   </td>
                 </tr>
                 <tr>

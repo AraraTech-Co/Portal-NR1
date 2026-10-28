@@ -158,6 +158,13 @@ export function Sidebar({ mobileOpen, onCloseMobile }: Props) {
           [S1-K]
         */}
         <ContextoDaConta onNavigate={onCloseMobile} />
+        {/*
+          Trocar a própria senha ficava só em Conta e usuários, que só master,
+          dono e RH abrem: os outros papéis não tinham caminho. [B2-1-G]
+        */}
+        <Link to="/trocar-senha" className="sidebar-logout sidebar-senha" onClick={onCloseMobile}>
+          Trocar minha senha
+        </Link>
         <button
           type="button"
           className="sidebar-logout"
