@@ -164,12 +164,57 @@ describe("o documento emitido envelhece [B2-4-A]", () => {
 
 describe("o que o fiscal lê no painel", () => {
   it("o risco em ordem traz o nível junto do ✓ [B2-1-K]", async () => {
-    const inventario = acha(await painel(fiscal.token), "inventario");
-    const avaliado = inventario.items.find((i) => i.ok && i.level);
-    expect(avaliado, "há risco avaliado com nível").toBeTruthy();
-    expect(
-      ["TRIVIAL", "TOLERABLE", "MODERATE", "SUBSTANTIAL", "INTOLERABLE"],
-    ).toContain(avaliado!.level);
+    /*
+      O risco em ordem é criado aqui: o caso dependia de achar um no banco, e
+      no banco recém-semeado o único risco do seed pode estar marcado para
+      reavaliar.
+    */
+    const perigo = await prisma.hazard.create({
+      data: {
+        organizationId: "aaaaaaaa-0001-4000-8000-000000000001",
+        activityId: "aaaaaaaa-0001-4000-8000-000000000014",
+        description: `Perigo em ordem ${SUFIXO}`,
+        category: "ACCIDENT",
+        status: "IDENTIFIED",
+        origin: "ROUTINE_REVIEW",
+        createdById: sst.user.id,
+      },
+    });
+    try {
+      const risco = await prisma.risk.create({
+        data: {
+          organizationId: "aaaaaaaa-0001-4000-8000-000000000001",
+          hazardId: perigo.id,
+          description: `Risco em ordem ${SUFIXO}`,
+        },
+      });
+      const versao = await prisma.riskMethodologyVersion.findFirstOrThrow({ select: { id: true } });
+      await prisma.riskAssessment.create({
+        data: {
+          organizationId: "aaaaaaaa-0001-4000-8000-000000000001",
+          riskId: risco.id,
+          methodologyVersionId: versao.id,
+          severity: 3,
+          probability: 3,
+          resultingLevel: "MODERATE",
+          status: "VALIDATED",
+          assessorId: sst.user.id,
+          validatedById: owner.user.id,
+          validatedAt: new Date(),
+          expiresAt: new Date(Date.now() + 365 * 86_400_000),
+        },
+      });
+
+      const inventario = acha(await painel(fiscal.token), "inventario");
+      const avaliado = inventario.items.find((i) => i.label === risco.description);
+      expect(avaliado, "o risco criado aparece no painel").toBeTruthy();
+      expect(avaliado!.ok).toBe(true);
+      expect(avaliado!.level).toBe("MODERATE");
+    } finally {
+      await prisma.riskAssessment.deleteMany({ where: { risk: { hazardId: perigo.id } } });
+      await prisma.risk.deleteMany({ where: { hazardId: perigo.id } });
+      await prisma.hazard.delete({ where: { id: perigo.id } });
+    }
   });
 
   it("função sem ninguém não conta como em ordem nem diz que alguém leu [B2-4-B]", async () => {

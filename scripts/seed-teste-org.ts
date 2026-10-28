@@ -400,7 +400,8 @@ async function main() {
 
   const risk = await prisma.risk.upsert({
     where: { id: "aaaaaaaa-0001-4000-8000-000000000021" },
-    update: { description: "Corte ou lesão nos olhos por cavaco" },
+    /* Rodar de novo devolve o risco do seed ao estado de origem, sem marca de reavaliar. */
+    update: { description: "Corte ou lesão nos olhos por cavaco", needsReassessment: false, reassessmentReason: null },
     create: {
       id: "aaaaaaaa-0001-4000-8000-000000000021",
       organizationId: org.id,
