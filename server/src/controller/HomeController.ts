@@ -1,6 +1,8 @@
 import { AssessmentStatus } from "@prisma/client";
 import { Request, Response } from "express";
 import prisma from "../model/prisma";
+import { formatCalendarDay } from "../helper/calendar-day";
+import { EMERGENCY_DRILL_FREQUENCY_MONTHS_DEFAULT } from "../constants";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { REQUIRED_PGR_DOCUMENTS } from "../helper/compliance";
 import {
@@ -41,17 +43,47 @@ const EM_ABERTO = ["OPEN", "IN_PROGRESS"] as const;
 /** Janela do "está vencendo": dois meses dá tempo de agendar. [S6-B] */
 const DIAS_DE_AVISO = 60;
 
-function diasAte(date: Date | null | undefined): number | null {
-  if (!date) return null;
-  return Math.ceil((date.getTime() - Date.now()) / 86_400_000);
+/**
+ * O dia de calendário de uma data, como a tela a escreve: meia-noite UTC é
+ * data sem hora; com hora, vale o dia em Brasília. [S3-B]
+ */
+function diaDeCalendario(date: Date): number {
+  const meiaNoiteUtc =
+    date.getUTCHours() === 0 &&
+    date.getUTCMinutes() === 0 &&
+    date.getUTCSeconds() === 0 &&
+    date.getUTCMilliseconds() === 0;
+  const base = meiaNoiteUtc ? date : new Date(date.getTime() - 3 * 3_600_000);
+  return Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate());
 }
 
-function prazoTexto(date: Date | null | undefined): string | null {
-  const dias = diasAte(date);
-  if (dias === null) return null;
-  if (dias < 0) return `o mais antigo venceu há ${Math.abs(dias)} dia(s)`;
-  if (dias === 0) return "o mais próximo vence hoje";
-  return `o mais próximo vence em ${dias} dia(s)`;
+/**
+ * Quantos dias de calendário faltam. Contava em horas arredondadas para
+ * cima: um acesso até o fim do dia 10 aparecia como 15 dias no dia 27, e o
+ * calendário dá 14. [S6-B]
+ */
+export function diasAte(date: Date | null | undefined, agora = new Date()): number | null {
+  if (!date) return null;
+  return Math.round((diaDeCalendario(date) - diaDeCalendario(agora)) / 86_400_000);
+}
+
+/** O prazo, com a data: o cartão dizia "em 15 dia(s)" sem dizer quando. [S6-B] */
+export function prazoTexto(date: Date | null | undefined, agora = new Date()): string | null {
+  const dias = diasAte(date, agora);
+  if (dias === null || !date) return null;
+  const dia = formatCalendarDay(date);
+  if (dias < 0) return `o mais antigo venceu em ${dia}, há ${Math.abs(dias)} dia(s)`;
+  if (dias === 0) return `o mais próximo vence hoje, ${dia}`;
+  return `o mais próximo vence em ${dia}, daqui a ${dias} dia(s)`;
+}
+
+/**
+ * Quando o próximo simulado vence: a mesma conta de Emergências (meses de
+ * 30,44 dias depois do último), para as duas telas dizerem a mesma coisa.
+ */
+function proximoSimulado(ultimo: Date | null, meses: number): Date | null {
+  if (!ultimo || meses <= 0) return null;
+  return new Date(ultimo.getTime() + meses * 30.44 * 86_400_000);
 }
 
 class HomeController {
@@ -593,6 +625,50 @@ class HomeController {
         }
       }
 
+      /*
+        O simulado a vencer só aparecia em Emergências: quem abre o Início
+        não ficava sabendo. Conta o procedimento cujo simulado vence na
+        janela, e o que nunca teve simulado. [S6-B]
+      */
+      if (pode("emergencias")) {
+        const procedimentos = await prisma.emergencyProcedure.findMany({
+          where: { organizationId: orgId, archivedAt: null },
+          select: {
+            drillFrequencyMonths: true,
+            drills: { orderBy: { performedAt: "desc" }, take: 1, select: { performedAt: true } },
+          },
+        });
+        const devidos: Array<Date | null> = [];
+        for (const p of procedimentos) {
+          const meses = p.drillFrequencyMonths ?? EMERGENCY_DRILL_FREQUENCY_MONTHS_DEFAULT;
+          if (meses <= 0) continue;
+          const ultimo = p.drills[0]?.performedAt ?? null;
+          if (!ultimo) {
+            devidos.push(null);
+            continue;
+          }
+          const vence = proximoSimulado(ultimo, meses)!;
+          if (vence <= limite) devidos.push(vence);
+        }
+        if (devidos.length > 0) {
+          const datas = devidos.filter((d): d is Date => d !== null).sort((a, b) => a.getTime() - b.getTime());
+          const nunca = devidos.length - datas.length;
+          vencendo.push({
+            id: "simulados",
+            label: "Simulados de emergência a fazer",
+            count: devidos.length,
+            link: "/emergencias",
+            tone: nunca > 0 || (datas[0] && datas[0] < agora) ? "warning" : "info",
+            detail:
+              datas.length > 0
+                ? prazoTexto(datas[0], agora)
+                : nunca === 1
+                  ? "um procedimento nunca teve simulado"
+                  : `${nunca} procedimentos nunca tiveram simulado`,
+          });
+        }
+      }
+
       if (canManageModule(actor.permission, "conta")) {
         const fiscais = await prisma.membership.findMany({
           where: {
@@ -652,6 +728,18 @@ class HomeController {
         desk: mesa,
         compliance: conformidade,
         expiring: vencendo,
+        /*
+          Quando nada vence, o bloco sumia, e não dava para saber se o portal
+          conferiu. Diz o que foi conferido, para a tela dizer "nada vence". [S6-B]
+        */
+        expiring_checked: [
+          pode("inventario") && "avaliações de risco",
+          pode("saude") && "exames",
+          pode("treinamentos") && "treinamentos",
+          veTodos("saude") && "certificados de trabalhadores",
+          pode("emergencias") && "simulados",
+          canManageModule(actor.permission, "conta") && "acessos de consulta",
+        ].filter((x): x is string => Boolean(x)),
         first_steps: passos,
         window_days: DIAS_DE_AVISO,
       });
