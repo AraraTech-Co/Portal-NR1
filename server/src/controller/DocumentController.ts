@@ -274,7 +274,24 @@ class DocumentController {
         }
       }
 
+      /*
+        O Responsável pelo PGR de Configurações vem sugerido na emissão: a
+        tela exigia escolher uma pessoa e tirava o cargo da função dela, e o
+        cadastro da empresa nunca era usado. [CB-57]
+      */
+      const org = await prisma.organization.findFirst({
+        where: { id: orgId },
+        select: { responsibleName: true, responsibleRole: true, responsibleRegistration: true },
+      });
+
       res.json({
+        default_responsible: org?.responsibleName
+          ? {
+              name: org.responsibleName,
+              role: org.responsibleRole,
+              registration: org.responsibleRegistration,
+            }
+          : null,
         documents: rows.map(({ content, ...d }) => ({
           ...d,
           items: snapshotSize(d.type, content),
@@ -381,6 +398,12 @@ class DocumentController {
 
       const responsibleName =
         responsible_name?.trim() || org.responsibleName || null;
+      /*
+        Cargo e registro do cadastro da empresa só completam o documento do
+        responsável da empresa: com outra pessoa, o cargo de um ia parar ao
+        lado do nome do outro. [CB-57]
+      */
+      const eOResponsavelDaEmpresa = responsibleName === org.responsibleName;
       if (!responsibleName) {
         res.status(400).json({
           message:
@@ -447,9 +470,13 @@ class DocumentController {
           issuedById: userId,
           responsibleName,
           responsibleRole:
-            responsible_role ?? org.responsibleRole ?? null,
+            responsible_role?.trim() ||
+            (eOResponsavelDaEmpresa ? org.responsibleRole : null) ||
+            null,
           responsibleRegistration:
-            responsible_registration ?? org.responsibleRegistration ?? null,
+            responsible_registration?.trim() ||
+            (eOResponsavelDaEmpresa ? org.responsibleRegistration : null) ||
+            null,
           signatureStatement:
             signature_statement?.trim() || DEFAULT_SIGNATURE,
         },

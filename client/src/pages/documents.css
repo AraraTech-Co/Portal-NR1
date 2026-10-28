@@ -1,0 +1,24 @@
+/* Quem assina: o responsável de Configurações ou outra pessoa. [CB-57] */
+.doc-quem {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.doc-quem legend {
+  padding: 0;
+  margin-bottom: 0.25rem;
+}
+
+.doc-quem-opcao {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-weight: 500;
+}
+
+.doc-quem-opcao input {
+  margin-top: 0.2rem;
+}

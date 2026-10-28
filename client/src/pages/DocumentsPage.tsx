@@ -6,6 +6,7 @@ import {
   PGR_TYPE_HINT,
   PGR_TYPE_LABEL,
   type PgrDocument,
+  type ResponsavelDaEmpresa,
 } from "@/api/documents";
 import { fetchEstablishments, type Establishment } from "@/api/operation";
 import { Button } from "@/components/Button";
@@ -17,6 +18,7 @@ import { PeoplePicker } from "@/components/PeoplePicker";
 import { useModuleAccess } from "@/lib/module-access";
 import "@/components/data-table.css";
 import "@/components/form.css";
+import "./documents.css";
 const DEFAULT_STATEMENT =
   "Declaro, como responsável, que este documento reflete o gerenciamento de riscos ocupacionais da organização nesta data.";
 
@@ -41,6 +43,29 @@ export function DocumentsPage() {
   const [responsibleName, setResponsibleName] = useState("");
   const [responsibleRole, setResponsibleRole] = useState("");
   const [responsibleRegistration, setResponsibleRegistration] = useState("");
+  /*
+    O Responsável pelo PGR de Configurações vem escolhido; trocar por outra
+    pessoa é uma escolha. Antes a tela pedia sempre uma pessoa, e o cargo
+    vinha da função dela — em branco para quem não tem função. [CB-57]
+  */
+  const [padrao, setPadrao] = useState<ResponsavelDaEmpresa | null>(null);
+  const [quem, setQuem] = useState<"empresa" | "outra">("outra");
+
+  function usarOResponsavelDaEmpresa(r: ResponsavelDaEmpresa) {
+    setQuem("empresa");
+    setResponsibleUserId("");
+    setResponsibleName(r.name);
+    setResponsibleRole(r.role ?? "");
+    setResponsibleRegistration(r.registration ?? "");
+  }
+
+  function escolherOutraPessoa() {
+    setQuem("outra");
+    setResponsibleUserId("");
+    setResponsibleName("");
+    setResponsibleRole("");
+    setResponsibleRegistration("");
+  }
   const [statement, setStatement] = useState(DEFAULT_STATEMENT);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -55,6 +80,8 @@ export function DocumentsPage() {
     setRequiredTypes(docs.required_types);
     setEstablishments(est.establishments);
     if (docs.required_types[0]) setType(docs.required_types[0]);
+    setPadrao(docs.default_responsible);
+    return docs.default_responsible;
   }, []);
 
   useEffect(() => {
@@ -62,6 +89,9 @@ export function DocumentsPage() {
     setLoading(true);
     setError(null);
     reload()
+      .then((r) => {
+        if (!cancelled && r) usarOResponsavelDaEmpresa(r);
+      })
       .catch((err) => {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "Falha ao carregar");
@@ -88,7 +118,7 @@ export function DocumentsPage() {
 
   async function onIssue(e: FormEvent) {
     e.preventDefault();
-    if (!responsibleUserId || !responsibleName.trim()) {
+    if (!responsibleName.trim()) {
       setFormError("Selecione o responsável.");
       return;
     }
@@ -104,13 +134,11 @@ export function DocumentsPage() {
         responsibleRegistration: responsibleRegistration.trim() || undefined,
         signatureStatement: statement.trim() || DEFAULT_STATEMENT,
       });
-      setResponsibleUserId("");
-      setResponsibleName("");
-      setResponsibleRole("");
-      setResponsibleRegistration("");
       setStatement(DEFAULT_STATEMENT);
       setIssued(created);
-      await reload();
+      const r = await reload();
+      if (r) usarOResponsavelDaEmpresa(r);
+      else escolherOutraPessoa();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Falha ao emitir");
     } finally {
@@ -252,28 +280,61 @@ export function DocumentsPage() {
               </select>
             </label>
           </div>
+          {padrao ? (
+            <fieldset className="form-field doc-quem">
+              <legend>Responsável</legend>
+              <label className="doc-quem-opcao">
+                <input
+                  type="radio"
+                  name="quem-assina"
+                  checked={quem === "empresa"}
+                  onChange={() => usarOResponsavelDaEmpresa(padrao)}
+                  disabled={saving}
+                />
+                <span>
+                  {padrao.name}
+                  {padrao.role ? ` · ${padrao.role}` : ""}{" "}
+                  <span className="muted">— Responsável pelo PGR em Configurações</span>
+                </span>
+              </label>
+              <label className="doc-quem-opcao">
+                <input
+                  type="radio"
+                  name="quem-assina"
+                  checked={quem === "outra"}
+                  onChange={escolherOutraPessoa}
+                  disabled={saving}
+                />
+                <span>Outra pessoa</span>
+              </label>
+            </fieldset>
+          ) : (
+            <p className="form-hint">
+              Cadastre o Responsável pelo PGR em Configurações para ele vir sugerido aqui.
+            </p>
+          )}
           <div className="form-grid cols-2">
-            <label className="form-field">
-              Responsável
-              <PeoplePicker
-                value={responsibleUserId}
-                required
-                disabled={saving}
-                onChange={(userId, member) => {
-                  setResponsibleUserId(userId);
-                  setResponsibleName(member?.name ?? "");
-                  if (member?.jobRoleName) {
-                    setResponsibleRole(member.jobRoleName);
-                  }
-                  /*
-                    A matrícula vinha para cá: 13 virava "registro
-                    profissional" no documento assinado. Matrícula é número
-                    da folha; registro profissional é CREA, CRM, MTE. Quem
-                    tem um digita; quem não tem deixa em branco. [S2-D]
-                  */
-                }}
-              />
-            </label>
+            {(!padrao || quem === "outra") && (
+              <label className="form-field">
+                Responsável
+                <PeoplePicker
+                  value={responsibleUserId}
+                  required
+                  disabled={saving}
+                  onChange={(userId, member) => {
+                    setResponsibleUserId(userId);
+                    setResponsibleName(member?.name ?? "");
+                    setResponsibleRole(member?.jobRoleName ?? "");
+                    /*
+                      A matrícula vinha para cá: 13 virava "registro
+                      profissional" no documento assinado. Matrícula é número
+                      da folha; registro profissional é CREA, CRM, MTE. Quem
+                      tem um digita; quem não tem deixa em branco. [S2-D]
+                    */
+                  }}
+                />
+              </label>
+            )}
             <label className="form-field">
               Cargo / função
               <input
