@@ -58,6 +58,7 @@ model User {
   occurrencesFiled  Occurrence[]          @relation("OccurrenceReporter")
   occurrencesReviewed Occurrence[]        @relation("OccurrenceAnalyst")
   drillsRecorded    EmergencyDrill[]      @relation("DrillRecorder")
+  emergencyResponsibilities EmergencyProcedureResponsible[]
   reportsFiled      EthicsReport[]        @relation("ReportReporter")
   /// Denúncias que esta pessoa triou antes de devolver ao comitê. [B3-3-H]
   reportsTriaged    EthicsReport[]        @relation("ReportTriage")
@@ -1293,11 +1294,28 @@ model EmergencyProcedure {
   organization  Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   establishment Establishment    @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
   drills        EmergencyDrill[]
+  /// As pessoas da empresa responsáveis pelo plano; o texto fica para quem é de fora.
+  responsiblePeople EmergencyProcedureResponsible[]
 
   @@index([organizationId, archivedAt])
 }
 
 /// 1.5.6.3.1: devem ser geradas evidências do exercício simulado realizado.
+/// Quem da empresa responde pelo procedimento de emergência (NR-1 1.5.6.2
+/// "a"). Gravado como texto, o nome de quem foi desligado ficava no plano sem
+/// aviso nenhum.
+model EmergencyProcedureResponsible {
+  procedureId String
+  userId      String
+  createdAt   DateTime @default(now())
+
+  procedure EmergencyProcedure @relation(fields: [procedureId], references: [id], onDelete: Cascade)
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([procedureId, userId])
+  @@index([userId])
+}
+
 model EmergencyDrill {
   id           String   @id @default(uuid())
   procedureId  String
