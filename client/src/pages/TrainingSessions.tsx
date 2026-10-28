@@ -8,16 +8,13 @@ import {
 import { fetchOrgMembers, type OrgMember } from "@/api/org-members";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
+import { filtrarPessoas } from "@/lib/busca-de-pessoas";
 import { formatDayTime, jaChegou } from "@/lib/labels";
 import "@/components/form.css";
 import "./training-page.css";
 
 function hojeIso(): string {
   return new Date(Date.now() - 3 * 3_600_000).toISOString().slice(0, 10);
-}
-
-function semAcento(texto: string): string {
-  return texto.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 }
 
 /**
@@ -53,15 +50,7 @@ function AttendanceForm({
       .catch(() => setMembros([]));
   }, [aberto]);
 
-  const filtrados = useMemo(() => {
-    const termo = semAcento(busca.trim());
-    if (!termo) return membros;
-    return membros.filter((m) =>
-      [m.name, m.registration ?? "", m.jobRoleName ?? ""].some((c) =>
-        semAcento(c).includes(termo),
-      ),
-    );
-  }, [membros, busca]);
+  const filtrados = useMemo(() => filtrarPessoas(membros, busca), [membros, busca]);
 
   async function salvar(e: FormEvent) {
     e.preventDefault();
@@ -197,15 +186,7 @@ function RecordForm({
       .catch(() => setMembros([]));
   }, [aberto]);
 
-  const filtrados = useMemo(() => {
-    const termo = semAcento(busca.trim());
-    if (!termo) return membros;
-    return membros.filter((m) =>
-      [m.name, m.registration ?? "", m.jobRoleName ?? ""].some((c) =>
-        semAcento(c).includes(termo),
-      ),
-    );
-  }, [membros, busca]);
+  const filtrados = useMemo(() => filtrarPessoas(membros, busca), [membros, busca]);
 
   function alternar(id: string) {
     const proximo = new Set(presentes);

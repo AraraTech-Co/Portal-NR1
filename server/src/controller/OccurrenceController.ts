@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import prisma from "../model/prisma";
+import { formatCalendarDay } from "../helper/calendar-day";
 import { Occurrence } from "../model/schema/Occurrence/Occurrence";
 import { Establishment } from "../model/schema/Establishment/Establishment";
 import { Risk } from "../model/schema/Risk/Risk";
@@ -440,7 +441,8 @@ class OccurrenceController {
           where: { id: current.riskId, organizationId: orgId },
           data: {
             needsReassessment: true,
-            reassessmentReason: `Ocorrência ${current.id} analisada — revisar medidas (1.5.5.5.2 c).`,
+            /* O motivo aparece na tela e no inventário: sem o identificador interno. [B2-4-E] */
+            reassessmentReason: `Ocorrência de ${formatCalendarDay(current.occurredAt)} analisada — revisar medidas (1.5.5.5.2 c).`,
           },
         });
       }

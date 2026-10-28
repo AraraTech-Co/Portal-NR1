@@ -70,6 +70,8 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   "sector.archive": "Setor arquivado",
   "job_role.update": "Função alterada",
   "job_role.archive": "Função arquivada",
+  /* Trocar a função de lugar na lista do setor aparecia como código. [B2-1-C] */
+  "job_role.reorder": "Ordem das funções alterada",
   "activity.update": "Atividade alterada",
   "activity.archive": "Atividade arquivada",
   "hazard.create": "Perigo registrado",

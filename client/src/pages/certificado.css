@@ -131,6 +131,16 @@
     display: none !important;
   }
 
+  /*
+    O fundo da aplicação saía em volta da folha — uma faixa em cima e um
+    bloco embaixo — quando o navegador imprime as cores de fundo. [B2-3-C]
+  */
+  html,
+  body,
+  #root {
+    background: #fff !important;
+  }
+
   .app-shell,
   .app-main,
   .app-content {

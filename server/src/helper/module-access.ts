@@ -130,9 +130,12 @@ const SEES_ALL_READ_ONLY: Record<string, readonly ModuleId[]> = {
     treinamento, ordem de serviço. Sem isto, "read" viraria "só a minha".
   */
   supervisor: ["colaboradores"],
+  /*
+    Sem Documentos do RH: pela decisão, o fiscal deixa de ver a pasta. A
+    ciência da ordem de serviço continua aberta pela rota dela. [CB-43]
+  */
   fiscal: [
     "colaboradores",
-    "documentos_rh",
     "saude",
     "treinamentos",
     "convocacoes",

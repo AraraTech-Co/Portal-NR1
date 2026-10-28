@@ -143,7 +143,7 @@ describe("o que o fiscal vê", () => {
     }
   });
 
-  it("vê documento geral e quem deu ciência; documento pessoal, não", async () => {
+  it("não abre a pasta do RH, nem o documento geral [CB-43]", async () => {
     const geral = await request(app)
       .post("/api/hr-documents")
       .set(as(rh.token))
@@ -158,26 +158,23 @@ describe("o que o fiscal vê", () => {
     const ack = await request(app).post(`/api/hr-documents/${geral.body.document.id}/ack`).set(as(colaborador.token));
     expect(ack.status).toBe(200);
 
+    /*
+      Pela decisão do CB-43, a pasta de Documentos do RH saiu do fiscal: nem
+      o documento geral abre. A ciência da ordem de serviço ele vê pela rota
+      da ordem (fiscal-ve-menos.test.ts).
+    */
     const lista = await request(app).get("/api/hr-documents").set(as(fiscal.token));
-    const ids = (lista.body.documents as { id: string }[]).map((d) => d.id);
-    expect(ids).toContain(geral.body.document.id);
-    expect(ids).not.toContain(pessoal.body.document.id);
-
-    const aberto = await request(app).get(`/api/hr-documents/${geral.body.document.id}`).set(as(fiscal.token));
-    expect(aberto.status).toBe(200);
-    const quem = (aberto.body.document.acks as { userId: string; acknowledgedAt: string | null; user: { name: string } }[]);
-    expect(quem.some((a) => a.userId === colaborador.user.id && a.acknowledgedAt)).toBe(true);
-    // abrir não deixou "lido" em nome do fiscal
-    expect(quem.some((a) => a.userId === fiscal.user.id)).toBe(false);
-
-    const negado = await request(app).get(`/api/hr-documents/${pessoal.body.document.id}`).set(as(fiscal.token));
-    expect(negado.status).toBe(403);
+    expect(lista.status).toBe(403);
+    for (const id of [geral.body.document.id, pessoal.body.document.id]) {
+      const res = await request(app).get(`/api/hr-documents/${id}`).set(as(fiscal.token));
+      expect(res.status).toBe(403);
+    }
   });
 });
 
 describe("o fiscal não grava nada", () => {
   it("nem nas rotas que o colaborador usa para o próprio registro", async () => {
-    const docs = await request(app).get("/api/hr-documents").set(as(fiscal.token));
+    const docs = await request(app).get("/api/hr-documents").set(as(rh.token));
     const docId = docs.body.documents[0].id as string;
     const trainings = await request(app).get("/api/trainings").set(as(fiscal.token));
     const trainingId = trainings.body.trainings[0].id as string;
@@ -185,7 +182,6 @@ describe("o fiscal não grava nada", () => {
     const profileId = me.body.profiles[0].id as string;
 
     const tentativas = [
-      request(app).post(`/api/hr-documents/${docId}/ack`).set(as(fiscal.token)),
       request(app).post(`/api/trainings/${trainingId}/enroll`).set(as(fiscal.token)),
       request(app).patch(`/api/employee-profiles/${profileId}`).set(as(fiscal.token)).send({ phone: "11999999999" }),
       request(app).post("/api/worker-certificates").set(as(fiscal.token)).send({ name: "x" }),
@@ -195,6 +191,9 @@ describe("o fiscal não grava nada", () => {
       expect(res.status, res.req.path).toBe(403);
       expect(res.body.code).toBe("READ_ONLY");
     }
+    /* Em Documentos do RH ele nem entra: não é só leitura, é fora do módulo. [CB-43] */
+    const ciencia = await request(app).post(`/api/hr-documents/${docId}/ack`).set(as(fiscal.token));
+    expect(ciencia.status).toBe(403);
   });
 
   it("nas rotas de escrita dos módulos, o servidor também recusa", async () => {

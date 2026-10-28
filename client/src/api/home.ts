@@ -29,6 +29,8 @@ export type HomeOverview = {
   /** Primeiros passos, enquanto a casa não está montada. [S1-F] */
   first_steps: HomeStep[] | null;
   window_days: number;
+  /** O que foi conferido para "o que vence" — vazio quando nada se aplica a quem abre. [S6-B] */
+  expiring_checked: string[];
 };
 
 export function fetchHome() {

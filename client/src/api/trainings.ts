@@ -31,6 +31,8 @@ export type MyEnrollment = {
   expiresAt: string | null;
   /** Emitido antes de existir nota mínima, com nota abaixo dela. [CB-31] */
   below_minimum?: boolean;
+  /** Concluído que pode ser refeito: abaixo da nota de hoje, ou vencido. [CB-65] */
+  can_retake?: boolean;
 };
 
 export type TrainingFull = {

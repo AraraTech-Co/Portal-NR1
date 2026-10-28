@@ -5,6 +5,7 @@ import type { Express } from "express";
 import { Role } from "@prisma/client";
 import { createApp } from "../../src/app";
 import prisma from "../../src/model/prisma";
+import { canSeeAllInModule } from "../../src/helper/module-access";
 
 /**
  * O que o fiscal vê das pessoas.
@@ -86,27 +87,38 @@ afterAll(async () => {
   await prisma.user.deleteMany({ where: { id: desligadoId } });
 });
 
-describe("a pasta do RH, para o fiscal, é só a parte geral [CB-43]", () => {
-  it("lê os documentos gerais, onde fica a ordem de serviço", async () => {
-    const res = await request(app).get("/api/hr-documents").set(as(fiscal));
-    expect(res.status, JSON.stringify(res.body)).toBe(200);
-    const docs = res.body.documents as Array<{ id: string; targetUserId: string | null }>;
-    expect(docs.length).toBeGreaterThan(0);
-    // Nenhum documento de uma pessoa: contrato e advertência não são dele.
-    expect(docs.every((d) => d.targetUserId === null)).toBe(true);
-    expect(docs.map((d) => d.id)).toContain(docGeral);
+describe("a pasta do RH não é do fiscal [CB-43]", () => {
+  /*
+    Pela decisão, o fiscal deixa de ver a pasta de Documentos do RH. Antes
+    ele lia a parte geral; agora nem a lista abre. [CB-43]
+  */
+  it("o menu do fiscal não traz Documentos do RH", async () => {
+    const res = await request(app).post("/api/auth").send({ login: "teste.fiscal", password: "teste1234" });
+    expect(res.status).toBe(200);
+    expect(res.body.user.modules.documentos_rh ?? "none").toBe("none");
+    expect(res.body.user.modules.colaboradores).toBe("read");
   });
 
-  it("documento de uma pessoa continua recusado", async () => {
+  it("nem a regra de ver o registro de todos inclui a pasta do RH", () => {
+    expect(canSeeAllInModule("fiscal", "documentos_rh")).toBe(false);
+    expect(canSeeAllInModule("fiscal", "colaboradores")).toBe(true);
+  });
+
+  it("a lista de Documentos do RH é recusada", async () => {
+    const res = await request(app).get("/api/hr-documents").set(as(fiscal));
+    expect(res.status, JSON.stringify(res.body)).toBe(403);
+  });
+
+  it("nem o documento geral, nem o de uma pessoa, abrem", async () => {
     const pessoal = await prisma.hrDocument.findFirst({
       where: { organizationId: ORG_ID, targetUserId: { not: null } },
       select: { id: true },
     });
     expect(pessoal, "um documento de pessoa no seed").toBeTruthy();
-    const res = await request(app)
-      .get(`/api/hr-documents/${pessoal!.id}`)
-      .set(as(fiscal));
-    expect(res.status, JSON.stringify(res.body)).toBe(403);
+    for (const id of [docGeral, pessoal!.id]) {
+      const res = await request(app).get(`/api/hr-documents/${id}`).set(as(fiscal));
+      expect(res.status, JSON.stringify(res.body)).toBe(403);
+    }
   });
 
   it("a ordem de serviço também abre pela porta dela", async () => {

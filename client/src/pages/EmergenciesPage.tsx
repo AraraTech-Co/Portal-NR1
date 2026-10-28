@@ -393,7 +393,12 @@ export function EmergenciesPage() {
       {!loading && !error && procedures.length === 0 && (
         <EmptyState
           title="Nenhum procedimento cadastrado"
-          description="Cadastre os cenários de emergência da operação e registre os simulados."
+          description={
+            /* Quem só lê recebia a instrução de quem cadastra. [S1-E] */
+            canWrite
+              ? "Cadastre os cenários de emergência da operação e registre os simulados."
+              : "A empresa ainda não cadastrou procedimentos de emergência. Quando cadastrar, eles aparecem aqui."
+          }
         />
       )}
 

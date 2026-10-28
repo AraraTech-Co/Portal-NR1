@@ -31,6 +31,22 @@ function expiryFrom(validityMonths: number | null): Date | null {
   return d;
 }
 
+/**
+ * Concluído que pode ser refeito: abaixo da nota mínima de hoje, ou vencido.
+ * O certificado que a pessoa tem continua valendo até vencer, e refazer não
+ * o apaga: só um certificado novo o substitui. [CB-31] [CB-65]
+ */
+function podeRefazer(
+  e: { status: string; score: number | null; expiresAt: Date | null },
+  notaMinima: number,
+  agora = new Date(),
+): boolean {
+  if (e.status !== ENROLLMENT_STATUSES.COMPLETED) return false;
+  const abaixo = e.score !== null && e.score < notaMinima;
+  const vencido = e.expiresAt !== null && e.expiresAt.getTime() < agora.getTime();
+  return abaixo || vencido;
+}
+
 function isRh(req: AuthRequest): boolean {
   return Boolean(req.actor && canManageModule(req.actor.permission, "treinamentos"));
 }
@@ -38,7 +54,9 @@ function isRh(req: AuthRequest): boolean {
 class TrainingController {
   async list(req: Request, res: Response) {
     try {
-      const orgId = actorOrgId(req as AuthRequest);
+      const auth = req as AuthRequest;
+      const orgId = actorOrgId(auth);
+      const userId = actorUserId(auth);
       const includeArchived = req.query.include_archived === "true";
       const rows = await prisma.training.findMany({
         where: {
@@ -50,9 +68,23 @@ class TrainingController {
           _count: {
             select: { slides: true, questions: true, enrollments: true },
           },
+          /*
+            A situação de quem abre a lista: o curso concluído aparecia com
+            "Fazer", como se a pessoa devesse o treinamento. [B3-3-B]
+          */
+          enrollments: {
+            where: { userId },
+            take: 1,
+            select: { id: true, status: true, completedAt: true, expiresAt: true },
+          },
         },
       });
-      res.json({ trainings: rows });
+      res.json({
+        trainings: rows.map(({ enrollments, ...t }) => ({
+          ...t,
+          my_enrollment: enrollments[0] ?? null,
+        })),
+      });
     } catch (err) {
       fail(res, err);
     }
@@ -161,6 +193,8 @@ class TrainingController {
                   minha.status === ENROLLMENT_STATUSES.COMPLETED &&
                   minha.score !== null &&
                   minha.score < training.passingScore,
+                /** A tela mostra "Refazer o treinamento". [CB-65] */
+                can_retake: podeRefazer(minha, training.passingScore),
               }
             : null,
           enrollments: undefined,
@@ -566,6 +600,18 @@ class TrainingController {
         return;
       }
 
+      /*
+        Começar de novo um curso concluído não rebaixa a inscrição: o
+        certificado continua valendo enquanto a pessoa refaz. [CB-65]
+      */
+      const atual = await prisma.trainingEnrollment.findUnique({
+        where: { trainingId_userId: { trainingId: training.id, userId } },
+      });
+      if (atual?.status === ENROLLMENT_STATUSES.COMPLETED) {
+        res.json({ enrollment: atual });
+        return;
+      }
+
       const enrollment = await prisma.trainingEnrollment.upsert({
         where: {
           trainingId_userId: { trainingId: training.id, userId },
@@ -629,11 +675,8 @@ class TrainingController {
         dela, continua valendo até vencer — mas a pessoa precisa poder
         refazer, e antes ouvia "Treinamento já concluído". [CB-31]
       */
-      const abaixoDaMinima =
-        enrollment.status === ENROLLMENT_STATUSES.COMPLETED &&
-        enrollment.score !== null &&
-        enrollment.score < training.passingScore;
-      if (enrollment.status === ENROLLMENT_STATUSES.COMPLETED && !abaixoDaMinima) {
+      const refazendo = enrollment.status === ENROLLMENT_STATUSES.COMPLETED;
+      if (refazendo && !podeRefazer(enrollment, training.passingScore)) {
         res.status(409).json({ message: "Treinamento já concluído." });
         return;
       }
@@ -660,6 +703,23 @@ class TrainingController {
       // Nota abaixo da mínima não gera certificado: certificado é prova de
       // capacitação perante a fiscalização, não comprovante de presença. [S4-K]
       const passed = score >= training.passingScore;
+      /*
+        Quem refaz e não passa fica com o certificado que já tinha: ele vale
+        até vencer, e a tentativa nova não o apaga. [CB-65]
+      */
+      if (!passed && refazendo) {
+        const aindaVale =
+          enrollment.expiresAt === null || enrollment.expiresAt.getTime() >= Date.now();
+        res.json({
+          enrollment,
+          passed: false,
+          passing_score: training.passingScore,
+          message: `Você acertou ${score}% e a nota mínima é ${training.passingScore}%.${
+            aindaVale ? " O certificado que você já tem continua valendo até vencer." : ""
+          } Reveja o conteúdo e tente de novo.`,
+        });
+        return;
+      }
       if (!passed) {
         enrollment = await prisma.trainingEnrollment.update({
           where: { id: enrollment.id },

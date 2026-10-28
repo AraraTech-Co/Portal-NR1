@@ -537,3 +537,6 @@ export function isRedemptionStatus(v: string): v is RedemptionStatus {
 export function isReferralStatus(v: string): v is ReferralStatus {
   return (REFERRAL_STATUS_VALUES as readonly string[]).includes(v);
 }
+
+/** "Onde incomoda", na queixa ergonômica: o lugar do corpo, não a frase. [B3-3-D] */
+export const BODY_PART_MAX = 60;

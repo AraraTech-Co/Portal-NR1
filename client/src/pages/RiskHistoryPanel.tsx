@@ -51,6 +51,10 @@ const FIELD_LABEL: Record<string, string> = {
   implementedAt: "implantada em",
   validatedAt: "validada em",
   type: "tipo",
+  /* Apareciam com o nome do campo no banco. [B2-4-E] */
+  deadlineJustification: "justificativa do prazo",
+  effectivenessCriteria: "critério de eficácia",
+  assigneeId: "responsável",
 };
 
 /**
@@ -99,6 +103,11 @@ function describeChange(before: unknown, after: unknown): string[] {
       continua sendo. A atividade já aparece no cabeçalho do risco. [B2-4-E]
     */
     .filter((k) => !/Id$/.test(k))
+    /*
+      No registro de criação, campo vazio não é informação: "justificativa
+      do prazo: vazio" só dizia que o prazo não passou do limite. [B2-4-E]
+    */
+    .filter((k) => !(before == null && (a[k] == null || a[k] === "")))
     .map((k) => {
       const label = FIELD_LABEL[k] ?? k;
       const from = humanValue(b[k]);

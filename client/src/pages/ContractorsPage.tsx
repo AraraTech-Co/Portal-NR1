@@ -240,7 +240,12 @@ export function ContractorsPage() {
       {rows && rows.length === 0 && (
         <EmptyState
           title="Nenhum terceiro cadastrado"
-          description="Cadastre as empresas contratadas para ligar as pessoas terceirizadas a elas e acompanhar documentos e riscos."
+          description={
+            /* Quem só lê recebia a instrução de quem cadastra. [S1-E] */
+            canWrite
+              ? "Cadastre as empresas contratadas para ligar as pessoas terceirizadas a elas e acompanhar documentos e riscos."
+              : "Nenhuma empresa contratada cadastrada."
+          }
         />
       )}
 
