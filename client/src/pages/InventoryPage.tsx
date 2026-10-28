@@ -61,6 +61,8 @@ function flattenRows(items: InventoryItem[]) {
     hazard: string;
     risk: string;
     level: string | null;
+    /** O que a reavaliação dá, enquanto aguarda validação. */
+    pendingLevel: string | null;
     status: string;
     place: string;
     /** De onde vem o perigo e quanta gente fica exposta. [S2-H] */
@@ -77,6 +79,7 @@ function flattenRows(items: InventoryItem[]) {
         hazard: item.description,
         risk: "—",
         level: null,
+        pendingLevel: null,
         status: controlStatus(item),
         place: `${item.establishment} · ${item.sector}`,
         activity: item.activity ?? null,
@@ -92,6 +95,7 @@ function flattenRows(items: InventoryItem[]) {
         hazard: item.description,
         risk: risk.description,
         level: risk.level,
+        pendingLevel: risk.pending_level ?? null,
         status: risk.needs_reassessment
           ? "Reavaliar"
           : controlStatus({ ...item, risks: [risk] }),
@@ -244,7 +248,20 @@ export function InventoryPage() {
                             {LEVEL_LABEL[row.level] ?? row.level}
                           </Chip>
                         ) : (
-                          <span className="muted">Sem avaliação</span>
+                          <span className="muted">
+                            {row.pendingLevel ? "Sem avaliação validada" : "Sem avaliação"}
+                          </span>
+                        )}
+                        {/*
+                          A reavaliação aguardando validação não aparecia: o
+                          Inventário mostrava o nível validado, e o prazo da
+                          ação já seguia o da mais recente. [B3-2-A]
+                        */}
+                        {row.pendingLevel && row.pendingLevel !== row.level && (
+                          <div className="muted inventory-pendente">
+                            aguardando validação:{" "}
+                            {LEVEL_LABEL[row.pendingLevel] ?? row.pendingLevel}
+                          </div>
                         )}
                       </td>
                       <td>{row.status}</td>

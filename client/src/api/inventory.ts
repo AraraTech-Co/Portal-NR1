@@ -12,6 +12,8 @@ export type InventoryRisk = {
   description: string;
   needs_reassessment: boolean;
   level: string | null;
+  /** O nível da avaliação que aguarda validação, se houver. */
+  pending_level?: string | null;
   severity: number | null;
   probability: number | null;
   controls: InventoryControl[];
