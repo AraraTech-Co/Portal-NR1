@@ -3,7 +3,11 @@ import { request } from "@/api/client";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
 import { NAV_GROUPS } from "@/layout/nav";
-import { ORG_ROLE_LABEL, PERMISSION_LABEL } from "@/lib/labels";
+/*
+  A forma comum do portal: o dia do desligamento, gravado sem hora, sai como
+  o dia de calendário, e não como o instante passado para o fuso. [B3-1-E]
+*/
+import { formatDay, ORG_ROLE_LABEL, PERMISSION_LABEL } from "@/lib/labels";
 import "@/components/form.css";
 import "./pessoas-acessos.css";
 
@@ -62,10 +66,6 @@ function isoInDays(days: number): string {
 }
 
 type Reset = { userId: string; name: string; password: string; copied: boolean };
-
-function formatDay(value: string): string {
-  return new Date(value).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
-}
 
 /** O que a pessoa faz em cada tela, agrupado como no menu. */
 function Acessos({ modules }: { modules: Person["modules"] }) {
