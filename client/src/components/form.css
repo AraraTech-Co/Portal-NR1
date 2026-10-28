@@ -74,3 +74,11 @@
   color: var(--sem-warning-fg);
   font-weight: 600;
 }
+
+/* Campo que o servidor recusou: a borda acompanha a mensagem. [B3-1-A] */
+input[aria-invalid="true"],
+select[aria-invalid="true"],
+textarea[aria-invalid="true"] {
+  border-color: var(--destructive);
+  box-shadow: 0 0 0 1px var(--destructive);
+}

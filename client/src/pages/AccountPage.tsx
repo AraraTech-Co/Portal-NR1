@@ -10,6 +10,7 @@ import {
   type InviteLink,
   type JoinRequest,
 } from "@/api/invites";
+import { ApiError } from "@/api/client";
 import { useAuth } from "@/auth/AuthContext";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
@@ -73,6 +74,13 @@ export function AccountPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [canalCopiado, setCanalCopiado] = useState(false);
 
+  /**
+   * A recusa de cada pedido, na linha dele. Ia para o aviso do topo da
+   * página, fora da vista de quem estava na lista de pedidos. [B3-1-A]
+   */
+  const [recusaDoPedido, setRecusaDoPedido] = useState<
+    Record<string, { message: string; code: string | null }>
+  >({});
   const [decideRoles, setDecideRoles] = useState<
     Record<
       string,
@@ -200,8 +208,17 @@ export function AccountPage() {
     }
   }
 
+  function limparRecusa(id: string) {
+    setRecusaDoPedido((prev) => {
+      if (!prev[id]) return prev;
+      const { [id]: _, ...resto } = prev;
+      return resto;
+    });
+  }
+
   async function onDecide(id: string, action: "approve" | "reject") {
     setBusyId(id);
+    limparRecusa(id);
     try {
       const roles = decideRoles[id];
       await decideJoinRequest(id, {
@@ -221,7 +238,13 @@ export function AccountPage() {
       });
       await reload();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao decidir");
+      setRecusaDoPedido((prev) => ({
+        ...prev,
+        [id]: {
+          message: err instanceof Error ? err.message : "Falha ao decidir",
+          code: err instanceof ApiError ? err.code : null,
+        },
+      }));
     } finally {
       setBusyId(null);
     }
@@ -448,7 +471,15 @@ export function AccountPage() {
                           <input
                             value={decideRoles[r.id]?.registration ?? ""}
                             placeholder="Matrícula"
-                            onChange={(e) =>
+                            aria-label={`Matrícula de ${r.name}`}
+                            aria-invalid={
+                              recusaDoPedido[r.id]?.code === "REGISTRATION_TAKEN" || undefined
+                            }
+                            aria-describedby={
+                              recusaDoPedido[r.id] ? `recusa-${r.id}` : undefined
+                            }
+                            onChange={(e) => {
+                              limparRecusa(r.id);
                               setDecideRoles((prev) => ({
                                 ...prev,
                                 [r.id]: {
@@ -456,8 +487,8 @@ export function AccountPage() {
                                   org_role: prev[r.id]?.org_role ?? "COLABORADOR",
                                   registration: e.target.value,
                                 },
-                              }))
-                            }
+                              }));
+                            }}
                           />
                         )}
                       </td>
@@ -533,7 +564,7 @@ export function AccountPage() {
                             disabled={busyId === r.id}
                             onClick={() => onDecide(r.id, "approve")}
                           >
-                            Aceitar
+                            {busyId === r.id ? "Aceitando…" : "Aceitar"}
                           </Button>
                           <Button
                             type="button"
@@ -544,6 +575,16 @@ export function AccountPage() {
                             Recusar
                           </Button>
                         </div>
+                        {recusaDoPedido[r.id] && (
+                          <p
+                            id={`recusa-${r.id}`}
+                            className="form-error"
+                            role="alert"
+                            style={{ minWidth: "24ch", maxWidth: "32ch", marginTop: "0.4rem" }}
+                          >
+                            {recusaDoPedido[r.id].message}
+                          </p>
+                        )}
                       </td>
                     </tr>
                   ))}
