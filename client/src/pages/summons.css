@@ -8,6 +8,16 @@
   .summons-table .summons-col-extra {
     display: none;
   }
+
+  /*
+    As três colunas que ficam somavam 344 px de conteúdo mínimo num quadro
+    de 341: a tabela passava 2 px da tela. Com menos recuo nas células, cabe.
+  */
+  .summons-table th,
+  .summons-table td {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
 }
 
 .summons-confirmar {
