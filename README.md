@@ -106,6 +106,8 @@ npm run local:dev
 
 Seed: `master` / `admin123` (MASTER) · `admin` / `admin123` (OWNER).
 
+Em produção (`NODE_ENV=production`) o seed exige `SEED_ADMIN_PASSWORD` (12 caracteres ou mais): ela vira a senha inicial do `master` e do `admin`, que trocam no primeiro acesso, e não substitui a senha de quem já existe. O `scripts/deploy-americana.sh` gera essa senha no servidor e a mostra uma vez.
+
 ---
 
 ## Papéis e matriz de módulos
