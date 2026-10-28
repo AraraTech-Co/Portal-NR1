@@ -236,6 +236,17 @@ export function HomePage() {
         </section>
       )}
 
+      {/*
+        Quando nada vencia, o bloco sumia, e não dava para saber se o portal
+        tinha conferido. [S6-B]
+      */}
+      {data && data.expiring.length === 0 && data.expiring_checked.length > 0 && (
+        <section className="home-block" aria-label="O que vence agora">
+          <h2>Nada vence nos próximos {data.window_days} dias</h2>
+          <p className="muted">Conferido: {data.expiring_checked.join(", ")}.</p>
+        </section>
+      )}
+
       {cuidaDe.length > 0 && (
         <section className="home-papel" aria-label="O seu papel nesta conta">
           <h2>Como {papel}, você cuida de</h2>
