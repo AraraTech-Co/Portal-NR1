@@ -1,6 +1,7 @@
 import { AccountRole, HazardCategory, HazardOrigin, HazardStatus, PrismaClient, Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { defaultMethodologyVersion } from "./matriz-padrao";
+import { senhaInicial } from "./senha-inicial";
 
 const prisma = new PrismaClient();
 
@@ -16,7 +17,11 @@ const HAZARD_ID = "00000000-0000-4000-8000-000000000014";
 const RISK_ID = "00000000-0000-4000-8000-000000000015";
 
 async function main() {
-  const passwordHash = await bcrypt.hash("admin123", 10);
+  // Antes de qualquer gravação: em produção sem senha definida, o seed para aqui.
+  const inicial = senhaInicial();
+  const passwordHash = await bcrypt.hash(inicial.senha, 10);
+  // Com senha definida, ela só entra na criação; quem já existe mantém a sua.
+  const senhaAoAtualizar = inicial.definida ? {} : { passwordHash, mustChangePassword: false };
 
   const org = await prisma.organization.upsert({
     where: { id: ORG_ID },
@@ -61,9 +66,8 @@ async function main() {
     update: {
       email: "master@demo.local",
       name: "Master Empresa",
-      passwordHash,
       active: true,
-      mustChangePassword: false,
+      ...senhaAoAtualizar,
     },
     create: {
       login: "master",
@@ -71,7 +75,7 @@ async function main() {
       name: "Master Empresa",
       passwordHash,
       active: true,
-      mustChangePassword: false,
+      mustChangePassword: inicial.definida,
     },
   });
 
@@ -95,9 +99,8 @@ async function main() {
     update: {
       email: "admin@demo.local",
       name: "Owner Conta Matriz",
-      passwordHash,
       active: true,
-      mustChangePassword: false,
+      ...senhaAoAtualizar,
     },
     create: {
       login: "admin",
@@ -105,7 +108,7 @@ async function main() {
       name: "Owner Conta Matriz",
       passwordHash,
       active: true,
-      mustChangePassword: false,
+      mustChangePassword: inicial.definida,
     },
   });
 
@@ -274,9 +277,10 @@ async function main() {
   });
 
   console.log("Seed OK");
-  console.log("  master / admin123  → MASTER (todas as contas)");
+  const senhaMostrada = inicial.definida ? "(SEED_ADMIN_PASSWORD, trocar no 1º acesso)" : inicial.senha;
+  console.log(`  master / ${senhaMostrada}  → MASTER (todas as contas)`);
   console.log(`    contas: ${accountA.name}, ${accountB.name}`);
-  console.log("  admin  / admin123  → OWNER Conta Matriz");
+  console.log(`  admin  / ${senhaMostrada}  → OWNER Conta Matriz`);
   console.log(
     `  GRO: ${establishment.name} → ${sector.name} → ${activity.name} → perigo/risco demo`,
   );

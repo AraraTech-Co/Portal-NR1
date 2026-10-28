@@ -116,8 +116,12 @@ p.user.count().then(c=>{console.log(c);return p.\$disconnect()}).catch(e=>{conso
 " 2>/dev/null || echo 0)"
 if [ "${USER_COUNT:-0}" = "0" ]; then
   echo "==> seed inicial"
-  docker exec -e DATABASE_URL="$NEW_URL" -w /app arara-front-portal-nr1 \
+  # Senha inicial gerada aqui, nunca fixa no código; quem entra troca no primeiro acesso.
+  SEED_ADMIN_PASSWORD="$(docker exec arara-front-portal-nr1 \
+    node -e "console.log(require('crypto').randomBytes(18).toString('base64url'))")"
+  docker exec -e DATABASE_URL="$NEW_URL" -e SEED_ADMIN_PASSWORD="$SEED_ADMIN_PASSWORD" -w /app arara-front-portal-nr1 \
     npx tsx prisma/seed.ts
+  echo "==> senha inicial de admin e master (anote; o portal pede a troca no primeiro acesso): $SEED_ADMIN_PASSWORD"
 fi
 
 docker ps --filter name=arara-front-portal-nr1 --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'

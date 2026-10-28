@@ -1,11 +1,9 @@
 # Deploy Portal NR-1 — imagem Docker Hub dockerflip747/portal-nr1:<versão> + :latest.
-# Schedule: terça 09:00 Brasília (12:00 UTC). Tags A.B.C.D (igual SGC).
+# Somente workflow_dispatch. Por enquanto só a loja Americana.
 
 name: Deploy
 
 on:
-  schedule:
-    - cron: "0 12 * * 2"
   workflow_dispatch:
     inputs:
       skip_build:
@@ -13,40 +11,6 @@ on:
         required: false
         type: boolean
         default: false
-      standalone_target:
-        description: "Loja (all = bulk em todas as lojas, incl. americana)"
-        required: false
-        type: choice
-        options:
-          - all
-          - americana
-          - acesso-nutrition
-          - arara-vm
-          - bem-barato
-          - brand-lar
-          - casa-lar
-          - shopping-lar
-          - casa-park
-          - casa-rosa
-          - ki-barato
-          - mini-shopping
-          - mogi-mirim
-          - shopping-ap
-          - taquaral
-          - shopping-campinas
-          - shopping-itatiba
-          - shopping-sc
-          - ttmb-utilidades
-          - shopping-100
-        default: all
-      app_target:
-        description: "homologacao ou producao (release/bump só com all + producao)"
-        required: false
-        type: choice
-        options:
-          - homologacao
-          - producao
-        default: homologacao
 
 concurrency:
   group: deploy-portal-nr1
@@ -54,42 +18,30 @@ concurrency:
 
 env:
   DOCKERHUB_IMAGE: dockerflip747/portal-nr1
-  EFF_SKIP_BUILD: ${{ github.event_name == 'schedule' && 'false' || (inputs.skip_build && 'true' || 'false') }}
-  EFF_STANDALONE_TARGET: ${{ github.event_name == 'schedule' && 'all' || (inputs.standalone_target || 'all') }}
-  EFF_APP_TARGET: ${{ github.event_name == 'schedule' && 'producao' || (inputs.app_target || 'homologacao') }}
+  EFF_SKIP_BUILD: ${{ inputs.skip_build && 'true' || 'false' }}
 
 jobs:
-  authorize_producao:
-    name: Authorize producao deploy
+  authorize:
+    name: Authorize deploy
     runs-on: ubuntu-latest
     steps:
-      - name: Check actor/ref for producao
+      - name: Check actor/ref
         env:
-          EVENT_NAME: ${{ github.event_name }}
           REF: ${{ github.ref }}
           ACTOR: ${{ github.actor }}
-          APP_TARGET: ${{ github.event_name == 'schedule' && 'producao' || inputs.app_target }}
         run: |
           set -euo pipefail
-          if [ "$EVENT_NAME" = "schedule" ]; then
-            echo "OK: schedule (producao em master)"
-            exit 0
-          fi
-          if [ "${APP_TARGET:-}" != "producao" ]; then
-            echo "OK: homologacao — sem restrição de ator (app_target=${APP_TARGET:-})"
-            exit 0
-          fi
           if [ "$REF" = "refs/heads/master" ]; then
-            echo "OK: producao a partir de master (ator=$ACTOR)"
+            echo "OK: deploy a partir de master (ator=$ACTOR)"
             exit 0
           fi
           case "$ACTOR" in
             hengueier|cristiano-ararati)
-              echo "OK: producao fora de master autorizada para $ACTOR (ref=$REF)"
+              echo "OK: deploy fora de master autorizado para $ACTOR (ref=$REF)"
               exit 0
               ;;
             *)
-              echo "::error::Deploy de producao fora de master so pode ser disparado por hengueier ou cristiano-ararati (ator=$ACTOR, ref=$REF)."
+              echo "::error::Deploy fora de master so pode ser disparado por hengueier ou cristiano-ararati (ator=$ACTOR, ref=$REF)."
               exit 1
               ;;
           esac
@@ -97,53 +49,12 @@ jobs:
   set_env:
     name: Set environment
     runs-on: ubuntu-latest
-    needs: [authorize_producao]
+    needs: [authorize]
     outputs:
-      environment: ${{ steps.resolve.outputs.environment }}
-      is_standalone_bulk: ${{ steps.resolve.outputs.is_standalone_bulk }}
-      standalone_targets: ${{ steps.resolve.outputs.standalone_targets }}
       app_version: ${{ steps.version.outputs.version }}
       nr1_image: ${{ steps.version.outputs.nr1_image }}
     steps:
       - uses: actions/checkout@v4
-
-      - id: resolve
-        name: Resolve lojas / GitHub Environments
-        env:
-          STANDALONE_TARGET: ${{ env.EFF_STANDALONE_TARGET }}
-          APP_TARGET: ${{ env.EFF_APP_TARGET }}
-        run: |
-          set -euo pipefail
-          # arara-vm → Environment "teste" (homolog dedicada); fora do bulk
-          BULK_JSON='["americana","acesso-nutrition","bem-barato","brand-lar","casa-lar","shopping-lar","casa-park","casa-rosa","ki-barato","mini-shopping","mogi-mirim","shopping-ap","taquaral","shopping-100","shopping-campinas","shopping-itatiba","shopping-sc","ttmb-utilidades"]'
-
-          map_env() {
-            case "$1" in
-              arara-vm) echo "teste" ;;
-              *) echo "$1" ;;
-            esac
-          }
-
-          if [ "$STANDALONE_TARGET" = "all" ]; then
-            echo "is_standalone_bulk=true" >> "$GITHUB_OUTPUT"
-            {
-              echo "standalone_targets<<JSON"
-              echo "$BULK_JSON"
-              echo "JSON"
-            } >> "$GITHUB_OUTPUT"
-            echo "environment=americana" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          ENV_NAME="$(map_env "$STANDALONE_TARGET")"
-          if [ "$STANDALONE_TARGET" = "arara-vm" ] && [ "$APP_TARGET" = "producao" ]; then
-            echo "::error::arara-vm (Environment teste) so aceita app_target=homologacao."
-            exit 1
-          fi
-
-          echo "is_standalone_bulk=false" >> "$GITHUB_OUTPUT"
-          echo 'standalone_targets=[]' >> "$GITHUB_OUTPUT"
-          echo "environment=${ENV_NAME}" >> "$GITHUB_OUTPUT"
 
       - id: version
         name: Resolve app version and image tag
@@ -175,7 +86,7 @@ jobs:
     needs: [set_env]
     if: |
       success()
-      && !(github.event_name == 'workflow_dispatch' && inputs.skip_build == true)
+      && inputs.skip_build != true
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -204,50 +115,16 @@ jobs:
             type=gha,mode=max
             type=registry,ref=${{ env.DOCKERHUB_IMAGE }}:buildcache,mode=max
 
-  deploy_single:
-    name: Deploy ${{ needs.set_env.outputs.environment }}
+  deploy_americana:
+    name: Deploy americana
     runs-on: ubuntu-latest
     needs: [set_env, build_image]
     if: |
       always() && !cancelled()
       && needs.set_env.result == 'success'
       && (needs.build_image.result == 'success' || needs.build_image.result == 'skipped')
-      && needs.set_env.outputs.is_standalone_bulk != 'true'
-    environment: ${{ needs.set_env.outputs.environment }}
+    environment: americana
     timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-      - name: Deploy to store
-        uses: ./.github/actions/deploy-store
-        with:
-          nr1_image: ${{ needs.set_env.outputs.nr1_image }}
-          ssh_key: ${{ secrets.SSH_KEY }}
-          remote_user: ${{ vars.REMOTE_USER }}
-          machine_ip: ${{ vars.MACHINE_IP || vars.IP_SRV }}
-          remote_dir: ${{ vars.REMOTE_DIR || '~/portal-nr1' }}
-          nr1_database_url: ${{ secrets.NR1_DATABASE_URL }}
-          nr1_auth_secret: ${{ secrets.NR1_AUTH_SECRET }}
-          nr1_public_url: ${{ vars.NR1_PUBLIC_URL }}
-          nr1_host_port: ${{ vars.NR1_HOST_PORT || '10000' }}
-          docker_network: ${{ vars.DOCKER_NETWORK || 'sgc-network' }}
-          dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
-          dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
-
-  deploy_bulk:
-    name: Deploy ${{ matrix.target_env }}
-    runs-on: ubuntu-latest
-    needs: [set_env, build_image]
-    if: |
-      always() && !cancelled()
-      && needs.set_env.result == 'success'
-      && (needs.build_image.result == 'success' || needs.build_image.result == 'skipped')
-      && needs.set_env.outputs.is_standalone_bulk == 'true'
-    environment: ${{ matrix.target_env }}
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        target_env: ${{ fromJson(needs.set_env.outputs.standalone_targets) }}
     steps:
       - uses: actions/checkout@v4
       - name: Deploy to store
@@ -269,27 +146,18 @@ jobs:
   release_and_bump:
     name: GitHub Release + version bump
     runs-on: ubuntu-latest
-    needs: [set_env, build_image, deploy_single, deploy_bulk]
+    needs: [set_env, build_image, deploy_americana]
     if: |
       always() && !cancelled()
       && needs.set_env.result == 'success'
       && needs.build_image.result == 'success'
-      && needs.set_env.outputs.is_standalone_bulk == 'true'
-      && needs.deploy_bulk.result == 'success'
-      && !(github.event_name == 'workflow_dispatch' && inputs.skip_build == true)
-      && (
-        github.event_name == 'schedule'
-        || (
-          github.event_name == 'workflow_dispatch'
-          && github.ref == 'refs/heads/master'
-          && inputs.standalone_target == 'all'
-          && inputs.app_target == 'producao'
-        )
-      )
+      && needs.deploy_americana.result == 'success'
+      && inputs.skip_build != true
+      && github.ref == 'refs/heads/master'
     permissions:
       contents: write
     env:
-      BUMP_KIND: ${{ github.event_name == 'schedule' && 'feature' || 'fix' }}
+      BUMP_KIND: fix
     steps:
       - uses: actions/checkout@v4
         with:
@@ -305,8 +173,8 @@ jobs:
             echo "::error::Checkout nao esta em master (esta em '$BRANCH'). Abortando release/bump."
             exit 1
           fi
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.ref }}" != "refs/heads/master" ]; then
-            echo "::error::Dispare o deploy de producao a partir de master (ref atual: ${{ github.ref }})."
+          if [ "${{ github.ref }}" != "refs/heads/master" ]; then
+            echo "::error::Dispare o deploy a partir de master (ref atual: ${{ github.ref }})."
             exit 1
           fi
           echo "OK: master @ $(git rev-parse --short HEAD)"
