@@ -17,6 +17,7 @@ import { NewTrainingForm } from "./NewTrainingForm";
 import { TrainingCertificateData } from "./TrainingCertificateData";
 import { TrainingSessions } from "./TrainingSessions";
 import { ENROLLMENT_STATUS_LABEL, formatDay } from "@/lib/labels";
+import { situacaoNaLista } from "@/lib/situacao-do-curso";
 import { isReadOnlyPermission, useModuleAccess } from "@/lib/module-access";
 import "@/components/form.css";
 import "./trainings.css";
@@ -157,10 +158,11 @@ export function TrainingsPage() {
           <thead>
             <tr>
               <th>Título</th>
+              {/* Logo depois do título: no celular, é o que cabe sem rolar. [B3-3-B] */}
+              <th>Você</th>
               <th>Tipo</th>
               <th>Duração (min)</th>
               <th>Inscrições</th>
-              <th aria-label="Fazer" />
             </tr>
           </thead>
           <tbody>
@@ -190,22 +192,36 @@ export function TrainingsPage() {
                       <strong>{r.title}</strong>
                       <div className="muted training-sub">{r.category}</div>
                     </td>
-                    <td>{TRAINING_KIND_LABEL[r.kind] ?? r.kind}</td>
-                    <td>{r.durationMinutes}</td>
-                    <td>{r._count?.enrollments ?? 0}</td>
                     <td onClick={(e) => e.stopPropagation()}>
                       {/*
                         "Fazer" convida quem só consulta a começar um curso
                         que o servidor recusa. Para ela, o treinamento se
-                        abre para ver, não para fazer. [B2-4-F]
+                        abre para ver, não para fazer. [B2-4-F] E o curso já
+                        concluído diz isso, com a validade, e leva ao
+                        certificado. [B3-3-B]
                       */}
-                      <Link to={`/treinamentos/${r.id}`}>
-                        {isReadOnlyPermission(user?.permission) ||
-                        r.kind === "CLASSROOM"
-                          ? "Abrir"
-                          : "Fazer"}
-                      </Link>
+                      {(() => {
+                        const minha = situacaoNaLista({
+                          trainingId: r.id,
+                          presencial: r.kind === "CLASSROOM",
+                          somenteLeitura: isReadOnlyPermission(user?.permission),
+                          minha: r.my_enrollment,
+                        });
+                        return (
+                          <div className="training-minha">
+                            {minha.situacao && (
+                              <Chip tone={minha.situacao.tom} className="chip-quebra">
+                                {minha.situacao.texto}
+                              </Chip>
+                            )}
+                            <Link to={minha.link.para}>{minha.link.texto}</Link>
+                          </div>
+                        );
+                      })()}
                     </td>
+                    <td>{TRAINING_KIND_LABEL[r.kind] ?? r.kind}</td>
+                    <td>{r.durationMinutes}</td>
+                    <td>{r._count?.enrollments ?? 0}</td>
                   </tr>
                   {open && (
                     <tr className="training-expand">

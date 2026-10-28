@@ -38,7 +38,9 @@ function isRh(req: AuthRequest): boolean {
 class TrainingController {
   async list(req: Request, res: Response) {
     try {
-      const orgId = actorOrgId(req as AuthRequest);
+      const auth = req as AuthRequest;
+      const orgId = actorOrgId(auth);
+      const userId = actorUserId(auth);
       const includeArchived = req.query.include_archived === "true";
       const rows = await prisma.training.findMany({
         where: {
@@ -50,9 +52,23 @@ class TrainingController {
           _count: {
             select: { slides: true, questions: true, enrollments: true },
           },
+          /*
+            A situação de quem abre a lista: o curso concluído aparecia com
+            "Fazer", como se a pessoa devesse o treinamento. [B3-3-B]
+          */
+          enrollments: {
+            where: { userId },
+            take: 1,
+            select: { id: true, status: true, completedAt: true, expiresAt: true },
+          },
         },
       });
-      res.json({ trainings: rows });
+      res.json({
+        trainings: rows.map(({ enrollments, ...t }) => ({
+          ...t,
+          my_enrollment: enrollments[0] ?? null,
+        })),
+      });
     } catch (err) {
       fail(res, err);
     }
