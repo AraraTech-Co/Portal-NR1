@@ -45,3 +45,14 @@
 .assess-draft .btn {
   justify-self: start;
 }
+
+/* A confirmação do que foi gravado ou validado. [B3-2-E] */
+.assess-ok {
+  margin: 0;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--sem-success-bd);
+  border-radius: var(--radius);
+  background: var(--sem-success);
+  color: var(--sem-success-fg);
+  font-size: 0.875rem;
+}
