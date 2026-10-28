@@ -32,6 +32,18 @@
   border-bottom: none;
 }
 
+/*
+  O link da tabela tinha a cara do texto em volta (a base tira cor e
+  sublinhado de todo link): "Abrir o treinamento", o número do certificado,
+  a data da ocorrência passavam por texto comum. [S7-G] [B2-1-G]
+*/
+/* Os desenhados como botão (classe `btn` ou terminada em `-btn`) ficam como estão. */
+.data-table td a:not(.btn):not([class*="-btn"]) {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .data-table tbody tr.is-clickable {
   cursor: pointer;
 }
