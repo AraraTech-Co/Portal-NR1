@@ -1,5 +1,5 @@
 # Deploy Portal NR-1 — imagem Docker Hub dockerflip747/portal-nr1:<versão> + :latest.
-# Somente workflow_dispatch (sem schedule / homologacao).
+# Somente workflow_dispatch. Por enquanto só a loja Americana.
 
 name: Deploy
 
@@ -11,31 +11,6 @@ on:
         required: false
         type: boolean
         default: false
-      standalone_target:
-        description: "Loja (all = bulk em todas as lojas, incl. americana)"
-        required: false
-        type: choice
-        options:
-          - all
-          - americana
-          - acesso-nutrition
-          - bem-barato
-          - brand-lar
-          - casa-lar
-          - shopping-lar
-          - casa-park
-          - casa-rosa
-          - ki-barato
-          - mini-shopping
-          - mogi-mirim
-          - shopping-ap
-          - taquaral
-          - shopping-campinas
-          - shopping-itatiba
-          - shopping-sc
-          - ttmb-utilidades
-          - shopping-100
-        default: all
 
 concurrency:
   group: deploy-portal-nr1
@@ -44,7 +19,6 @@ concurrency:
 env:
   DOCKERHUB_IMAGE: dockerflip747/portal-nr1
   EFF_SKIP_BUILD: ${{ inputs.skip_build && 'true' || 'false' }}
-  EFF_STANDALONE_TARGET: ${{ inputs.standalone_target || 'all' }}
 
 jobs:
   authorize:
@@ -77,36 +51,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: [authorize]
     outputs:
-      environment: ${{ steps.resolve.outputs.environment }}
-      is_standalone_bulk: ${{ steps.resolve.outputs.is_standalone_bulk }}
-      standalone_targets: ${{ steps.resolve.outputs.standalone_targets }}
       app_version: ${{ steps.version.outputs.version }}
       nr1_image: ${{ steps.version.outputs.nr1_image }}
     steps:
       - uses: actions/checkout@v4
-
-      - id: resolve
-        name: Resolve lojas / GitHub Environments
-        env:
-          STANDALONE_TARGET: ${{ env.EFF_STANDALONE_TARGET }}
-        run: |
-          set -euo pipefail
-          BULK_JSON='["americana","acesso-nutrition","bem-barato","brand-lar","casa-lar","shopping-lar","casa-park","casa-rosa","ki-barato","mini-shopping","mogi-mirim","shopping-ap","taquaral","shopping-100","shopping-campinas","shopping-itatiba","shopping-sc","ttmb-utilidades"]'
-
-          if [ "$STANDALONE_TARGET" = "all" ]; then
-            echo "is_standalone_bulk=true" >> "$GITHUB_OUTPUT"
-            {
-              echo "standalone_targets<<JSON"
-              echo "$BULK_JSON"
-              echo "JSON"
-            } >> "$GITHUB_OUTPUT"
-            echo "environment=americana" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          echo "is_standalone_bulk=false" >> "$GITHUB_OUTPUT"
-          echo 'standalone_targets=[]' >> "$GITHUB_OUTPUT"
-          echo "environment=${STANDALONE_TARGET}" >> "$GITHUB_OUTPUT"
 
       - id: version
         name: Resolve app version and image tag
@@ -167,50 +115,16 @@ jobs:
             type=gha,mode=max
             type=registry,ref=${{ env.DOCKERHUB_IMAGE }}:buildcache,mode=max
 
-  deploy_single:
-    name: Deploy ${{ needs.set_env.outputs.environment }}
+  deploy_americana:
+    name: Deploy americana
     runs-on: ubuntu-latest
     needs: [set_env, build_image]
     if: |
       always() && !cancelled()
       && needs.set_env.result == 'success'
       && (needs.build_image.result == 'success' || needs.build_image.result == 'skipped')
-      && needs.set_env.outputs.is_standalone_bulk != 'true'
-    environment: ${{ needs.set_env.outputs.environment }}
+    environment: americana
     timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-      - name: Deploy to store
-        uses: ./.github/actions/deploy-store
-        with:
-          nr1_image: ${{ needs.set_env.outputs.nr1_image }}
-          ssh_key: ${{ secrets.SSH_KEY }}
-          remote_user: ${{ vars.REMOTE_USER }}
-          machine_ip: ${{ vars.MACHINE_IP || vars.IP_SRV }}
-          remote_dir: ${{ vars.REMOTE_DIR || '~/portal-nr1' }}
-          nr1_database_url: ${{ secrets.NR1_DATABASE_URL }}
-          nr1_auth_secret: ${{ secrets.NR1_AUTH_SECRET }}
-          nr1_public_url: ${{ vars.NR1_PUBLIC_URL }}
-          nr1_host_port: ${{ vars.NR1_HOST_PORT || '10000' }}
-          docker_network: ${{ vars.DOCKER_NETWORK || 'sgc-network' }}
-          dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
-          dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
-
-  deploy_bulk:
-    name: Deploy ${{ matrix.target_env }}
-    runs-on: ubuntu-latest
-    needs: [set_env, build_image]
-    if: |
-      always() && !cancelled()
-      && needs.set_env.result == 'success'
-      && (needs.build_image.result == 'success' || needs.build_image.result == 'skipped')
-      && needs.set_env.outputs.is_standalone_bulk == 'true'
-    environment: ${{ matrix.target_env }}
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        target_env: ${{ fromJson(needs.set_env.outputs.standalone_targets) }}
     steps:
       - uses: actions/checkout@v4
       - name: Deploy to store
@@ -232,16 +146,14 @@ jobs:
   release_and_bump:
     name: GitHub Release + version bump
     runs-on: ubuntu-latest
-    needs: [set_env, build_image, deploy_single, deploy_bulk]
+    needs: [set_env, build_image, deploy_americana]
     if: |
       always() && !cancelled()
       && needs.set_env.result == 'success'
       && needs.build_image.result == 'success'
-      && needs.set_env.outputs.is_standalone_bulk == 'true'
-      && needs.deploy_bulk.result == 'success'
+      && needs.deploy_americana.result == 'success'
       && inputs.skip_build != true
       && github.ref == 'refs/heads/master'
-      && inputs.standalone_target == 'all'
     permissions:
       contents: write
     env:
