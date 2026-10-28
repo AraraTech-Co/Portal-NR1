@@ -35,10 +35,14 @@ async function buildInventorySnapshot(
       risks: {
         where: { archivedAt: null },
         include: {
+          /*
+            A validada é a que vale; a que aguarda validação vai junto, para
+            a tela dizer que o nível vai mudar. O prazo da ação já segue a
+            mais recente [B3-2-A], e o Inventário mostrava só a validada.
+          */
           assessments: {
-            where: { status: AssessmentStatus.VALIDATED },
-            orderBy: { validatedAt: "desc" },
-            take: 1,
+            where: { status: { in: [AssessmentStatus.VALIDATED, AssessmentStatus.DRAFT] } },
+            orderBy: { assessedAt: "desc" },
           },
           controls: { where: { archivedAt: null } },
         },
@@ -70,20 +74,26 @@ async function buildInventorySnapshot(
       activity: h.activity.name,
       sector: h.activity.sector.name,
       establishment: h.activity.establishment.name,
-      risks: h.risks.map((r) => ({
-        risk_id: r.id,
-        description: r.description,
-        needs_reassessment: r.needsReassessment,
-        level: r.assessments[0]?.resultingLevel ?? null,
-        severity: r.assessments[0]?.severity ?? null,
-        probability: r.assessments[0]?.probability ?? null,
-        controls: r.controls.map((c) => ({
-          id: c.id,
-          type: c.type,
-          description: c.description,
-          status: c.status,
-        })),
-      })),
+      risks: h.risks.map((r) => {
+        const validada = r.assessments.find((a) => a.status === AssessmentStatus.VALIDATED);
+        const pendente = r.assessments.find((a) => a.status === AssessmentStatus.DRAFT);
+        return {
+          risk_id: r.id,
+          description: r.description,
+          needs_reassessment: r.needsReassessment,
+          level: validada?.resultingLevel ?? null,
+          severity: validada?.severity ?? null,
+          probability: validada?.probability ?? null,
+          /** O nível da avaliação que aguarda validação, se houver. */
+          pending_level: pendente?.resultingLevel ?? null,
+          controls: r.controls.map((c) => ({
+            id: c.id,
+            type: c.type,
+            description: c.description,
+            status: c.status,
+          })),
+        };
+      }),
     })),
   };
 }
