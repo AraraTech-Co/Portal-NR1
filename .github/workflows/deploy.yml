@@ -1,11 +1,9 @@
 # Deploy Portal NR-1 — imagem Docker Hub dockerflip747/portal-nr1:<versão> + :latest.
-# Schedule: terça 09:00 Brasília (12:00 UTC). Tags A.B.C.D (igual SGC).
+# Somente workflow_dispatch (sem schedule / homologacao).
 
 name: Deploy
 
 on:
-  schedule:
-    - cron: "0 12 * * 2"
   workflow_dispatch:
     inputs:
       skip_build:
@@ -21,7 +19,6 @@ on:
           - all
           - americana
           - acesso-nutrition
-          - arara-vm
           - bem-barato
           - brand-lar
           - casa-lar
@@ -39,14 +36,6 @@ on:
           - ttmb-utilidades
           - shopping-100
         default: all
-      app_target:
-        description: "homologacao ou producao (release/bump só com all + producao)"
-        required: false
-        type: choice
-        options:
-          - homologacao
-          - producao
-        default: homologacao
 
 concurrency:
   group: deploy-portal-nr1
@@ -54,42 +43,31 @@ concurrency:
 
 env:
   DOCKERHUB_IMAGE: dockerflip747/portal-nr1
-  EFF_SKIP_BUILD: ${{ github.event_name == 'schedule' && 'false' || (inputs.skip_build && 'true' || 'false') }}
-  EFF_STANDALONE_TARGET: ${{ github.event_name == 'schedule' && 'all' || (inputs.standalone_target || 'all') }}
-  EFF_APP_TARGET: ${{ github.event_name == 'schedule' && 'producao' || (inputs.app_target || 'homologacao') }}
+  EFF_SKIP_BUILD: ${{ inputs.skip_build && 'true' || 'false' }}
+  EFF_STANDALONE_TARGET: ${{ inputs.standalone_target || 'all' }}
 
 jobs:
-  authorize_producao:
-    name: Authorize producao deploy
+  authorize:
+    name: Authorize deploy
     runs-on: ubuntu-latest
     steps:
-      - name: Check actor/ref for producao
+      - name: Check actor/ref
         env:
-          EVENT_NAME: ${{ github.event_name }}
           REF: ${{ github.ref }}
           ACTOR: ${{ github.actor }}
-          APP_TARGET: ${{ github.event_name == 'schedule' && 'producao' || inputs.app_target }}
         run: |
           set -euo pipefail
-          if [ "$EVENT_NAME" = "schedule" ]; then
-            echo "OK: schedule (producao em master)"
-            exit 0
-          fi
-          if [ "${APP_TARGET:-}" != "producao" ]; then
-            echo "OK: homologacao — sem restrição de ator (app_target=${APP_TARGET:-})"
-            exit 0
-          fi
           if [ "$REF" = "refs/heads/master" ]; then
-            echo "OK: producao a partir de master (ator=$ACTOR)"
+            echo "OK: deploy a partir de master (ator=$ACTOR)"
             exit 0
           fi
           case "$ACTOR" in
             hengueier|cristiano-ararati)
-              echo "OK: producao fora de master autorizada para $ACTOR (ref=$REF)"
+              echo "OK: deploy fora de master autorizado para $ACTOR (ref=$REF)"
               exit 0
               ;;
             *)
-              echo "::error::Deploy de producao fora de master so pode ser disparado por hengueier ou cristiano-ararati (ator=$ACTOR, ref=$REF)."
+              echo "::error::Deploy fora de master so pode ser disparado por hengueier ou cristiano-ararati (ator=$ACTOR, ref=$REF)."
               exit 1
               ;;
           esac
@@ -97,7 +75,7 @@ jobs:
   set_env:
     name: Set environment
     runs-on: ubuntu-latest
-    needs: [authorize_producao]
+    needs: [authorize]
     outputs:
       environment: ${{ steps.resolve.outputs.environment }}
       is_standalone_bulk: ${{ steps.resolve.outputs.is_standalone_bulk }}
@@ -111,18 +89,9 @@ jobs:
         name: Resolve lojas / GitHub Environments
         env:
           STANDALONE_TARGET: ${{ env.EFF_STANDALONE_TARGET }}
-          APP_TARGET: ${{ env.EFF_APP_TARGET }}
         run: |
           set -euo pipefail
-          # arara-vm → Environment "teste" (homolog dedicada); fora do bulk
           BULK_JSON='["americana","acesso-nutrition","bem-barato","brand-lar","casa-lar","shopping-lar","casa-park","casa-rosa","ki-barato","mini-shopping","mogi-mirim","shopping-ap","taquaral","shopping-100","shopping-campinas","shopping-itatiba","shopping-sc","ttmb-utilidades"]'
-
-          map_env() {
-            case "$1" in
-              arara-vm) echo "teste" ;;
-              *) echo "$1" ;;
-            esac
-          }
 
           if [ "$STANDALONE_TARGET" = "all" ]; then
             echo "is_standalone_bulk=true" >> "$GITHUB_OUTPUT"
@@ -135,15 +104,9 @@ jobs:
             exit 0
           fi
 
-          ENV_NAME="$(map_env "$STANDALONE_TARGET")"
-          if [ "$STANDALONE_TARGET" = "arara-vm" ] && [ "$APP_TARGET" = "producao" ]; then
-            echo "::error::arara-vm (Environment teste) so aceita app_target=homologacao."
-            exit 1
-          fi
-
           echo "is_standalone_bulk=false" >> "$GITHUB_OUTPUT"
           echo 'standalone_targets=[]' >> "$GITHUB_OUTPUT"
-          echo "environment=${ENV_NAME}" >> "$GITHUB_OUTPUT"
+          echo "environment=${STANDALONE_TARGET}" >> "$GITHUB_OUTPUT"
 
       - id: version
         name: Resolve app version and image tag
@@ -175,7 +138,7 @@ jobs:
     needs: [set_env]
     if: |
       success()
-      && !(github.event_name == 'workflow_dispatch' && inputs.skip_build == true)
+      && inputs.skip_build != true
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -276,20 +239,13 @@ jobs:
       && needs.build_image.result == 'success'
       && needs.set_env.outputs.is_standalone_bulk == 'true'
       && needs.deploy_bulk.result == 'success'
-      && !(github.event_name == 'workflow_dispatch' && inputs.skip_build == true)
-      && (
-        github.event_name == 'schedule'
-        || (
-          github.event_name == 'workflow_dispatch'
-          && github.ref == 'refs/heads/master'
-          && inputs.standalone_target == 'all'
-          && inputs.app_target == 'producao'
-        )
-      )
+      && inputs.skip_build != true
+      && github.ref == 'refs/heads/master'
+      && inputs.standalone_target == 'all'
     permissions:
       contents: write
     env:
-      BUMP_KIND: ${{ github.event_name == 'schedule' && 'feature' || 'fix' }}
+      BUMP_KIND: fix
     steps:
       - uses: actions/checkout@v4
         with:
@@ -305,8 +261,8 @@ jobs:
             echo "::error::Checkout nao esta em master (esta em '$BRANCH'). Abortando release/bump."
             exit 1
           fi
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.ref }}" != "refs/heads/master" ]; then
-            echo "::error::Dispare o deploy de producao a partir de master (ref atual: ${{ github.ref }})."
+          if [ "${{ github.ref }}" != "refs/heads/master" ]; then
+            echo "::error::Dispare o deploy a partir de master (ref atual: ${{ github.ref }})."
             exit 1
           fi
           echo "OK: master @ $(git rev-parse --short HEAD)"
