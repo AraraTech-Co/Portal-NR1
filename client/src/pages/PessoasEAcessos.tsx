@@ -270,6 +270,7 @@ export function PessoasEAcessos() {
               {filtradas.map((p) => {
                 const open = openId === p.id;
                 const showReset = reset?.userId === p.id;
+                const temAcoes = p.can_suspend || p.can_change_role || p.can_reset_password;
                 return (
                   <Fragment key={p.id}>
                     <tr className={open ? "is-open" : undefined}>
@@ -313,53 +314,70 @@ export function PessoasEAcessos() {
                         )}
                       </td>
                       <td>
-                        {/* As ações da linha ficam lado a lado, não empilhadas. [B2-1-J] */}
-                        <div className="form-actions people-row-actions">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="compact"
-                            aria-expanded={open}
-                            onClick={() => setOpenId(open ? null : p.id)}
-                          >
-                            {open ? "Fechar acessos" : "Ver acessos"}
-                          </Button>
-                          {p.can_suspend && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="compact"
-                              disabled={busyId === p.id}
-                              onClick={() => void toggleAcesso(p)}
-                            >
-                              {p.status === "suspended" ? "Devolver acesso" : "Suspender acesso"}
-                            </Button>
-                          )}
-                          {p.can_change_role && (
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              size="compact"
-                              disabled={busyId === p.id}
-                              onClick={() => (editing?.userId === p.id ? setEditing(null) : startEdit(p))}
-                            >
-                              Mudar papel
-                            </Button>
-                          )}
-                          {p.can_reset_password && (
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              size="compact"
-                              disabled={busyId === p.id}
-                              onClick={() => void onReset(p)}
-                            >
-                              {busyId === p.id ? "Redefinindo…" : "Redefinir senha"}
-                            </Button>
-                          )}
-                        </div>
+                        {/*
+                          Até quatro botões por linha quebravam em duas linhas
+                          no notebook (1366 e 1536 pontos). Na linha fica um
+                          botão só; as ações abrem no painel da pessoa, junto
+                          dos acessos. [B2-1-J]
+                        */}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="compact"
+                          aria-expanded={open}
+                          className="people-abrir"
+                          onClick={() => setOpenId(open ? null : p.id)}
+                        >
+                          {open ? "Fechar" : temAcoes ? "Acessos e ações" : "Ver acessos"}
+                        </Button>
                       </td>
                     </tr>
+                    {open && (
+                      <tr className="people-expand">
+                        <td colSpan={4}>
+                          <div className="people-panel">
+                            {temAcoes && (
+                              <div className="form-actions people-row-actions">
+                                {p.can_suspend && (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="compact"
+                                    disabled={busyId === p.id}
+                                    onClick={() => void toggleAcesso(p)}
+                                  >
+                                    {p.status === "suspended" ? "Devolver acesso" : "Suspender acesso"}
+                                  </Button>
+                                )}
+                                {p.can_change_role && (
+                                  <Button
+                                    type="button"
+                                    variant="secondary"
+                                    size="compact"
+                                    disabled={busyId === p.id}
+                                    onClick={() => (editing?.userId === p.id ? setEditing(null) : startEdit(p))}
+                                  >
+                                    Mudar papel
+                                  </Button>
+                                )}
+                                {p.can_reset_password && (
+                                  <Button
+                                    type="button"
+                                    variant="secondary"
+                                    size="compact"
+                                    disabled={busyId === p.id}
+                                    onClick={() => void onReset(p)}
+                                  >
+                                    {busyId === p.id ? "Redefinindo…" : "Redefinir senha"}
+                                  </Button>
+                                )}
+                              </div>
+                            )}
+                            <Acessos modules={p.modules} />
+                          </div>
+                        </td>
+                      </tr>
+                    )}
                     {editing?.userId === p.id && (
                       <tr className="people-expand">
                         <td colSpan={4}>
@@ -438,15 +456,6 @@ export function PessoasEAcessos() {
                               Passe só para a pessoa. Ela troca no primeiro acesso, e esta senha não
                               aparece de novo.
                             </p>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                    {open && (
-                      <tr className="people-expand">
-                        <td colSpan={4}>
-                          <div className="people-panel">
-                            <Acessos modules={p.modules} />
                           </div>
                         </td>
                       </tr>
