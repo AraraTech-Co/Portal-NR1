@@ -381,7 +381,8 @@ class HomeController {
             id: "pedidos_entrada",
             label: "Pedidos de entrada esperando aprovação",
             count: pedidos,
-            link: "/conta",
+            /* Conta e usuários abre na parte dos pedidos. [B2-1-I] */
+            link: "/conta?parte=entrada",
             tone: "warning",
           });
         }
@@ -684,7 +685,7 @@ class HomeController {
             id: "acesso_fiscal",
             label: "Acessos de consulta a vencer",
             count: fiscais.length,
-            link: "/conta",
+            link: "/conta?parte=fiscalizacao",
             tone: "info",
             detail: prazoTexto(fiscais[0]?.accessExpiresAt),
           });

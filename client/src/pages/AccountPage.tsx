@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   createInviteLink,
   deactivateInviteLink,
@@ -17,9 +17,11 @@ import { Chip } from "@/components/Chip";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
 import { canalPath, canalUrl } from "@/lib/canal";
+import { parteAberta, partesDaConta, ROTULO_DA_PARTE, type Parte } from "@/lib/partes-da-conta";
 import { avisoDoPapel, formatDay, ORG_ROLE_LABEL } from "@/lib/labels";
 import "@/components/data-table.css";
 import "@/components/form.css";
+import "./conta.css";
 import { LoadingState } from "@/components/LoadingState";
 import { ConsultaAcessos, FiscaisComAcesso } from "./ConsultaAcessos";
 import { ImportPeople } from "./ImportPeople";
@@ -57,6 +59,7 @@ export function AccountPage() {
   const [assignable, setAssignable] = useState<AssignableRoles>({
     org_roles: ["COLABORADOR"],
   });
+  const [parametros, setParametros] = useSearchParams();
   const [canManage, setCanManage] = useState(false);
   const [canDecide, setCanDecide] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -250,11 +253,17 @@ export function AccountPage() {
     }
   }
 
+  const partes = partesDaConta({ gerenciar: canManage, decidirPedidos: canDecide });
+  const parte = parteAberta(partes, parametros.get("parte"));
+  function abrirParte(p: Parte) {
+    setParametros(p === partes[0] ? {} : { parte: p }, { replace: true });
+  }
+
   return (
     <div>
       <PageHeader
         title="Conta e usuários"
-        description="Sessão, canal de denúncia, contas acessíveis, links de convite e pedidos de entrada."
+        description="A sua sessão e, em partes, as pessoas e os acessos da empresa."
       />
 
       {user && (
@@ -307,7 +316,25 @@ export function AccountPage() {
         </section>
       )}
 
-      {user && (
+      {/* A sessão fica à vista; o resto, em partes. [B2-1-I] */}
+      <nav className="conta-partes" aria-label="Partes de Conta e usuários">
+        {partes.map((p) => (
+          <button
+            key={p}
+            type="button"
+            className={`conta-parte${p === parte ? " is-ativa" : ""}`}
+            aria-current={p === parte ? "page" : undefined}
+            onClick={() => abrirParte(p)}
+          >
+            {ROTULO_DA_PARTE[p]}
+            {p === "entrada" && requests.length > 0 && (
+              <span className="conta-parte-conta">{requests.length}</span>
+            )}
+          </button>
+        ))}
+      </nav>
+
+      {parte === "canal" && user && (
         <section className="form-section">
           <h2>Canal de denúncia</h2>
           <p className="muted">
@@ -370,7 +397,7 @@ export function AccountPage() {
         </p>
       )}
 
-      {!loading && accounts.length > 0 && (
+      {parte === "contas" && !loading && accounts.length > 0 && (
         <section className="form-section">
           <h2>Contas acessíveis</h2>
           <div className="data-table-wrap">
@@ -419,7 +446,7 @@ export function AccountPage() {
         </section>
       )}
 
-      {canDecide && (
+      {parte === "entrada" && canDecide && (
         <section className="form-section">
           <h2>Pedidos de entrada</h2>
           {requests.length === 0 ? (
@@ -603,7 +630,7 @@ export function AccountPage() {
         </section>
       )}
 
-      {canManage && (
+      {parte === "entrada" && canManage && (
         <section className="form-section">
           <h2>Links de convite</h2>
           <p className="muted">
@@ -810,12 +837,12 @@ export function AccountPage() {
         </section>
       )}
 
-      {canManage && <ImportPeople />}
-      {canManage && <PessoasEAcessos />}
+      {parte === "pessoas" && canManage && <PessoasEAcessos />}
+      {parte === "pessoas" && canManage && <ImportPeople />}
       {/* Quem é o comitê de ética é decisão de acesso. [CB-27] */}
-      {canManage && <EthicsCommitteeSection />}
-      {canManage && <FiscaisComAcesso />}
-      {canManage && <ConsultaAcessos />}
+      {parte === "canal" && canManage && <EthicsCommitteeSection />}
+      {parte === "fiscalizacao" && canManage && <FiscaisComAcesso />}
+      {parte === "fiscalizacao" && canManage && <ConsultaAcessos />}
     </div>
   );
 }

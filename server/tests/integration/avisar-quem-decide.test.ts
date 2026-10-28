@@ -375,7 +375,8 @@ describe("o pedido de entrada entra na mesa de quem aprova [CB-53]", () => {
     const naMesa = cartoes.find((c) => c.id === "pedidos_entrada");
     expect(naMesa, "quem aprova vê o pedido no Início").toBeTruthy();
     expect(naMesa!.count).toBeGreaterThan(0);
-    expect(naMesa!.link).toBe("/conta");
+    /* Leva direto à parte dos pedidos em Conta e usuários. [B2-1-I] */
+    expect(naMesa!.link).toBe("/conta?parte=entrada");
 
     const doColaborador = await mesa(colaborador.token);
     expect(
