@@ -412,3 +412,58 @@ describe("nenhuma situação chega à tela em código [CB-64]", () => {
     );
   });
 });
+
+describe("a pesquisa anônima conta respostas, não pessoas [CB-64]", () => {
+  /*
+    Decidido: a pesquisa anônima continua sem guardar quem respondeu, e por
+    isso não impede a mesma pessoa de responder de novo. A tela de quem cuida
+    do módulo diz que a contagem é de respostas.
+  */
+  it("a mesma pessoa responde duas vezes, e as duas entram sem autor", async () => {
+    const id = await pesquisaNova(`Clima repetido ${SUFIXO}`);
+    const [primeira] = await perguntasDe(id);
+    await request(app).post(`/api/climate-surveys/${id}/open`).set(as(rh.token));
+
+    for (const score of [2, 4]) {
+      const res = await request(app)
+        .post(`/api/climate-surveys/${id}/respond`)
+        .set(as(colaborador.token))
+        .send({ answers: [{ question_id: primeira, score }] });
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
+    }
+
+    const lista = await request(app).get("/api/climate-surveys").set(as(rh.token));
+    const linha = (lista.body.surveys as { id: string; _count: { responses: number } }[]).find(
+      (s) => s.id === id,
+    )!;
+    expect(linha._count.responses, "a contagem é de respostas").toBe(2);
+    const guardadas = await prisma.climateResponse.findMany({
+      where: { surveyId: id },
+      select: { userId: true },
+    });
+    expect(guardadas.map((g) => g.userId)).toEqual([null, null]);
+  });
+
+  it("a tela de quem cuida do módulo diz que a contagem é de respostas", () => {
+    const tela = fonte("pages", "ClimatePage.tsx");
+    expect(tela, "a varredura não engoliu código junto").toContain(
+      'useModuleAccess("clima")',
+    );
+    /*
+      Na lista: só para quem cuida do módulo, quando há pesquisa anônima, uma
+      vez acima da tabela — fora da coluna da contagem, que some no celular.
+    */
+    const aviso = entre(tela, "{canManage && rows.some((r) => r.isAnonymous) && (", ")}").replace(/\s+/g, " ");
+    expect(aviso).toContain(
+      "Nas pesquisas anônimas, o número é de respostas, não de pessoas: o portal não guarda quem respondeu, e a mesma pessoa pode ter respondido mais de uma vez.",
+    );
+    expect(tela.indexOf("respostas, não de pessoas"), "acima da tabela").toBeLessThan(
+      tela.indexOf('<table className="data-table climate-table">'),
+    );
+    expect(tela.split("respostas, não de pessoas").length - 1, "uma vez só").toBe(1);
+    /* Ao montar a pesquisa, que já é só de quem cuida do módulo. */
+    const montar = entre(tela, "<NewRecordSection", "submitLabel=");
+    expect(montar).toContain("canWrite={canManage}");
+    expect(montar).toContain("o portal conta respostas, não pessoas.");
+  });
+});

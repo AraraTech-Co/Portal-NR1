@@ -12,3 +12,8 @@
 .climate-acoes {
   margin-top: 0.5rem;
 }
+
+/* A nota da contagem fica acima da tabela, sem encostar nela. [CB-64] */
+.climate-nota {
+  margin-bottom: 0.75rem;
+}

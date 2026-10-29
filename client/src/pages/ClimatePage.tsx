@@ -159,7 +159,7 @@ export function ClimatePage() {
           canWrite={canManage}
           openLabel="Nova pesquisa"
           title="Nova pesquisa de clima"
-          description="Nasce como rascunho: dá para revisar antes de abrir para respostas. A resposta é anônima."
+          description="Nasce como rascunho: dá para revisar antes de abrir para respostas. A resposta é anônima, e por isso o portal conta respostas, não pessoas."
           submitLabel="Criar rascunho"
           disabled={!title.trim()}
           onSubmit={async () => {
@@ -278,6 +278,18 @@ export function ClimatePage() {
               </Button>
             </div>
           </section>
+        )}
+
+        {/* Na anônima, o portal não guarda quem respondeu e, por isso, não
+            impede a mesma pessoa de responder de novo: a contagem é de
+            respostas. Impedir exigiria guardar quem respondeu. Uma vez,
+            acima da tabela: a coluna da contagem some no celular. [CB-64] */}
+        {canManage && rows.some((r) => r.isAnonymous) && (
+          <p className="form-hint climate-nota">
+            Nas pesquisas anônimas, o número é de respostas, não de pessoas: o
+            portal não guarda quem respondeu, e a mesma pessoa pode ter
+            respondido mais de uma vez.
+          </p>
         )}
 
         <div className="data-table-wrap">
