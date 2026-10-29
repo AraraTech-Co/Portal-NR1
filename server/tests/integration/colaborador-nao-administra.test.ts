@@ -1,13 +1,16 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import request from "supertest";
 import type { Express } from "express";
 import { createApp } from "../../src/app";
+import prisma from "../../src/model/prisma";
 
 /**
  * Escrever para enviar o PRÓPRIO registro não é administrar o módulo.
  * Mesma causa do [S4-A] em ideias, clima, ocorrências e AEP.
  *
  * Exige a organização do `scripts/seed-teste-org.ts` (um usuário por papel).
+ * O que os casos criam é apagado no fim, com a trilha de auditoria de cada
+ * registro; ficam só as entradas e as sessões, como nos outros testes.
  */
 const SENHA = "teste1234";
 const EST_ID = "aaaaaaaa-0001-4000-8000-000000000011";
@@ -27,11 +30,29 @@ let sst: { token: string; user: { id: string } };
 
 const as = (token: string) => ({ Authorization: `Bearer ${token}` });
 
+const criados = {
+  ideias: [] as string[],
+  pesquisas: [] as string[],
+  ocorrencias: [] as string[],
+  aeps: [] as string[],
+  perigos: [] as string[],
+};
+
 beforeAll(async () => {
   app = createApp();
   colaborador = await entrar(app, "teste.colaborador");
   rh = await entrar(app, "teste.rh");
   sst = await entrar(app, "teste.sst");
+});
+
+afterAll(async () => {
+  const ids = Object.values(criados).flat();
+  await prisma.auditEvent.deleteMany({ where: { entityId: { in: ids } } });
+  await prisma.hazard.deleteMany({ where: { id: { in: criados.perigos } } });
+  await prisma.aep.deleteMany({ where: { id: { in: criados.aeps } } });
+  await prisma.occurrence.deleteMany({ where: { id: { in: criados.ocorrencias } } });
+  await prisma.climateSurvey.deleteMany({ where: { id: { in: criados.pesquisas } } });
+  await prisma.idea.deleteMany({ where: { id: { in: criados.ideias } } });
 });
 
 describe("ideias", () => {
@@ -41,11 +62,13 @@ describe("ideias", () => {
       .set(as(rh.token))
       .send({ title: "Ideia do RH", description: "Texto da ideia do RH" });
     expect(doRh.status).toBe(201);
+    criados.ideias.push(doRh.body.idea.id);
     const minha = await request(app)
       .post("/api/ideas")
       .set(as(colaborador.token))
       .send({ title: "Minha ideia", description: "Texto da minha ideia" });
     expect(minha.status).toBe(201);
+    criados.ideias.push(minha.body.idea.id);
 
     const lista = await request(app).get("/api/ideas").set(as(colaborador.token));
     const autores = new Set(
@@ -70,6 +93,8 @@ describe("ideias", () => {
       .post("/api/ideas")
       .set(as(colaborador.token))
       .send({ title: "Para o RH decidir", description: "Texto da ideia" });
+    expect(minha.status).toBe(201);
+    criados.ideias.push(minha.body.idea.id);
     const decide = await request(app)
       .post(`/api/ideas/${minha.body.idea.id}/decide`)
       .set(as(rh.token))
@@ -92,6 +117,7 @@ describe("clima", () => {
       .send({ title: "Clima do RH", questions: [{ prompt: "Você se sente ouvido?" }] });
     expect(criada.status).toBe(201);
     const id = criada.body.survey.id as string;
+    criados.pesquisas.push(id);
 
     const rascunho = await request(app)
       .get(`/api/climate-surveys/${id}`)
@@ -139,6 +165,7 @@ describe("ocorrências", () => {
         establishment_id: EST_ID,
       });
     expect(res.status).toBe(201);
+    criados.ocorrencias.push(res.body.occurrence.id);
     return res.body.occurrence.id as string;
   }
 
@@ -199,6 +226,7 @@ describe("AEP", () => {
         method: "OBSERVATION",
       });
     expect(res.status).toBe(201);
+    criados.aeps.push(res.body.aep.id);
     return res.body.aep.id as string;
   }
 
@@ -231,5 +259,6 @@ describe("AEP", () => {
       .set(as(sst.token))
       .send({ factor_id: "OVERLOAD", description: "Sobrecarga", exposed_workers_count: 2 });
     expect(perigo.status).toBe(201);
+    criados.perigos.push(perigo.body.hazard.id);
   });
 });
