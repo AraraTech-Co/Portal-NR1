@@ -1,7 +1,7 @@
 {
   "name": "portal-nr1",
   "private": true,
-  "version": "0.1.0.1",
+  "version": "0.1.0.2",
   "description": "Portal NR-1 — React + Express (scaffold)",
   "license": "SEE LICENSE IN LICENSE",
   "scripts": {
