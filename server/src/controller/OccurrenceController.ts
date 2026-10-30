@@ -27,6 +27,14 @@ import {
   OCCURRENCE_TYPE_VALUES,
   isOccurrenceType,
 } from "../constants";
+import {
+  deadlineLimit,
+  hojeEmBrasilia,
+  PRIORITY_BY_LEVEL,
+  RISK_LEVEL_LABEL,
+  type RiskLevel,
+} from "../helper/action-deadline";
+import { nivelDoRisco } from "../helper/nivel-do-risco";
 import type { AuthRequest } from "../types/auth";
 
 function fail(res: Response, err: unknown) {
@@ -480,6 +488,7 @@ class OccurrenceController {
         priority,
         assignee_id,
         due_date,
+        deadline_justification,
         effectiveness_criteria,
       } = req.body as {
         title?: string;
@@ -487,6 +496,7 @@ class OccurrenceController {
         priority?: string;
         assignee_id?: string;
         due_date?: string;
+        deadline_justification?: string;
         effectiveness_criteria?: string;
       };
 
@@ -517,6 +527,46 @@ class OccurrenceController {
         return;
       }
 
+      /*
+        A mesma regra do plano de ação aberto pelo Inventário: data no passado
+        é recusada, e o prazo do nível do risco da ocorrência é limite — passar
+        dele exige dizer por quê. A ação pela ocorrência não conferia o prazo
+        e saía sempre com prioridade Alta. [CB-72] [S2-M] [B3-2-A]
+      */
+      const prazo = new Date(`${String(due_date).slice(0, 10)}T00:00:00.000Z`);
+      if (Number.isNaN(prazo.getTime())) {
+        res.status(400).json({ message: "Prazo inválido. Use AAAA-MM-DD." });
+        return;
+      }
+      const hoje = hojeEmBrasilia();
+      if (prazo < hoje) {
+        res.status(400).json({
+          message: "O prazo não pode ser uma data que já passou.",
+          code: "DEADLINE_IN_THE_PAST",
+        });
+        return;
+      }
+      const avaliado = occurrence.riskId ? await nivelDoRisco(orgId, occurrence.riskId) : null;
+      const nivel = avaliado?.nivel ?? null;
+      const justificativa = blank(deadline_justification);
+      const { days, limit } = deadlineLimit(nivel, hoje);
+      const passouDoLimite = Boolean(nivel) && prazo > limit;
+      if (passouDoLimite && !justificativa) {
+        const deOnde = avaliado?.validada ? "" : ", aguardando validação,";
+        res.status(400).json({
+          message: `Risco ${RISK_LEVEL_LABEL[nivel as never] ?? nivel}${deOnde} pede prazo de até ${days} dias (${formatCalendarDay(limit)}). Para ir além, diga por quê.`,
+          code: "DEADLINE_NEEDS_JUSTIFICATION",
+          limit_days: days,
+          limit_date: limit.toISOString().slice(0, 10),
+        });
+        return;
+      }
+      /* Sem prioridade escolhida, a do nível do risco; sem nível, Média. */
+      const prioridade =
+        (priority as never) ||
+        (nivel ? PRIORITY_BY_LEVEL[nivel as RiskLevel] : undefined) ||
+        ACTION_PRIORITIES.MEDIUM;
+
       const action = await new Action().create.new({
         organizationId: orgId,
         title: title.trim(),
@@ -524,10 +574,13 @@ class OccurrenceController {
         sourceType: ACTION_SOURCE_TYPES.OCCURRENCE,
         occurrenceId: occurrence.id,
         riskId: occurrence.riskId,
-        priority: (priority as never) || ACTION_PRIORITIES.HIGH,
+        priority: prioridade,
         status: ACTION_STATUSES.OPEN,
         assigneeId: assignee_id ?? null,
-        dueDate: due_date ? new Date(due_date) : null,
+        dueDate: prazo,
+        // Só guarda o motivo quando ele foi de fato necessário.
+        deadlineJustification: passouDoLimite ? justificativa : null,
+        riskLevelAtOpening: nivel,
         effectivenessCriteria: criterio,
         createdById: userId,
       });

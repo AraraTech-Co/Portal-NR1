@@ -369,6 +369,34 @@ export function podeEditarCriterio(
 }
 
 /**
+ * A prioridade vem do nível do risco: intolerável não espera. Fica editável,
+ * porque quem conhece a operação pode discordar. Espelho de
+ * `server/src/helper/action-deadline.ts`: a tela sugere, o servidor cobra.
+ * Usado pelo Inventário e pela ocorrência. [S2-M] [CB-72]
+ */
+export const PRIORITY_BY_LEVEL: Record<string, string> = {
+  INTOLERABLE: "CRITICAL",
+  SUBSTANTIAL: "HIGH",
+  MODERATE: "MEDIUM",
+  TOLERABLE: "LOW",
+  TRIVIAL: "LOW",
+};
+
+/** Prazo sugerido: quanto pior o risco, mais curto. */
+export const DAYS_BY_PRIORITY: Record<string, number> = {
+  CRITICAL: 7,
+  HIGH: 30,
+  MEDIUM: 90,
+  LOW: 180,
+};
+
+/** O que o nível do risco pede: prioridade e dias. [B2-2-A] [S2-M] */
+export function sugestaoDoNivel(nivel: string | null) {
+  const prioridade = PRIORITY_BY_LEVEL[nivel ?? ""] ?? "MEDIUM";
+  return { prioridade, dias: DAYS_BY_PRIORITY[prioridade] ?? 90 };
+}
+
+/**
  * O nível que decide prioridade e limite de prazo da ação: o da avaliação
  * MAIS RECENTE, validada ou à espera de validação — a mesma regra do
  * servidor. A substituída não conta. Só o validado valia, e quem avalia não

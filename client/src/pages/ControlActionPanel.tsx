@@ -18,39 +18,15 @@ import {
   CONTROL_TYPE_LABEL,
   CRITERIO_HINT,
   CRITERIO_LABEL,
+  DAYS_BY_PRIORITY,
   formatDay,
   nivelParaPrazo,
+  PRIORITY_BY_LEVEL,
+  RISK_LEVEL_LABEL,
+  sugestaoDoNivel,
 } from "@/lib/labels";
 import "@/components/form.css";
 import "./control-action.css";
-
-/**
- * A prioridade vem do nível do risco: intolerável não espera. Fica editável,
- * porque quem conhece a operação pode discordar. [S2-M]
- */
-const PRIORITY_BY_LEVEL: Record<string, string> = {
-  INTOLERABLE: "CRITICAL",
-  SUBSTANTIAL: "HIGH",
-  MODERATE: "MEDIUM",
-  TOLERABLE: "LOW",
-  TRIVIAL: "LOW",
-};
-
-const RISK_LEVEL_LABEL: Record<string, string> = {
-  INTOLERABLE: "Intolerável",
-  SUBSTANTIAL: "Substancial",
-  MODERATE: "Moderado",
-  TOLERABLE: "Tolerável",
-  TRIVIAL: "Trivial",
-};
-
-/** Prazo sugerido: quanto pior o risco, mais curto. */
-const DAYS_BY_PRIORITY: Record<string, number> = {
-  CRITICAL: 7,
-  HIGH: 30,
-  MEDIUM: 90,
-  LOW: 180,
-};
 
 function isoInDays(days: number): string {
   return new Date(Date.now() - 3 * 3_600_000 + days * 86_400_000).toISOString().slice(0, 10);
@@ -59,12 +35,6 @@ function isoInDays(days: number): string {
 /** Hoje em Brasília: o prazo não pode ser uma data que já passou. [CB-21] */
 function hojeIso(): string {
   return isoInDays(0);
-}
-
-/** O que o nível do risco pede: prioridade e dias. [B2-2-A] [S2-M] */
-function sugestaoDoNivel(nivel: string | null) {
-  const prioridade = PRIORITY_BY_LEVEL[nivel ?? ""] ?? "MEDIUM";
-  return { prioridade, dias: DAYS_BY_PRIORITY[prioridade] ?? 90 };
 }
 
 /** Medidas de prevenção e as ações que as implantam. [S2-A] */

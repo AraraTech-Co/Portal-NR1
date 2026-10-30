@@ -22,6 +22,7 @@ import {
   deadlineLimit,
   hojeEmBrasilia,
 } from "../helper/action-deadline";
+import { nivelDoRisco } from "../helper/nivel-do-risco";
 import type { AuthRequest } from "../types/auth";
 
 function fail(res: Response, err: unknown) {
@@ -52,34 +53,6 @@ async function audit(
 
 function textOrNull(raw: unknown): string | null {
   return typeof raw === "string" && raw.trim() !== "" ? raw.trim() : null;
-}
-
-/** Nível vigente do risco: a última avaliação validada. [S2-M] */
-/**
- * O nível que decide prioridade e limite de prazo: o da avaliação MAIS
- * RECENTE, validada ou à espera de validação. Só o validado valia, e quem
- * avalia não valida a própria avaliação: no caminho mais comum — avaliar e
- * já abrir a ação —, a tela dizia "Sem risco avaliado" e aceitava qualquer
- * prazo. A avaliação substituída não conta. [B3-2-A]
- */
-async function nivelDoRisco(
-  organizationId: string,
-  riskId: string,
-): Promise<{ nivel: string; validada: boolean } | null> {
-  const avaliacao = await prisma.riskAssessment.findFirst({
-    where: {
-      organizationId,
-      riskId,
-      status: { not: AssessmentStatus.SUPERSEDED },
-    },
-    orderBy: { assessedAt: "desc" },
-    select: { resultingLevel: true, status: true },
-  });
-  if (!avaliacao?.resultingLevel) return null;
-  return {
-    nivel: avaliacao.resultingLevel,
-    validada: avaliacao.status === AssessmentStatus.VALIDATED,
-  };
 }
 
 class RiskController {
