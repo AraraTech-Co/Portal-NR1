@@ -1,4 +1,6 @@
 import { Role } from "@prisma/client";
+import prisma from "../model/prisma";
+import { effectivePermission } from "./auth";
 import { canWriteModule } from "./module-access";
 import type { Actor } from "../types/auth";
 
@@ -20,6 +22,49 @@ const ORG_RANK: Record<Role, number> = {
 
 export function canManageInviteLinks(actor: Actor): boolean {
   return canWriteModule(actor.permission, "conta");
+}
+
+/** Papéis que decidem pedidos da própria conta, sem cuidar de Conta. */
+const DECIDEM_NA_CONTA: readonly Role[] = [
+  Role.ADMIN,
+  Role.RH,
+  Role.SST,
+  Role.GERENTE,
+  Role.ADM_LOJA,
+];
+
+/**
+ * Quem deve ser avisado de um pedido de entrada na conta: o mesmo recorte do
+ * Início e da tela que decide. Quem cuida de Conta (e o master) decide os de
+ * todas as contas da empresa; os outros papéis que decidem, só os da conta
+ * de que fazem parte. Acesso suspenso ou vencido não recebe. [CB-29]
+ */
+export async function quemDecidePedidosDaConta(
+  organizationId: string,
+  accountId: string,
+): Promise<string[]> {
+  const agora = new Date();
+  const membros = await prisma.membership.findMany({
+    where: {
+      organizationId,
+      suspendedAt: null,
+      OR: [{ accessExpiresAt: null }, { accessExpiresAt: { gt: agora } }],
+      user: { active: true },
+    },
+    select: {
+      userId: true,
+      role: true,
+      user: { select: { accountMemberships: { where: { accountId }, select: { id: true } } } },
+    },
+  });
+  return membros
+    .filter((m) => {
+      if (m.role === Role.MASTER || canWriteModule(effectivePermission(m.role), "conta")) {
+        return true;
+      }
+      return DECIDEM_NA_CONTA.includes(m.role) && m.user.accountMemberships.length > 0;
+    })
+    .map((m) => m.userId);
 }
 
 /** Quem pode aprovar/recusar pedidos de entrada. */
