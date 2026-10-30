@@ -121,6 +121,7 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   "establishment.create": "Estabelecimento cadastrado",
   "sector.create": "Setor cadastrado",
   "job_role.create": "Função cadastrada",
+  "job_role_requirement.create": "Exigência da função criada",
   "activity.create": "Atividade cadastrada",
   "organization.update": "Dados da empresa alterados",
   "session.signin": "Entrou no portal",

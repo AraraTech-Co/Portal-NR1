@@ -115,6 +115,24 @@ class ComplianceController {
           validityMonths: (validity_months as number) ?? null,
         },
       });
+      /*
+        A exigência decide quem o Painel conta "em dia" no treinamento: quem
+        a criou e quando precisa ficar registrado. [CB-75]
+      */
+      await writeAudit({
+        organizationId: orgId,
+        actorId: actorUserId(auth),
+        action: "job_role_requirement.create",
+        entityType: "JobRoleRequirement",
+        entityId: row.id,
+        after: {
+          jobRoleId: row.jobRoleId,
+          kind: row.kind,
+          name: row.name,
+          trainingId: row.trainingId,
+          validityMonths: row.validityMonths,
+        },
+      });
       res.status(201).json({ requirement: row });
     } catch (err) {
       fail(res, err);

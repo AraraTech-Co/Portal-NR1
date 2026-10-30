@@ -854,6 +854,8 @@ class InspectionController {
         "establishment",
         "sector",
         "job_role",
+        /* A exigência decide quem o Painel conta em dia. [CB-75] */
+        "job_role_requirement",
         "activity",
         "hazard",
         "risk",
