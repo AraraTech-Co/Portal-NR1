@@ -187,13 +187,19 @@ export function OccurrenceDetailPage() {
           nem para o histórico, onde se vê a reavaliação que esta análise
           pediu. [B3-4-C]
         */}
+        {/* O link, no meio da frase e sem cor, lia-se como texto corrido e
+            foi achado por acaso: fica na própria linha, com cara de link. [B4-D] */}
         {row.risk && (
-          <p className="occ-risco">
-            <strong>Risco:</strong> {row.risk.description}{" "}
-            <Link to={`/inventario?risco=${row.risk.id}`}>
-              abrir no inventário, com o histórico
-            </Link>
-          </p>
+          <>
+            <p className="occ-risco">
+              <strong>Risco:</strong> {row.risk.description}
+            </p>
+            <p className="occ-risco">
+              <Link className="occ-risco-link" to={`/inventario?risco=${row.risk.id}`}>
+                Ver o risco no inventário, com o histórico
+              </Link>
+            </p>
+          </>
         )}
       </section>
 
