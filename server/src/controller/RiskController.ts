@@ -451,7 +451,7 @@ class RiskController {
       */
       const ocorrencias = await prisma.occurrence.findMany({
         where: { organizationId: orgId, riskId: risk.id },
-        select: { id: true },
+        select: { id: true, description: true },
       });
       const changes = await prisma.auditEvent.findMany({
         where: {
@@ -472,11 +472,24 @@ class RiskController {
           id: true,
           action: true,
           entityType: true,
+          entityId: true,
           before: true,
           after: true,
           createdAt: true,
           actor: { select: { id: true, name: true } },
         },
+      });
+      /*
+        "Ocorrência registrada" trazia só o tipo: o registro antigo da trilha
+        não guardava o que aconteceu. A descrição vem da própria ocorrência
+        quando a trilha não a tem. [B4-A]
+      */
+      const descricaoDa = new Map(ocorrencias.map((o) => [o.id, o.description]));
+      const mudancas = changes.map(({ entityId, ...c }) => {
+        if (c.action !== "occurrence.create") return c;
+        const depois = (c.after ?? {}) as Record<string, unknown>;
+        if (depois.description || !descricaoDa.has(entityId)) return c;
+        return { ...c, after: { ...depois, description: descricaoDa.get(entityId) } };
       });
 
       res.json({
@@ -514,7 +527,7 @@ class RiskController {
         })),
         controls: risk.controls,
         actions: risk.actions,
-        changes,
+        changes: mudancas,
       });
     } catch (err) {
       fail(res, err);

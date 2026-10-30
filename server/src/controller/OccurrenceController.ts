@@ -268,7 +268,12 @@ class OccurrenceController {
         action: "occurrence.create",
         entityType: "Occurrence",
         entityId: occurrence.id,
-        after: { type: occurrence.type },
+        /* O que aconteceu, não só o tipo: o Histórico do risco mostra. [B4-A] */
+        after: {
+          type: occurrence.type,
+          description: occurrence.description,
+          occurredAt: occurrence.occurredAt,
+        },
       });
 
       res.status(201).json({ occurrence });
