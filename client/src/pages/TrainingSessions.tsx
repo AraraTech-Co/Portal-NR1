@@ -2,10 +2,14 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   fetchTrainingSessions,
   recordSessionAttendance,
+  addSessionPaper,
   recordTrainingSession,
+  sessionPaperUrl,
   updateTrainingSession,
   type TrainingSession,
 } from "@/api/trainings";
+import { baixarArquivoPrivado } from "@/api/arquivo-privado";
+import { AnexarPapel } from "@/components/AnexarPapel";
 import { fetchOrgMembers, type OrgMember } from "@/api/org-members";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
@@ -631,6 +635,23 @@ export function TrainingSessions({
                   onSaved={load}
                 />
               )}
+              {/* O papel assinado da turma, anexo opcional (B3-4-F). [CB-74] */}
+              <AnexarPapel
+                canWrite={canRecord}
+                label="Lista de presença ou certificados assinados"
+                hint="Opcional: o portal guarda a cópia digitalizada; o original fica com a empresa. Até 20 MB."
+                anexos={s.papers}
+                onSend={async (input) => {
+                  await addSessionPaper(trainingId, s.id, input);
+                  await load();
+                }}
+                onOpen={(anexo) =>
+                  baixarArquivoPrivado(
+                    sessionPaperUrl(trainingId, s.id, anexo.id),
+                    anexo.fileName ?? "lista-de-presenca",
+                  )
+                }
+              />
               {/* A aula já passou e ninguém lançou a presença: é aqui que o
                   certificado nasce. [CB-34] */}
               {canRecord &&

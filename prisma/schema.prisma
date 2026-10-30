@@ -851,6 +851,10 @@ model Evidence {
   occurrenceId     String?
   drillId          String?
   aepId            String?
+  /// O papel assinado da ordem de serviço e da turma presencial, como
+  /// decidido em B3-4-F: anexar é possível, não obrigatório. [CB-74]
+  serviceOrderId    String?
+  trainingSessionId String?
   createdAt        DateTime                 @default(now())
   updatedAt        DateTime                 @updatedAt
 
@@ -860,6 +864,8 @@ model Evidence {
   occurrence    Occurrence?          @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
   drill         EmergencyDrill?      @relation(fields: [drillId], references: [id], onDelete: Cascade)
   aep           Aep?                 @relation(fields: [aepId], references: [id], onDelete: Cascade)
+  serviceOrder    ServiceOrder?    @relation(fields: [serviceOrderId], references: [id], onDelete: Cascade)
+  trainingSession TrainingSession? @relation(fields: [trainingSessionId], references: [id], onDelete: Cascade)
   uploadedBy    User                 @relation("EvidenceUploader", fields: [uploadedById], references: [id])
   reviewedBy    User?                @relation("EvidenceReviewer", fields: [reviewedById], references: [id])
 
@@ -867,6 +873,8 @@ model Evidence {
   @@index([actionId])
   @@index([participationId])
   @@index([occurrenceId])
+  @@index([serviceOrderId])
+  @@index([trainingSessionId])
 }
 
 // ============================================================
@@ -1001,6 +1009,7 @@ model ServiceOrder {
   jobRole      JobRole      @relation(fields: [jobRoleId], references: [id], onDelete: Cascade)
   issuedBy     User         @relation("ServiceOrderIssuer", fields: [issuedById], references: [id])
   acks         ServiceOrderAck[]
+  evidences    Evidence[]
 
   @@unique([organizationId, jobRoleId, version])
   @@index([organizationId, issuedAt])
@@ -2122,6 +2131,7 @@ model TrainingSession {
   recordedBy   User         @relation("SessionRecorder", fields: [recordedById], references: [id])
   attendances  TrainingAttendance[]
   summons      Summon[]
+  evidences    Evidence[]
 
   @@index([organizationId, heldAt])
   @@index([trainingId])

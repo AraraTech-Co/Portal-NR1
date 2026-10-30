@@ -9,6 +9,8 @@ import { formatCalendarDayTime } from "../helper/calendar-day";
 import { canManageModule, canSeeAllInModule } from "../helper/module-access";
 import { NotificationKind, TrainingKind } from "@prisma/client";
 import { ENROLLMENT_STATUSES } from "../constants";
+import { gravarPapel, PAPEL_SELECT, PapelInvalido } from "../helper/papel-anexado";
+import { sendPrivateFile } from "../helper/send-private-file";
 import type { AuthRequest } from "../types/auth";
 
 function fail(res: Response, err: unknown) {
@@ -1188,6 +1190,8 @@ class TrainingController {
           attendances: {
             include: { user: { select: { id: true, name: true } } },
           },
+          /* A lista de presença assinada, quando anexada. [CB-74] */
+          evidences: { orderBy: { uploadedAt: "desc" }, select: PAPEL_SELECT },
         },
       });
 
@@ -1203,6 +1207,7 @@ class TrainingController {
           duration_minutes: s.durationMinutes,
           notes: s.notes,
           recorded_by: s.recordedBy,
+          papers: s.evidences,
           present: s.attendances.filter((a) => a.present).length,
           absent: s.attendances.filter((a) => !a.present).length,
           attendances: s.attendances
@@ -1359,6 +1364,76 @@ class TrainingController {
           instructor_qualification: session.instructorQualification,
         },
       });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
+  /**
+   * Anexa o papel assinado da turma: a lista de presença, os certificados
+   * assinados. Pela decisão B3-4-F, o portal guarda a cópia digitalizada e o
+   * original fica com a empresa; anexar é opcional. [CB-74]
+   */
+  async addSessionPaper(req: Request, res: Response) {
+    try {
+      const auth = req as AuthRequest;
+      const orgId = actorOrgId(auth);
+      const userId = actorUserId(auth);
+      const turma = await prisma.trainingSession.findFirst({
+        where: { id: req.params.sessionId, trainingId: req.params.id, organizationId: orgId },
+        select: { id: true, heldAt: true },
+      });
+      if (!turma) {
+        res.status(404).json({ message: "Turma não encontrada." });
+        return;
+      }
+      const papel = await gravarPapel({
+        organizationId: orgId,
+        uploadedById: userId,
+        body: req.body,
+        eventDate: turma.heldAt,
+        vinculo: { trainingSessionId: turma.id },
+      });
+      await writeAudit({
+        organizationId: orgId,
+        actorId: userId,
+        action: "training.session_paper",
+        entityType: "TrainingSession",
+        entityId: turma.id,
+        after: { evidenceId: papel.id, fileName: papel.fileName },
+      });
+      res.status(201).json({ paper: { id: papel.id, fileName: papel.fileName } });
+    } catch (err) {
+      if (err instanceof PapelInvalido) {
+        res.status(400).json({ message: err.message });
+        return;
+      }
+      fail(res, err);
+    }
+  }
+
+  /** O papel da turma: para quem vê as turmas. [CB-74] */
+  async sessionPaperFile(req: Request, res: Response) {
+    try {
+      const auth = req as AuthRequest;
+      if (!auth.actor || !canSeeAllInModule(auth.actor.permission, "treinamentos")) {
+        res.status(403).json({ message: "Sem permissão para ver as turmas." });
+        return;
+      }
+      const papel = await prisma.evidence.findFirst({
+        where: {
+          id: req.params.evidenceId,
+          organizationId: actorOrgId(auth),
+          trainingSessionId: req.params.sessionId,
+          trainingSession: { trainingId: req.params.id },
+        },
+        select: { storagePath: true, fileName: true, mimeType: true },
+      });
+      if (!papel) {
+        res.status(404).json({ message: "Papel não encontrado." });
+        return;
+      }
+      sendPrivateFile(res, papel, "Este papel foi registrado sem arquivo.");
     } catch (err) {
       fail(res, err);
     }

@@ -2,10 +2,15 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   acknowledgeServiceOrder,
+  addServiceOrderPaper,
   fetchServiceOrder,
   fetchServiceOrderAcks,
+  serviceOrderPaperUrl,
   type ServiceOrderFull,
 } from "@/api/service-orders";
+import { baixarArquivoPrivado } from "@/api/arquivo-privado";
+import { AnexarPapel, type PapelAnexado } from "@/components/AnexarPapel";
+import { useModuleAccess } from "@/lib/module-access";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
 import { LoadingState } from "@/components/LoadingState";
@@ -205,6 +210,9 @@ export function ServiceOrderViewPage() {
   const [acking, setAcking] = useState(false);
   /** A lista de ciência — nula para quem não pode vê-la. [B2-4-G] */
   const [acks, setAcks] = useState<AckRow[] | null>(null);
+  /* O comprovante assinado no papel, anexo opcional (B3-4-F). [CB-74] */
+  const [papeis, setPapeis] = useState<PapelAnexado[]>([]);
+  const { canWrite: podeAnexar } = useModuleAccess("documentos_pgr");
   /** Sai um comprovante por pessoa junto com a ordem. */
   const [comComprovantes, setComComprovantes] = useState(true);
   /** Imprimir só o comprovante desta pessoa. */
@@ -229,7 +237,10 @@ export function ServiceOrderViewPage() {
     let cancelled = false;
     fetchServiceOrderAcks(id)
       .then((data) => {
-        if (!cancelled) setAcks(data.people);
+        if (!cancelled) {
+          setAcks(data.people);
+          setPapeis(data.papers);
+        }
       })
       .catch(() => {
         // Quem não emite nem fiscaliza não vê a lista: não é erro de tela.
@@ -546,6 +557,27 @@ export function ServiceOrderViewPage() {
 
       {acks && (
         <Acknowledgements order={order} rows={acks} onReceipt={setApenas} />
+      )}
+
+      {acks && (
+        <section className="so-papel">
+          <AnexarPapel
+            canWrite={podeAnexar}
+            label="Comprovante de ciência assinado"
+            hint="Opcional: a ciência no portal, com data e hora, já é a prova. Até 20 MB."
+            anexos={papeis}
+            onSend={async (input) => {
+              await addServiceOrderPaper(order.id, input);
+              setPapeis((await fetchServiceOrderAcks(order.id)).papers);
+            }}
+            onOpen={(anexo) =>
+              baixarArquivoPrivado(
+                serviceOrderPaperUrl(order.id, anexo.id),
+                anexo.fileName ?? "comprovante",
+              )
+            }
+          />
+        </section>
       )}
 
       {(apenas ? (acks ?? []) : comprovantes).map((p) => (

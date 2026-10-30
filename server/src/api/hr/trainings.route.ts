@@ -48,5 +48,12 @@ router.post("/api/trainings/:id/turmas", writeRh, (req, res) =>
 router.patch("/api/trainings/:id/turmas/:sessionId", writeRh, (req, res) =>
   trainings.updateSession(req, res),
 );
+/** O papel assinado da turma (lista de presença), anexo opcional. [CB-74] */
+router.post("/api/trainings/:id/turmas/:sessionId/papel", writeRh, (req, res) =>
+  trainings.addSessionPaper(req, res),
+);
+router.get("/api/trainings/:id/turmas/:sessionId/papel/:evidenceId/file", read, (req, res) =>
+  trainings.sessionPaperFile(req, res),
+);
 
 export default router;

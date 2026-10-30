@@ -26,6 +26,9 @@ const UPLOAD_ROUTES = [
   "/api/occupational-exams",
   "/api/hr-documents",
   "/api/payslips",
+  /* O papel assinado da ordem de serviço e da turma. [CB-74] */
+  "/api/service-orders",
+  "/api/trainings",
 ];
 
 /** O maior arquivo aceito, em base64, mais folga para os outros campos do JSON. */
