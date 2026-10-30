@@ -334,7 +334,7 @@ export function OccurrenceDetailPage() {
                 {row.actions.map((a) => (
                   <tr key={a.id}>
                     <td>
-                      <Link to="/acoes">{a.title}</Link>
+                      <Link to={`/acoes?acao=${a.id}`}>{a.title}</Link>
                       <span className="muted occ-sub">
                         {ACTION_PRIORITY_LABEL[a.priority] ?? a.priority}
                       </span>
