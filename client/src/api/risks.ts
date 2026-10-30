@@ -185,6 +185,14 @@ export async function createControl(input: { risk_id: string; type: string; desc
   });
 }
 
+/** Corrigir o tipo da medida já registrada. [B3-2-D] */
+export async function updateControlType(id: string, type: string) {
+  return request<{ control: Control }>(`/api/controls/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ type }),
+  });
+}
+
 /** Ação do plano: NR-1 1.5.5.2 exige dono e prazo. [S2-M] */
 export async function createRiskAction(input: {
   title: string;

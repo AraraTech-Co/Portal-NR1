@@ -788,6 +788,52 @@ class RiskController {
     }
   }
 
+  /**
+   * Corrige o tipo da medida já registrada. A medida da placa foi registrada
+   * como EPI antes de existir "EPC" e continuava EPI no inventário e na
+   * ordem de serviço: não havia como corrigir. A mudança entra na trilha do
+   * risco, com o tipo de antes e o de agora. [B3-2-D]
+   */
+  async updateControlType(req: Request, res: Response) {
+    try {
+      const orgId = actorOrgId(req as AuthRequest);
+      const { type } = req.body as { type?: string };
+      if (!type || !(Object.values(ControlType) as string[]).includes(type)) {
+        res.status(400).json({
+          message: `Informe o tipo: ${Object.values(ControlType).join(", ")}.`,
+        });
+        return;
+      }
+      const atual = await prisma.controlMeasure.findFirst({
+        where: { id: req.params.id, organizationId: orgId },
+        select: { id: true, riskId: true, type: true, description: true },
+      });
+      if (!atual) {
+        res.status(404).json({ message: "Medida não encontrada." });
+        return;
+      }
+      if (atual.type === type) {
+        res.json({ control: atual });
+        return;
+      }
+      const control = await prisma.controlMeasure.update({
+        where: { id: atual.id },
+        data: { type: type as ControlType },
+      });
+      await audit(
+        req,
+        "control.update",
+        "Risk",
+        atual.riskId,
+        { type: atual.type, description: atual.description },
+        { type: control.type, description: control.description },
+      );
+      res.json({ control });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
   // —— Actions (plano de ação mínimo) ——
   async listActions(req: Request, res: Response) {
     try {

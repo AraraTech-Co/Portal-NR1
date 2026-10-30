@@ -81,6 +81,7 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   "assessment.create": "Avaliação de risco feita",
   "assessment.validate": "Avaliação validada",
   "control.create": "Medida de controle registrada",
+  "control.update": "Tipo da medida corrigido",
   "action.create": "Ação aberta",
   "change_event.create": "Mudança registrada",
   "pgr_document.issue": "Documento do PGR emitido",

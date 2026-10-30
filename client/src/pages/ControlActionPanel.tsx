@@ -4,6 +4,7 @@ import {
   createRiskAction,
   fetchAssessments,
   fetchControls,
+  updateControlType,
   type Control,
 } from "@/api/risks";
 import { fetchActions, type ActionRow } from "@/api/actions";
@@ -63,6 +64,10 @@ export function ControlActionPanel({
   const [controlType, setControlType] = useState("ENGINEERING");
   const [controlDescription, setControlDescription] = useState("");
   const [savingControl, setSavingControl] = useState(false);
+  /* A medida registrada com o tipo errado (EPI no lugar de EPC). [B3-2-D] */
+  const [corrigindo, setCorrigindo] = useState<string | null>(null);
+  const [tipoCorrigido, setTipoCorrigido] = useState("");
+  const [salvandoTipo, setSalvandoTipo] = useState(false);
 
   const [openAction, setOpenAction] = useState<string | null>(null);
   const [title, setTitle] = useState("");
@@ -178,6 +183,21 @@ export function ControlActionPanel({
     }
   }
 
+  async function salvarTipo(controlId: string) {
+    setSalvandoTipo(true);
+    setError(null);
+    try {
+      await updateControlType(controlId, tipoCorrigido);
+      setCorrigindo(null);
+      await reload();
+      await onChanged?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao corrigir o tipo");
+    } finally {
+      setSalvandoTipo(false);
+    }
+  }
+
   const actionsOf = (controlId: string) => actions.filter((a) => a.controlId === controlId);
 
   /*
@@ -232,7 +252,60 @@ export function ControlActionPanel({
                 {openAction === c.id && (
                   <Chip tone="info">Preenchendo a ação abaixo</Chip>
                 )}
+                {canWrite && corrigindo !== c.id && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      setTipoCorrigido(c.type);
+                      setCorrigindo(c.id);
+                    }}
+                  >
+                    Corrigir tipo
+                  </Button>
+                )}
               </div>
+              {corrigindo === c.id && (
+                <div className="ctrl-tipo">
+                  <label className="form-field">
+                    Tipo da medida
+                    <select
+                      value={tipoCorrigido}
+                      onChange={(e) => setTipoCorrigido(e.target.value)}
+                      disabled={salvandoTipo}
+                    >
+                      {Object.entries(CONTROL_TYPE_LABEL).map(([valor, rotulo]) => (
+                        <option key={valor} value={valor}>
+                          {rotulo}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="form-hint">
+                      A correção fica no histórico do risco. A ordem de serviço já
+                      emitida não muda; ela avisa que o inventário mudou.
+                    </span>
+                  </label>
+                  <div className="form-actions">
+                    <Button
+                      type="button"
+                      size="compact"
+                      disabled={salvandoTipo || tipoCorrigido === c.type}
+                      onClick={() => void salvarTipo(c.id)}
+                    >
+                      {salvandoTipo ? "Salvando…" : "Salvar tipo"}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="compact"
+                      variant="ghost"
+                      disabled={salvandoTipo}
+                      onClick={() => setCorrigindo(null)}
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              )}
               {actionsOf(c.id).map((a) => (
                 <p key={a.id} className="muted ctrl-action">
                   {a.title} · {ACTION_STATUS_LABEL[a.status] ?? a.status}
