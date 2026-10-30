@@ -256,3 +256,41 @@ describe("validar dá o aviso por lido [CB-59]", () => {
     expect(pendenteDepois, "via como pendente o que acabara de fazer").toBe(0);
   });
 });
+
+describe("a decisão de um validador resolve a espera de todos [CB-76]", () => {
+  const pendentes = (id: string) =>
+    prisma.notification.findMany({
+      where: { entityType: "Action", entityId: id, kind: "ACTION_WAITING_VALIDATION", readAt: null },
+      select: { userId: true },
+    });
+
+  it("aprovada por um, nenhum validador fica com o aviso pendente", async () => {
+    const id = await acaoConcluida("Trocar o protetor");
+    const antes = await pendentes(id);
+    expect(new Set(antes.map((n) => n.userId)).size, "o aviso foi a mais de um validador").toBeGreaterThan(1);
+    const outra = await acaoConcluida("Outra ação, ainda à espera");
+
+    await request(app)
+      .post(`/api/actions/${id}/review`)
+      .set(as(sst.token))
+      .send({ decision: "approve", effectiveness_result: "ok" })
+      .expect(200);
+
+    expect(await pendentes(id)).toEqual([]);
+    expect(
+      (await pendentes(outra)).length,
+      "o aviso de outra ação continua pendente",
+    ).toBe(antes.length);
+  });
+
+  it("recusada por um, também não sobra aviso de validar para os outros", async () => {
+    const id = await acaoConcluida("Refazer a sinalização");
+    expect((await pendentes(id)).length).toBeGreaterThan(1);
+    await request(app)
+      .post(`/api/actions/${id}/review`)
+      .set(as(sst.token))
+      .send({ decision: "reject", rejection_reason: "Foto não mostra a placa" })
+      .expect(200);
+    expect(await pendentes(id)).toEqual([]);
+  });
+});
