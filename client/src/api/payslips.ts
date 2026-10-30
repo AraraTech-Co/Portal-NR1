@@ -138,6 +138,65 @@ export function publishPayslip(input: {
   );
 }
 
+/** Como cada parte da folha saiu da conferência. [B4-F] */
+export type PayslipBatchPart = {
+  pages: number[];
+  registration: string | null;
+  document_name: string | null;
+  situacao:
+    | "CONFERE"
+    | "SEM_CADASTRO"
+    | "NAO_CONFERE"
+    | "SEM_FUNCIONARIO"
+    | "VARIAS_PESSOAS"
+    | "REPETIDA";
+  user_id: string | null;
+  user_name: string | null;
+  substitui: boolean;
+  motivos: string[];
+  avisos: string[];
+};
+
+export type PayslipBatchSummary = {
+  conferem: number;
+  substituem: number;
+  de_fora: number;
+  paginas_sem_funcionario: number;
+};
+
+type PayslipBatchInput = {
+  reference_month: number;
+  reference_year: number;
+  file_name: string;
+  mime_type: string;
+  content_base64: string;
+};
+
+/** Confere a folha do mês sem gravar nada. [B4-F] */
+export function previewPayslipBatch(input: PayslipBatchInput) {
+  return request<{
+    total_pages: number;
+    resumo: PayslipBatchSummary;
+    parts: PayslipBatchPart[];
+  }>("/api/payslips/lote/previa", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+/** Publica as partes da folha que conferem; o servidor confere de novo. [B4-F] */
+export function publishPayslipBatch(input: PayslipBatchInput) {
+  return request<{
+    publicados: number;
+    substituidos: number;
+    resumo: PayslipBatchSummary;
+    parts: PayslipBatchPart[];
+  }>("/api/payslips/lote", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
 export function askPayslipQuestion(id: string, body: string) {
   return request<{ question: PayslipQuestion }>(
     `/api/payslips/${id}/questions`,

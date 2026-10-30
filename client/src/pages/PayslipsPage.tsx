@@ -18,6 +18,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
 import { PageHeader } from "@/components/PageHeader";
 import { PeoplePicker } from "@/components/PeoplePicker";
+import { PayslipBatchSection } from "./PayslipBatchSection";
 import { formatDay } from "@/lib/labels";
 import { useModuleAccess } from "@/lib/module-access";
 import "@/components/data-table.css";
@@ -385,6 +386,8 @@ export function PayslipsPage() {
           </form>
         </section>
       )}
+
+      {isRh && <PayslipBatchSection onPublished={reload} />}
 
       {isRh && (
         <section className="form-section">

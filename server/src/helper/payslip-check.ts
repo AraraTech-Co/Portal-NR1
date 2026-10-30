@@ -74,7 +74,7 @@ function nameTokens(value: string): string[] {
  * Matrícula alfanumérica ("COL-001") é comparada como texto, sem diferenciar
  * maiúsculas — folha e cadastro divergem nisso com frequência.
  */
-function sameRegistration(a: string, b: string): boolean {
+export function sameRegistration(a: string, b: string): boolean {
   const x = a.trim();
   const y = b.trim();
   if (x.toUpperCase() === y.toUpperCase()) return true;

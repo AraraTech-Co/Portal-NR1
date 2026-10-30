@@ -148,6 +148,7 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   "leave.decide": "Pedido de férias ou licença decidido",
   "payslip.create": "Holerite publicado",
   "payslip.replace": "Holerite substituído",
+  "payslip.batch": "Folha do mês publicada em lote",
   "membership.role_changed": "Papel de uma pessoa alterado",
   "user.password_reset": "Senha redefinida",
   "consulta.view": "Consulta abriu uma tela",
