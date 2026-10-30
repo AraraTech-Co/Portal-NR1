@@ -60,6 +60,7 @@ export function CertificatePage() {
   if (!cert) return <LoadingState />;
 
   const itens = itensDoCertificado(cert);
+  const noCurso = itens.faltando.filter((item) => !itens.faltandoNaTurma.includes(item));
   const cnpj = formatarCnpj(cert.organization?.taxId ?? null);
 
   return (
@@ -169,11 +170,22 @@ export function CertificatePage() {
         <p className="cert-code">Certificado nº {cert.code}</p>
       </article>
 
-      {/* Na tela, não no papel: o que o cadastro ainda deve ao certificado. */}
-      {itens.faltando.length > 0 && (
+      {/* Na tela, não no papel: o que o cadastro ainda deve ao certificado.
+          Cada item no lugar onde se completa: o do curso na linha do curso,
+          o da turma presencial na turma. [B4-B] */}
+      {noCurso.length > 0 && (
         <p className="cert-pendente" role="note">
-          Falta no cadastro do treinamento: {itens.faltando.join(", ")}. Quem
-          cuida dos treinamentos completa em Treinamentos, na linha do curso.
+          Falta no cadastro do treinamento: {noCurso.join(", ")}. Quem cuida
+          dos treinamentos completa em Treinamentos, na linha do curso, em
+          "Completar para o certificado".
+        </p>
+      )}
+      {itens.faltandoNaTurma.length > 0 && cert.session && (
+        <p className="cert-pendente" role="note">
+          Falta na turma de {formatDay(cert.session.held_at)}:{" "}
+          {itens.faltandoNaTurma.join(", ")}. Quem cuida dos treinamentos
+          completa em Treinamentos, no curso, em "Turmas presenciais", na
+          própria turma.
         </p>
       )}
     </div>

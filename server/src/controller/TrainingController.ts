@@ -1292,6 +1292,78 @@ class TrainingController {
     }
   }
 
+  /**
+   * Local e qualificação de quem deu a aula, numa turma já registrada.
+   *
+   * No presencial, o certificado tira os dois da TURMA, e a turma não se
+   * editava: a que foi registrada sem eles deixava o certificado incompleto
+   * para sempre, e "Completar para o certificado", no curso, não os alcança.
+   * Campo que não vem fica como está; campo vazio apaga. [B4-B]
+   */
+  async updateSession(req: Request, res: Response) {
+    try {
+      const auth = req as AuthRequest;
+      const orgId = actorOrgId(auth);
+      const userId = actorUserId(auth);
+      const atual = await prisma.trainingSession.findFirst({
+        where: {
+          id: req.params.sessionId,
+          trainingId: req.params.id,
+          organizationId: orgId,
+        },
+        select: { id: true, location: true, instructorQualification: true },
+      });
+      if (!atual) {
+        res.status(404).json({ message: "Turma não encontrada." });
+        return;
+      }
+      const body = req.body as Record<string, unknown>;
+      const campos = {
+        location: "location",
+        instructor_qualification: "instructorQualification",
+      } as const;
+      const data: Partial<Record<(typeof campos)[keyof typeof campos], string | null>> = {};
+      for (const [chave, coluna] of Object.entries(campos)) {
+        if (!(chave in body)) continue;
+        const v = body[chave];
+        if (v !== null && typeof v !== "string") {
+          res.status(400).json({ message: `${chave} deve ser texto.` });
+          return;
+        }
+        data[coluna] = blank(v);
+      }
+      const session = await prisma.trainingSession.update({
+        where: { id: atual.id },
+        data,
+        select: { id: true, location: true, instructorQualification: true },
+      });
+      await writeAudit({
+        organizationId: orgId,
+        actorId: userId,
+        action: "training.session_update",
+        entityType: "TrainingSession",
+        entityId: atual.id,
+        before: {
+          location: atual.location,
+          instructorQualification: atual.instructorQualification,
+        },
+        after: {
+          location: session.location,
+          instructorQualification: session.instructorQualification,
+        },
+      });
+      res.json({
+        session: {
+          id: session.id,
+          location: session.location,
+          instructor_qualification: session.instructorQualification,
+        },
+      });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
   async archive(req: Request, res: Response) {
     try {
       const auth = req as AuthRequest;

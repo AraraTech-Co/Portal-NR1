@@ -197,6 +197,20 @@ export function updateTrainingCertificateData(
   });
 }
 
+/** Local e qualificação de quem deu a aula, na turma já registrada. [B4-B] */
+export function updateTrainingSession(
+  trainingId: string,
+  sessionId: string,
+  input: { location: string | null; instructor_qualification: string | null },
+) {
+  return request<{
+    session: { id: string; location: string | null; instructor_qualification: string | null };
+  }>(
+    `/api/trainings/${encodeURIComponent(trainingId)}/turmas/${encodeURIComponent(sessionId)}`,
+    { method: "PATCH", body: JSON.stringify(input) },
+  );
+}
+
 /** A lista de presença de uma turma já marcada. [CB-34] */
 export function recordSessionAttendance(
   trainingId: string,

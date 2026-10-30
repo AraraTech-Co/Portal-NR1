@@ -3,6 +3,7 @@ import {
   fetchTrainingSessions,
   recordSessionAttendance,
   recordTrainingSession,
+  updateTrainingSession,
   type TrainingSession,
 } from "@/api/trainings";
 import { fetchOrgMembers, type OrgMember } from "@/api/org-members";
@@ -21,6 +22,115 @@ function hojeIso(): string {
  * Registrar a turma presencial que aconteceu: quem deu, quando, quanto tempo
  * e quem esteve. Sem isto o treinamento presencial não deixava rastro. [S4-D]
  */
+/**
+ * Local e qualificação de quem deu a aula, na turma já registrada.
+ *
+ * No presencial o certificado tira os dois da turma, e a turma não se
+ * editava: registrada sem eles, o certificado ficava incompleto para sempre.
+ * [B4-B]
+ */
+function SessionCertificateFields({
+  trainingId,
+  session,
+  onSaved,
+}: {
+  trainingId: string;
+  session: TrainingSession;
+  onSaved: () => Promise<void>;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const [local, setLocal] = useState(session.location ?? "");
+  const [qualificacao, setQualificacao] = useState(session.instructor_qualification ?? "");
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const falta = !session.location || !session.instructor_qualification;
+
+  async function salvar(e: FormEvent) {
+    e.preventDefault();
+    setSalvando(true);
+    setErro(null);
+    try {
+      await updateTrainingSession(trainingId, session.id, {
+        location: local.trim() || null,
+        instructor_qualification: qualificacao.trim() || null,
+      });
+      setAberto(false);
+      await onSaved();
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : "Falha ao salvar");
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  if (!aberto) {
+    return (
+      <div className="form-actions">
+        <Button
+          type="button"
+          size="compact"
+          variant="secondary"
+          onClick={() => {
+            setLocal(session.location ?? "");
+            setQualificacao(session.instructor_qualification ?? "");
+            setErro(null);
+            setAberto(true);
+          }}
+        >
+          {falta ? "Completar local e qualificação" : "Corrigir local e qualificação"}
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <form className="form-grid" onSubmit={salvar}>
+      <p className="form-hint">
+        O certificado desta turma usa o local e a qualificação de quem deu a
+        aula ({session.instructor_name}). NR-1 1.7.1.1.
+      </p>
+      <div className="form-grid cols-2">
+        <label className="form-field">
+          Local
+          <input
+            value={local}
+            onChange={(e) => setLocal(e.target.value)}
+            disabled={salvando}
+            placeholder="Ex.: Sala de treinamento, unidade Centro"
+          />
+        </label>
+        <label className="form-field">
+          Qualificação de quem ministrou
+          <input
+            value={qualificacao}
+            onChange={(e) => setQualificacao(e.target.value)}
+            disabled={salvando}
+            placeholder="Ex.: Técnico de Segurança do Trabalho"
+          />
+        </label>
+      </div>
+      {erro && (
+        <p className="form-error" role="alert">
+          {erro}
+        </p>
+      )}
+      <div className="form-actions">
+        <Button type="submit" disabled={salvando}>
+          {salvando ? "Salvando…" : "Salvar"}
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => setAberto(false)}
+          disabled={salvando}
+        >
+          Cancelar
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 /**
  * A lista de presença de uma turma que já foi marcada.
  *
@@ -514,6 +624,13 @@ export function TrainingSessions({
                 {s.present + s.absent === 0 ? "Marcada" : "Registrada"} por{" "}
                 {s.recorded_by.name}
               </div>
+              {canRecord && (
+                <SessionCertificateFields
+                  trainingId={trainingId}
+                  session={s}
+                  onSaved={load}
+                />
+              )}
               {/* A aula já passou e ninguém lançou a presença: é aqui que o
                   certificado nasce. [CB-34] */}
               {canRecord &&

@@ -321,7 +321,9 @@ describe("as telas [B3-3-G]", () => {
     expect(p).toContain("Assinatura do responsável técnico");
     expect(p.match(/className="cert-signature-line"/g)?.length).toBe(2);
     expect(p).toContain("const cnpj = formatarCnpj(cert.organization?.taxId ?? null);");
-    expect(p).toContain("{itens.faltando.length > 0 && (");
+    /* O aviso do que falta, separado entre curso e turma. [B4-B] */
+    expect(p).toContain("{noCurso.length > 0 && (");
+    expect(p).toContain("{itens.faltandoNaTurma.length > 0 && cert.session && (");
   });
 
   it("no papel, sem a moldura da tela e sem o aviso do que falta", () => {

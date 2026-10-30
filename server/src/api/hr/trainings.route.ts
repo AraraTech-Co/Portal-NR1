@@ -44,5 +44,9 @@ router.post("/api/trainings/:id/turmas/:sessionId/presenca", writeRh, (req, res)
 router.post("/api/trainings/:id/turmas", writeRh, (req, res) =>
   trainings.createSession(req, res),
 );
+/** Local e qualificação de quem deu a aula, na turma já registrada. [B4-B] */
+router.patch("/api/trainings/:id/turmas/:sessionId", writeRh, (req, res) =>
+  trainings.updateSession(req, res),
+);
 
 export default router;

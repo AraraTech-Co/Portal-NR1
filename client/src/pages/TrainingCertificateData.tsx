@@ -102,7 +102,9 @@ export function TrainingCertificateData({
           <p className="form-hint">
             A NR-1 (1.7.1.1) pede no certificado o nome e a qualificação de
             quem ministra e a assinatura do responsável técnico. No presencial,
-            quem deu a aula é o da turma; o nome daqui vem sugerido nela.
+            quem deu a aula é o da turma; o nome daqui vem sugerido nela. O
+            local e a qualificação de quem deu a aula presencial se completam
+            na própria turma, em "Turmas presenciais".
           </p>
           <div className="form-grid cols-2">
             {CAMPOS.map(({ chave, rotulo }) => (
