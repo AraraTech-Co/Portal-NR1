@@ -8,6 +8,7 @@ import {
   fetchOccurrence,
   type OccurrenceDetail,
 } from "@/api/occurrences";
+import { fetchAssessments } from "@/api/risks";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
 import { Dialog } from "@/components/Dialog";
@@ -20,12 +21,20 @@ import {
   CRITERIO_HINT,
   CRITERIO_LABEL,
   formatDay,
+  nivelParaPrazo,
   OCCURRENCE_TYPE_LABEL,
+  RISK_LEVEL_LABEL,
+  sugestaoDoNivel,
 } from "@/lib/labels";
 import "@/components/data-table.css";
 import "@/components/form.css";
 import "./occurrence-detail.css";
 import { LoadingState } from "@/components/LoadingState";
+
+/** O dia daqui a `days` dias, em Brasília, como AAAA-MM-DD. */
+function isoInDays(days: number): string {
+  return new Date(Date.now() - 3 * 3_600_000 + days * 86_400_000).toISOString().slice(0, 10);
+}
 
 export function OccurrenceDetailPage() {
   const { id } = useParams();
@@ -49,6 +58,15 @@ export function OccurrenceDetailPage() {
   const [criterioDaAcao, setCriterioDaAcao] = useState("");
   const [responsavel, setResponsavel] = useState("");
   const [prazo, setPrazo] = useState("");
+  /*
+    A mesma regra do Inventário: o nível do risco da ocorrência sugere a
+    prioridade e o prazo, e o prazo do nível é limite — passar dele pede o
+    motivo. A ação pela ocorrência saía sempre Alta e sem limite, e "Alta"
+    era lido como o nível do risco. [CB-72]
+  */
+  const [avaliado, setAvaliado] = useState<{ nivel: string; validada: boolean } | null>(null);
+  const [prioridade, setPrioridade] = useState("MEDIUM");
+  const [justificativa, setJustificativa] = useState("");
   const [salvandoAcao, setSalvandoAcao] = useState(false);
   const [erroDaAcao, setErroDaAcao] = useState<string | null>(null);
 
@@ -135,6 +153,11 @@ export function OccurrenceDetailPage() {
       row.preventionReview,
   );
 
+  /* O limite é o do nível do risco; sem nível, o prazo é livre. [CB-72] */
+  const limiteDias = avaliado ? sugestaoDoNivel(avaliado.nivel).dias : null;
+  const passouDoLimite =
+    limiteDias !== null && Boolean(prazo) && prazo > isoInDays(limiteDias);
+
   return (
     <div>
       <p className="occ-back">
@@ -164,13 +187,19 @@ export function OccurrenceDetailPage() {
           nem para o histórico, onde se vê a reavaliação que esta análise
           pediu. [B3-4-C]
         */}
+        {/* O link, no meio da frase e sem cor, lia-se como texto corrido e
+            foi achado por acaso: fica na própria linha, com cara de link. [B4-D] */}
         {row.risk && (
-          <p className="occ-risco">
-            <strong>Risco:</strong> {row.risk.description}{" "}
-            <Link to={`/inventario?risco=${row.risk.id}`}>
-              abrir no inventário, com o histórico
-            </Link>
-          </p>
+          <>
+            <p className="occ-risco">
+              <strong>Risco:</strong> {row.risk.description}
+            </p>
+            <p className="occ-risco">
+              <Link className="occ-risco-link" to={`/inventario?risco=${row.risk.id}`}>
+                Ver o risco no inventário, com o histórico
+              </Link>
+            </p>
+          </>
         )}
       </section>
 
@@ -262,12 +291,24 @@ export function OccurrenceDetailPage() {
               type="button"
               size="compact"
               variant="secondary"
-              onClick={() => {
+              onClick={async () => {
                 setErroDaAcao(null);
                 setTituloDaAcao("");
                 setCriterioDaAcao("");
                 setResponsavel("");
-                setPrazo("");
+                setJustificativa("");
+                let atual: { nivel: string; validada: boolean } | null = null;
+                if (row.risk) {
+                  try {
+                    atual = nivelParaPrazo((await fetchAssessments(row.risk.id)).assessments);
+                  } catch {
+                    /* Sem ler o nível, a tela não sugere; o servidor cobra. */
+                  }
+                }
+                const sugestao = sugestaoDoNivel(atual?.nivel ?? null);
+                setAvaliado(atual);
+                setPrioridade(sugestao.prioridade);
+                setPrazo(atual ? isoInDays(sugestao.dias) : "");
                 setAbrindoAcao(true);
               }}
             >
@@ -293,7 +334,7 @@ export function OccurrenceDetailPage() {
                 {row.actions.map((a) => (
                   <tr key={a.id}>
                     <td>
-                      <Link to="/acoes">{a.title}</Link>
+                      <Link to={`/acoes?acao=${a.id}`}>{a.title}</Link>
                       <span className="muted occ-sub">
                         {ACTION_PRIORITY_LABEL[a.priority] ?? a.priority}
                       </span>
@@ -339,7 +380,8 @@ export function OccurrenceDetailPage() {
                   title: tituloDaAcao.trim(),
                   assignee_id: responsavel,
                   due_date: prazo,
-                  priority: "HIGH",
+                  priority: prioridade,
+                  deadline_justification: passouDoLimite ? justificativa.trim() : undefined,
                   effectiveness_criteria: criterioDaAcao.trim(),
                 });
                 setAbrindoAcao(false);
@@ -377,11 +419,53 @@ export function OccurrenceDetailPage() {
               <input
                 type="date"
                 value={prazo}
+                min={isoInDays(0)}
                 onChange={(e) => setPrazo(e.target.value)}
                 disabled={salvandoAcao}
                 required
               />
+              <span className="form-hint">
+                {avaliado
+                  ? `${RISK_LEVEL_LABEL[avaliado.nivel] ?? avaliado.nivel}${
+                      avaliado.validada ? "" : ", aguardando validação"
+                    } → ${
+                      ACTION_PRIORITY_LABEL[sugestaoDoNivel(avaliado.nivel).prioridade] ??
+                      sugestaoDoNivel(avaliado.nivel).prioridade
+                    } → até ${sugestaoDoNivel(avaliado.nivel).dias} dias.`
+                  : row.risk
+                    ? "Risco ainda sem avaliação: o prazo é livre — só não pode ser uma data que já passou."
+                    : "Ocorrência sem risco do inventário: o prazo é livre — só não pode ser uma data que já passou."}
+              </span>
             </label>
+            <label className="form-field">
+              Prioridade
+              <select
+                value={prioridade}
+                onChange={(e) => setPrioridade(e.target.value)}
+                disabled={salvandoAcao}
+              >
+                {Object.entries(ACTION_PRIORITY_LABEL).map(([valor, rotulo]) => (
+                  <option key={valor} value={valor}>
+                    {rotulo}
+                  </option>
+                ))}
+              </select>
+              {avaliado && (
+                <span className="form-hint">Sugerida pelo nível do risco; mude se precisar.</span>
+              )}
+            </label>
+            {passouDoLimite && (
+              <label className="form-field">
+                Por que este prazo passa de {limiteDias} dias
+                <input
+                  value={justificativa}
+                  onChange={(e) => setJustificativa(e.target.value)}
+                  placeholder="Ex.: depende da parada de máquina de janeiro"
+                  disabled={salvandoAcao}
+                  required
+                />
+              </label>
+            )}
             <label className="form-field">
               {CRITERIO_LABEL}
               <input
@@ -405,7 +489,8 @@ export function OccurrenceDetailPage() {
                   !tituloDaAcao.trim() ||
                   !responsavel ||
                   !prazo ||
-                  !criterioDaAcao.trim()
+                  !criterioDaAcao.trim() ||
+                  (passouDoLimite && !justificativa.trim())
                 }
               >
                 {salvandoAcao ? "Abrindo…" : "Abrir ação"}

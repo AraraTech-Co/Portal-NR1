@@ -156,7 +156,8 @@ describe("o motivo da reavaliação não traz o identificador interno [B2-4-E]",
 });
 
 describe("o Histórico do risco fala português [B2-4-E]", () => {
-  const painel = fonte("pages", "RiskHistoryPanel.tsx");
+  /* Os rótulos e a descrição da mudança moram em lib desde a B4-A. */
+  const painel = fonte("lib", "historico-do-risco.ts");
 
   it("a justificativa e o critério têm nome", () => {
     expect(painel).toContain('deadlineJustification: "justificativa do prazo"');

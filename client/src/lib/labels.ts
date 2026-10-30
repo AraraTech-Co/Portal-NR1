@@ -235,6 +235,20 @@ export const AEP_STATUS_LABEL: Record<string, string> = {
   CONCLUDED: "Concluída",
 };
 
+/**
+ * O tipo do holerite. Adiantamento e folha mensal do mesmo mês são dois
+ * holerites, e a tela precisa dizer qual é qual. [B4-G]
+ */
+export const PAYSLIP_KIND_LABEL: Record<string, string> = {
+  MONTHLY: "Mensal",
+  ADVANCE: "Adiantamento",
+  VACATION: "Férias",
+  THIRTEENTH: "13º salário",
+  TERMINATION: "Rescisão",
+};
+
+export const PAYSLIP_KIND_VALUES = Object.keys(PAYSLIP_KIND_LABEL);
+
 /** Pesquisa de clima: saía "OPEN" na coluna de situação. [B2-1-C] */
 export const SURVEY_STATUS_LABEL: Record<string, string> = {
   DRAFT: "Rascunho",
@@ -352,6 +366,34 @@ export function podeEditarCriterio(
   if (status === "CANCELLED") return false;
   if (status === "VALIDATED" || status === "CLOSED") return valida && !temCriterio;
   return cuidaDoPlano;
+}
+
+/**
+ * A prioridade vem do nível do risco: intolerável não espera. Fica editável,
+ * porque quem conhece a operação pode discordar. Espelho de
+ * `server/src/helper/action-deadline.ts`: a tela sugere, o servidor cobra.
+ * Usado pelo Inventário e pela ocorrência. [S2-M] [CB-72]
+ */
+export const PRIORITY_BY_LEVEL: Record<string, string> = {
+  INTOLERABLE: "CRITICAL",
+  SUBSTANTIAL: "HIGH",
+  MODERATE: "MEDIUM",
+  TOLERABLE: "LOW",
+  TRIVIAL: "LOW",
+};
+
+/** Prazo sugerido: quanto pior o risco, mais curto. */
+export const DAYS_BY_PRIORITY: Record<string, number> = {
+  CRITICAL: 7,
+  HIGH: 30,
+  MEDIUM: 90,
+  LOW: 180,
+};
+
+/** O que o nível do risco pede: prioridade e dias. [B2-2-A] [S2-M] */
+export function sugestaoDoNivel(nivel: string | null) {
+  const prioridade = PRIORITY_BY_LEVEL[nivel ?? ""] ?? "MEDIUM";
+  return { prioridade, dias: DAYS_BY_PRIORITY[prioridade] ?? 90 };
 }
 
 /**

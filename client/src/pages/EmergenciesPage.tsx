@@ -22,7 +22,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
 import { PageHeader } from "@/components/PageHeader";
 import { PeoplePicker } from "@/components/PeoplePicker";
-import { CRITERIO_HINT, CRITERIO_LABEL, formatDay } from "@/lib/labels";
+import { ACTION_PRIORITY_LABEL, CRITERIO_HINT, CRITERIO_LABEL, formatDay } from "@/lib/labels";
 import { useModuleAccess } from "@/lib/module-access";
 import "@/components/data-table.css";
 import "@/components/form.css";
@@ -81,6 +81,13 @@ export function EmergenciesPage() {
   const [acaoDoAchado, setAcaoDoAchado] = useState<
     { drillId: string; findings: string } | null
   >(null);
+  /*
+    A providência e a prioridade são de quem abre: o nome da ação era o texto
+    do achado, sem lugar para dizer o que será feito, e a prioridade saía
+    sempre Alta — lida depois como o nível do risco. [B4-C]
+  */
+  const [oQueSeraFeito, setOQueSeraFeito] = useState("");
+  const [prioridadeDaAcao, setPrioridadeDaAcao] = useState("");
   const [responsavel, setResponsavel] = useState("");
   const [prazoDaAcao, setPrazoDaAcao] = useState("");
   /* Sem critério de eficácia, a ação não abre. [B3-4-A] */
@@ -206,19 +213,30 @@ export function EmergenciesPage() {
   /* O achado do simulado vira ação do plano, com responsável e prazo. */
   async function abrirAcaoDoAchado(e: FormEvent) {
     e.preventDefault();
-    if (!acaoDoAchado || !responsavel || !prazoDaAcao || !criterioDaAcao.trim()) return;
+    if (
+      !acaoDoAchado ||
+      !oQueSeraFeito.trim() ||
+      !prioridadeDaAcao ||
+      !responsavel ||
+      !prazoDaAcao ||
+      !criterioDaAcao.trim()
+    ) {
+      return;
+    }
     setAbrindoAcao(true);
     setErroDaAcao(null);
     try {
       const { action } = await createActionFromFinding({
-        title: acaoDoAchado.findings.slice(0, 160),
+        title: oQueSeraFeito.trim().slice(0, 160),
         description: `Achado do simulado de emergência: ${acaoDoAchado.findings}`,
         assignee_id: responsavel,
         due_date: prazoDaAcao,
-        priority: "HIGH",
+        priority: prioridadeDaAcao,
         effectiveness_criteria: criterioDaAcao.trim(),
       });
       setAcaoDoAchado(null);
+      setOQueSeraFeito("");
+      setPrioridadeDaAcao("");
       setResponsavel("");
       setPrazoDaAcao("");
       setCriterioDaAcao("");
@@ -561,6 +579,9 @@ export function EmergenciesPage() {
                                             drillId: d.id,
                                             findings: d.findings!,
                                           });
+                                          /* Sugerido pelo achado; quem abre reescreve como providência. */
+                                          setOQueSeraFeito(d.findings!.slice(0, 160));
+                                          setPrioridadeDaAcao("");
                                         }}
                                       >
                                         Abrir ação para este achado
@@ -612,7 +633,44 @@ export function EmergenciesPage() {
           onClose={() => setAcaoDoAchado(null)}
         >
           <form className="form-grid" onSubmit={abrirAcaoDoAchado}>
-            <p className="form-hint">{acaoDoAchado.findings}</p>
+            <p className="form-hint">
+              <strong>Achado:</strong> {acaoDoAchado.findings}
+            </p>
+            <label className="form-field">
+              O que será feito
+              <input
+                value={oQueSeraFeito}
+                onChange={(e) => setOQueSeraFeito(e.target.value)}
+                maxLength={160}
+                placeholder="Ex.: trocar a fechadura da porta lateral"
+                disabled={abrindoAcao}
+                required
+              />
+              <span className="form-hint">
+                Vem com o texto do achado: escreva a providência. É o nome da
+                ação no plano.
+              </span>
+            </label>
+            <label className="form-field">
+              Prioridade
+              <select
+                value={prioridadeDaAcao}
+                onChange={(e) => setPrioridadeDaAcao(e.target.value)}
+                disabled={abrindoAcao}
+                required
+              >
+                <option value="">Escolha</option>
+                {Object.entries(ACTION_PRIORITY_LABEL).map(([valor, rotulo]) => (
+                  <option key={valor} value={valor}>
+                    {rotulo}
+                  </option>
+                ))}
+              </select>
+              <span className="form-hint">
+                Sem risco do inventário ligado, não há nível que sugira a
+                prioridade: escolha pelo achado.
+              </span>
+            </label>
             <label className="form-field">
               Responsável
               <PeoplePicker
@@ -652,7 +710,12 @@ export function EmergenciesPage() {
               <Button
                 type="submit"
                 disabled={
-                  abrindoAcao || !responsavel || !prazoDaAcao || !criterioDaAcao.trim()
+                  abrindoAcao ||
+                  !oQueSeraFeito.trim() ||
+                  !prioridadeDaAcao ||
+                  !responsavel ||
+                  !prazoDaAcao ||
+                  !criterioDaAcao.trim()
                 }
               >
                 {abrindoAcao ? "Abrindo…" : "Abrir ação"}

@@ -88,6 +88,8 @@ export type TrainingSession = {
   duration_minutes: number;
   notes: string | null;
   recorded_by: { id: string; name: string };
+  /** A lista de presença assinada, quando anexada. [CB-74] */
+  papers: { id: string; fileName: string | null; description: string | null; uploadedAt: string }[];
   present: number;
   absent: number;
   attendances: SessionAttendance[];
@@ -195,6 +197,36 @@ export function updateTrainingCertificateData(
     method: "PATCH",
     body: JSON.stringify(input),
   });
+}
+
+/** Local e qualificação de quem deu a aula, na turma já registrada. [B4-B] */
+export function updateTrainingSession(
+  trainingId: string,
+  sessionId: string,
+  input: { location: string | null; instructor_qualification: string | null },
+) {
+  return request<{
+    session: { id: string; location: string | null; instructor_qualification: string | null };
+  }>(
+    `/api/trainings/${encodeURIComponent(trainingId)}/turmas/${encodeURIComponent(sessionId)}`,
+    { method: "PATCH", body: JSON.stringify(input) },
+  );
+}
+
+/** Anexa o papel assinado da turma (lista de presença). [CB-74] */
+export function addSessionPaper(
+  trainingId: string,
+  sessionId: string,
+  input: { file_name: string; mime_type: string; content_base64: string; description?: string },
+) {
+  return request<{ paper: { id: string; fileName: string } }>(
+    `/api/trainings/${encodeURIComponent(trainingId)}/turmas/${encodeURIComponent(sessionId)}/papel`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+export function sessionPaperUrl(trainingId: string, sessionId: string, evidenceId: string): string {
+  return `/api/trainings/${encodeURIComponent(trainingId)}/turmas/${encodeURIComponent(sessionId)}/papel/${encodeURIComponent(evidenceId)}/file`;
 }
 
 /** A lista de presença de uma turma já marcada. [CB-34] */

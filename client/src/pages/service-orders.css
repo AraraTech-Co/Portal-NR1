@@ -192,10 +192,20 @@
   comprovante por pessoa para assinar. Era escondida de propósito, e o
   fiscal que pedia a prova em PDF ficava sem ela. [B2-4-G] [CB-46]
 */
+/* O comprovante assinado anexado: só na tela, no mesmo cartão da ciência. [CB-74] */
+.so-papel {
+  margin-top: 1rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+
 @media print {
   .so-ack-box,
   .so-alert,
   .so-print-option,
+  .so-papel,
   .so-receipt-button {
     display: none !important;
   }

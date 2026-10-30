@@ -104,13 +104,22 @@ describe("Occurrence module (NR-1 1.5.5.5)", () => {
           que o plano de ação já cumpria. [B3-4-C] [S2-M]
         */
         assignee_id: responsavel,
-        due_date: "2027-03-20",
+        /*
+          Dentro do limite do nível do risco: a ação pela ocorrência segue a
+          regra do Inventário, e a prioridade não escolhida é a do nível, não
+          mais sempre Alta. [CB-72]
+        */
+        due_date: new Date(Date.now() + 20 * 86_400_000).toISOString().slice(0, 10),
       });
     expect(action.status, JSON.stringify(action.body)).toBe(201);
     expect(action.body.action.sourceType).toBe("OCCURRENCE");
     expect(action.body.action.occurrenceId).toBe(occurrenceId);
     expect(action.body.action.riskId).toBe(RISK_ID);
-    expect(action.body.action.priority).toBe("HIGH");
+    const nivel = action.body.action.riskLevelAtOpening as string;
+    expect(nivel, "a ação guarda o nível do risco na abertura").toBeTruthy();
+    expect(action.body.action.priority).toBe(
+      ({ INTOLERABLE: "CRITICAL", SUBSTANTIAL: "HIGH", MODERATE: "MEDIUM", TOLERABLE: "LOW", TRIVIAL: "LOW" } as Record<string, string>)[nivel],
+    );
 
     const ev = await request(app)
       .post(`/api/occurrences/${occurrenceId}/evidences`)

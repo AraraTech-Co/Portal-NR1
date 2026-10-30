@@ -108,6 +108,8 @@ export async function addOccurrenceAction(
     assignee_id: string;
     due_date: string;
     priority?: string;
+    /** Prazo além do que o nível do risco pede: por quê. [CB-72] */
+    deadline_justification?: string;
     /** Obrigatório: a ação não abre sem ele. [B3-4-A] */
     effectiveness_criteria: string;
   },
