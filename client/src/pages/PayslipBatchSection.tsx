@@ -7,6 +7,7 @@ import {
   type PayslipBatchSummary,
 } from "@/api/payslips";
 import { Button } from "@/components/Button";
+import { PAYSLIP_KIND_LABEL, PAYSLIP_KIND_VALUES } from "@/lib/labels";
 import "@/components/form.css";
 import "./payslip-batch.css";
 
@@ -62,6 +63,8 @@ export function PayslipBatchSection({
   const now = new Date();
   const [month, setMonth] = useState(String(now.getMonth() + 1));
   const [year, setYear] = useState(String(now.getFullYear()));
+  /* Adiantamento e mensal do mesmo mês são dois holerites. [B4-G] */
+  const [kind, setKind] = useState("MONTHLY");
   const [file, setFile] = useState<File | null>(null);
   const [previa, setPrevia] = useState<Previa | null>(null);
   const [ocupado, setOcupado] = useState<"conferindo" | "publicando" | null>(null);
@@ -80,6 +83,7 @@ export function PayslipBatchSection({
     return {
       reference_month: Number(month),
       reference_year: Number(year),
+      kind,
       file_name: file.name,
       mime_type: file.type || "application/pdf",
       content_base64: await fileToBase64(file),
@@ -175,6 +179,23 @@ export function PayslipBatchSection({
           </label>
         </div>
         <label className="form-field">
+          Tipo
+          <select
+            value={kind}
+            onChange={(e) => {
+              setKind(e.target.value);
+              limpar();
+            }}
+            disabled={ocupado !== null}
+          >
+            {PAYSLIP_KIND_VALUES.map((k) => (
+              <option key={k} value={k}>
+                {PAYSLIP_KIND_LABEL[k]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="form-field">
           Arquivo da folha (PDF)
           <input
             type="file"
@@ -213,7 +234,7 @@ export function PayslipBatchSection({
           <p className="lote-resumo">
             {previa.total_pages} página(s): <strong>{conferem.length} conferem</strong>
             {previa.resumo.substituem > 0 &&
-              ` (${previa.resumo.substituem} já têm holerite neste mês e serão substituídos)`}
+              ` (${previa.resumo.substituem} já têm holerite deste tipo neste mês e serão substituídos)`}
             {deFora.length > 0 && <>, <strong>{deFora.length} ficam de fora</strong></>}.
           </p>
 

@@ -7,6 +7,8 @@ export type PayslipListItem = {
   userId: string;
   referenceMonth: number;
   referenceYear: number;
+  /** Mensal, adiantamento, férias, 13º ou rescisão. [B4-G] */
+  kind: string;
   fileName: string;
   publishedAt: string;
   viewedAt: string | null;
@@ -31,6 +33,7 @@ export type PayslipDetail = {
   userId: string;
   referenceMonth: number;
   referenceYear: number;
+  kind: string;
   fileName: string;
   publishedAt: string;
   viewedAt: string | null;
@@ -92,6 +95,7 @@ export type OpenPayslipQuestion = {
   payslip_id: string;
   reference_month: number;
   reference_year: number;
+  kind: string;
   file_name: string;
   user: { id: string; name: string };
 };
@@ -124,6 +128,8 @@ export function publishPayslip(input: {
   content_base64: string;
   /** Por que publicar apesar de o documento não conferir. [CB-28] */
   override_reason?: string;
+  /** Mensal, adiantamento, férias, 13º ou rescisão. [B4-G] */
+  kind: string;
 }) {
   return request<{
     payslip: PayslipDetail;
@@ -167,6 +173,7 @@ export type PayslipBatchSummary = {
 type PayslipBatchInput = {
   reference_month: number;
   reference_year: number;
+  kind: string;
   file_name: string;
   mime_type: string;
   content_base64: string;

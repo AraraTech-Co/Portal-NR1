@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import fs from "fs";
-import { NotificationKind } from "@prisma/client";
+import { NotificationKind, PayslipKind } from "@prisma/client";
 import { Request, Response } from "express";
 import prisma from "../model/prisma";
 import { Payslip } from "../model/schema/Payslip/Payslip";
@@ -24,7 +24,7 @@ import type { AuthRequest } from "../types/auth";
 function fail(res: Response, err: unknown) {
   if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
     res.status(409).json({
-      message: "Já existe holerite para este colaborador neste mês/ano.",
+      message: "Já existe holerite deste tipo para este colaborador neste mês/ano.",
     });
     return;
   }
@@ -48,6 +48,7 @@ async function gravarHolerite(input: {
   userId: string;
   referenceMonth: number;
   referenceYear: number;
+  kind: PayslipKind;
   fileName: string;
   mimeType: string;
   data: Buffer;
@@ -66,6 +67,7 @@ async function gravarHolerite(input: {
       userId: input.userId,
       referenceMonth: input.referenceMonth,
       referenceYear: input.referenceYear,
+      kind: input.kind,
     },
   });
 
@@ -116,6 +118,7 @@ async function gravarHolerite(input: {
       userId: input.userId,
       referenceMonth: input.referenceMonth,
       referenceYear: input.referenceYear,
+      kind: input.kind,
       storagePath,
       fileName: input.fileName,
       publishedById: input.publisherId,
@@ -137,7 +140,7 @@ async function gravarHolerite(input: {
     organizationId: input.orgId,
     userId: input.userId,
     kind: NotificationKind.PAYSLIP_PUBLISHED,
-    title: `Holerite de ${String(input.referenceMonth).padStart(2, "0")}/${input.referenceYear}`,
+    title: `${KIND_LABEL[input.kind]} de ${String(input.referenceMonth).padStart(2, "0")}/${input.referenceYear}`,
     body: existing
       ? "O holerite foi corrigido e está disponível."
       : "Seu holerite está disponível.",
@@ -173,6 +176,33 @@ type ParteDoLote = {
 
 type LoteLido = { parts: ParteDoLote[]; totalPages: number };
 
+/**
+ * O tipo do holerite. Adiantamento e folha mensal saem com a mesma
+ * competência; cada tipo tem o seu lugar, e só o mesmo tipo substitui. [B4-G]
+ */
+const KIND_LABEL: Record<PayslipKind, string> = {
+  MONTHLY: "Holerite",
+  ADVANCE: "Adiantamento",
+  VACATION: "Férias",
+  THIRTEENTH: "13º salário",
+  TERMINATION: "Rescisão",
+};
+
+/** O começo do nome do arquivo de cada parte do lote, que a pessoa vê. */
+const KIND_FILE_PREFIX: Record<PayslipKind, string> = {
+  MONTHLY: "holerite",
+  ADVANCE: "adiantamento",
+  VACATION: "ferias",
+  THIRTEENTH: "13-salario",
+  TERMINATION: "rescisao",
+};
+
+/** Sem tipo é a folha mensal, como era antes de o tipo existir. */
+function tipoDoPedido(value: unknown): PayslipKind | null {
+  if (value === undefined || value === null || value === "") return PayslipKind.MONTHLY;
+  return typeof value === "string" && Object.hasOwn(KIND_LABEL, value) ? (value as PayslipKind) : null;
+}
+
 class ErroDoLote extends Error {
   constructor(
     public status: number,
@@ -203,6 +233,7 @@ async function lerLote(
   data: Buffer,
   referenceMonth: number,
   referenceYear: number,
+  kind: PayslipKind,
 ): Promise<LoteLido> {
   const pages = await extractPdfPages(data, MAX_BATCH_PAGES + 1);
   if (!pages || pages.length === 0) {
@@ -289,6 +320,7 @@ async function lerLote(
       organizationId: orgId,
       referenceMonth,
       referenceYear,
+      kind,
       userId: { in: conferem.map((part) => part.user_id!) },
     },
     select: { userId: true },
@@ -301,10 +333,11 @@ async function lerLote(
 
 /** Os campos do lote, conferidos; `null` quando já respondeu com erro. */
 function pedidoDoLote(req: Request, res: Response) {
-  const { reference_month, reference_year, file_name, mime_type, content_base64 } =
+  const { reference_month, reference_year, kind, file_name, mime_type, content_base64 } =
     req.body as {
       reference_month?: number;
       reference_year?: number;
+      kind?: string;
       file_name?: string;
       mime_type?: string;
       content_base64?: string;
@@ -323,11 +356,17 @@ function pedidoDoLote(req: Request, res: Response) {
     res.status(400).json({ message: "O arquivo da folha precisa ser PDF." });
     return null;
   }
+  const tipo = tipoDoPedido(kind);
+  if (!tipo) {
+    res.status(400).json({ message: "Tipo de holerite inválido." });
+    return null;
+  }
   const data = Buffer.from(content_base64, "base64");
   assertSize(data.length || 0);
   return {
     referenceMonth: reference_month,
     referenceYear: reference_year,
+    kind: tipo,
     fileName: file_name.trim(),
     data,
   };
@@ -398,7 +437,7 @@ class PayslipController {
             : {}),
           ...(year ? { referenceYear: year } : {}),
         },
-        orderBy: [{ referenceYear: "desc" }, { referenceMonth: "desc" }],
+        orderBy: [{ referenceYear: "desc" }, { referenceMonth: "desc" }, { kind: "asc" }],
         include: {
           user: { select: { id: true, name: true } },
           publishedBy: { select: { id: true, name: true } },
@@ -532,6 +571,7 @@ class PayslipController {
             select: {
               id: true,
               referenceMonth: true,
+              kind: true,
               referenceYear: true,
               fileName: true,
               user: { select: { id: true, name: true } },
@@ -547,6 +587,7 @@ class PayslipController {
           asked_by: q.askedBy,
           payslip_id: q.payslip.id,
           reference_month: q.payslip.referenceMonth,
+          kind: q.payslip.kind,
           reference_year: q.payslip.referenceYear,
           file_name: q.payslip.fileName,
           user: q.payslip.user,
@@ -570,6 +611,7 @@ class PayslipController {
         mime_type,
         content_base64,
         override_reason,
+        kind,
       } = req.body as {
         user_id?: string;
         reference_month?: number;
@@ -579,6 +621,8 @@ class PayslipController {
         content_base64?: string;
         /** Por que publicar apesar de o documento não conferir. [CB-28] */
         override_reason?: string;
+        /** Mensal, adiantamento, férias, 13º ou rescisão. [B4-G] */
+        kind?: string;
       };
 
       if (
@@ -596,6 +640,11 @@ class PayslipController {
       }
       if (reference_month < 1 || reference_month > 12) {
         res.status(400).json({ message: "reference_month deve ser 1–12." });
+        return;
+      }
+      const tipo = tipoDoPedido(kind);
+      if (!tipo) {
+        res.status(400).json({ message: "Tipo de holerite inválido." });
         return;
       }
       if (!content_base64) {
@@ -697,6 +746,7 @@ class PayslipController {
         userId: user_id,
         referenceMonth: reference_month,
         referenceYear: reference_year,
+        kind: tipo,
         fileName: file_name.trim(),
         mimeType: mime_type,
         data,
@@ -724,7 +774,13 @@ class PayslipController {
       const orgId = actorOrgId(req as AuthRequest);
       const pedido = pedidoDoLote(req, res);
       if (!pedido) return;
-      const lote = await lerLote(orgId, pedido.data, pedido.referenceMonth, pedido.referenceYear);
+      const lote = await lerLote(
+        orgId,
+        pedido.data,
+        pedido.referenceMonth,
+        pedido.referenceYear,
+        pedido.kind,
+      );
       res.json({
         total_pages: lote.totalPages,
         resumo: resumoDoLote(lote.parts),
@@ -748,7 +804,13 @@ class PayslipController {
       const publisherId = actorUserId(auth);
       const pedido = pedidoDoLote(req, res);
       if (!pedido) return;
-      const lote = await lerLote(orgId, pedido.data, pedido.referenceMonth, pedido.referenceYear);
+      const lote = await lerLote(
+        orgId,
+        pedido.data,
+        pedido.referenceMonth,
+        pedido.referenceYear,
+        pedido.kind,
+      );
       const conferem = lote.parts.filter((part) => part.situacao === "CONFERE");
       if (conferem.length === 0) {
         res.status(422).json({
@@ -784,7 +846,8 @@ class PayslipController {
           userId: part.user_id!,
           referenceMonth: pedido.referenceMonth,
           referenceYear: pedido.referenceYear,
-          fileName: `holerite-${competencia}-${part.registration}.pdf`,
+          kind: pedido.kind,
+          fileName: `${KIND_FILE_PREFIX[pedido.kind]}-${competencia}-${part.registration}.pdf`,
           mimeType: "application/pdf",
           data: bytes,
           overrideReason: null,
@@ -803,6 +866,7 @@ class PayslipController {
           fileName: pedido.fileName,
           referenceMonth: pedido.referenceMonth,
           referenceYear: pedido.referenceYear,
+          kind: pedido.kind,
           totalPages: lote.totalPages,
           published: publicados.length,
           replaced: publicados.filter((row) => row.substituiu).length,

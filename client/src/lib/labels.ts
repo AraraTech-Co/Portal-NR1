@@ -235,6 +235,20 @@ export const AEP_STATUS_LABEL: Record<string, string> = {
   CONCLUDED: "Concluída",
 };
 
+/**
+ * O tipo do holerite. Adiantamento e folha mensal do mesmo mês são dois
+ * holerites, e a tela precisa dizer qual é qual. [B4-G]
+ */
+export const PAYSLIP_KIND_LABEL: Record<string, string> = {
+  MONTHLY: "Mensal",
+  ADVANCE: "Adiantamento",
+  VACATION: "Férias",
+  THIRTEENTH: "13º salário",
+  TERMINATION: "Rescisão",
+};
+
+export const PAYSLIP_KIND_VALUES = Object.keys(PAYSLIP_KIND_LABEL);
+
 /** Pesquisa de clima: saía "OPEN" na coluna de situação. [B2-1-C] */
 export const SURVEY_STATUS_LABEL: Record<string, string> = {
   DRAFT: "Rascunho",

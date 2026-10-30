@@ -1795,12 +1795,24 @@ model HrDocumentAck {
 
 // ---------- Holerites ----------
 
+/// O tipo do holerite. Adiantamento e folha mensal saem com a mesma
+/// competência, e um não pode tomar o lugar do outro. [B4-G]
+enum PayslipKind {
+  MONTHLY
+  ADVANCE
+  VACATION
+  THIRTEENTH
+  TERMINATION
+}
+
 model Payslip {
   id             String   @id @default(uuid())
   organizationId String
   userId         String
   referenceMonth Int
   referenceYear  Int
+  /// Os publicados antes do tipo existir eram todos da folha mensal. [B4-G]
+  kind           PayslipKind @default(MONTHLY)
   storagePath    String
   fileName       String
   publishedById  String
@@ -1819,7 +1831,7 @@ model Payslip {
   questions    PayslipQuestion[]
   versions     PayslipVersion[]
 
-  @@unique([organizationId, userId, referenceYear, referenceMonth])
+  @@unique([organizationId, userId, referenceYear, referenceMonth, kind])
   @@index([organizationId, referenceYear, referenceMonth])
 }
 
