@@ -42,5 +42,7 @@ router.post("/api/assessments/:id/validate", write, (req, res) =>
 
 router.get("/api/controls", read, (req, res) => risk.listControls(req, res));
 router.post("/api/controls", write, (req, res) => risk.createControl(req, res));
+/** Corrigir o tipo da medida já registrada (EPI → EPC). [B3-2-D] */
+router.patch("/api/controls/:id", write, (req, res) => risk.updateControlType(req, res));
 
 export default router;

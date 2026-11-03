@@ -22,6 +22,7 @@ import {
   deadlineLimit,
   hojeEmBrasilia,
 } from "../helper/action-deadline";
+import { nivelDoRisco } from "../helper/nivel-do-risco";
 import type { AuthRequest } from "../types/auth";
 
 function fail(res: Response, err: unknown) {
@@ -52,34 +53,6 @@ async function audit(
 
 function textOrNull(raw: unknown): string | null {
   return typeof raw === "string" && raw.trim() !== "" ? raw.trim() : null;
-}
-
-/** Nível vigente do risco: a última avaliação validada. [S2-M] */
-/**
- * O nível que decide prioridade e limite de prazo: o da avaliação MAIS
- * RECENTE, validada ou à espera de validação. Só o validado valia, e quem
- * avalia não valida a própria avaliação: no caminho mais comum — avaliar e
- * já abrir a ação —, a tela dizia "Sem risco avaliado" e aceitava qualquer
- * prazo. A avaliação substituída não conta. [B3-2-A]
- */
-async function nivelDoRisco(
-  organizationId: string,
-  riskId: string,
-): Promise<{ nivel: string; validada: boolean } | null> {
-  const avaliacao = await prisma.riskAssessment.findFirst({
-    where: {
-      organizationId,
-      riskId,
-      status: { not: AssessmentStatus.SUPERSEDED },
-    },
-    orderBy: { assessedAt: "desc" },
-    select: { resultingLevel: true, status: true },
-  });
-  if (!avaliacao?.resultingLevel) return null;
-  return {
-    nivel: avaliacao.resultingLevel,
-    validada: avaliacao.status === AssessmentStatus.VALIDATED,
-  };
 }
 
 class RiskController {
@@ -478,7 +451,7 @@ class RiskController {
       */
       const ocorrencias = await prisma.occurrence.findMany({
         where: { organizationId: orgId, riskId: risk.id },
-        select: { id: true },
+        select: { id: true, description: true },
       });
       const changes = await prisma.auditEvent.findMany({
         where: {
@@ -499,11 +472,24 @@ class RiskController {
           id: true,
           action: true,
           entityType: true,
+          entityId: true,
           before: true,
           after: true,
           createdAt: true,
           actor: { select: { id: true, name: true } },
         },
+      });
+      /*
+        "Ocorrência registrada" trazia só o tipo: o registro antigo da trilha
+        não guardava o que aconteceu. A descrição vem da própria ocorrência
+        quando a trilha não a tem. [B4-A]
+      */
+      const descricaoDa = new Map(ocorrencias.map((o) => [o.id, o.description]));
+      const mudancas = changes.map(({ entityId, ...c }) => {
+        if (c.action !== "occurrence.create") return c;
+        const depois = (c.after ?? {}) as Record<string, unknown>;
+        if (depois.description || !descricaoDa.has(entityId)) return c;
+        return { ...c, after: { ...depois, description: descricaoDa.get(entityId) } };
       });
 
       res.json({
@@ -541,7 +527,7 @@ class RiskController {
         })),
         controls: risk.controls,
         actions: risk.actions,
-        changes,
+        changes: mudancas,
       });
     } catch (err) {
       fail(res, err);
@@ -797,6 +783,52 @@ class RiskController {
         description: row.description,
       });
       res.status(201).json({ control: row });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
+  /**
+   * Corrige o tipo da medida já registrada. A medida da placa foi registrada
+   * como EPI antes de existir "EPC" e continuava EPI no inventário e na
+   * ordem de serviço: não havia como corrigir. A mudança entra na trilha do
+   * risco, com o tipo de antes e o de agora. [B3-2-D]
+   */
+  async updateControlType(req: Request, res: Response) {
+    try {
+      const orgId = actorOrgId(req as AuthRequest);
+      const { type } = req.body as { type?: string };
+      if (!type || !(Object.values(ControlType) as string[]).includes(type)) {
+        res.status(400).json({
+          message: `Informe o tipo: ${Object.values(ControlType).join(", ")}.`,
+        });
+        return;
+      }
+      const atual = await prisma.controlMeasure.findFirst({
+        where: { id: req.params.id, organizationId: orgId },
+        select: { id: true, riskId: true, type: true, description: true },
+      });
+      if (!atual) {
+        res.status(404).json({ message: "Medida não encontrada." });
+        return;
+      }
+      if (atual.type === type) {
+        res.json({ control: atual });
+        return;
+      }
+      const control = await prisma.controlMeasure.update({
+        where: { id: atual.id },
+        data: { type: type as ControlType },
+      });
+      await audit(
+        req,
+        "control.update",
+        "Risk",
+        atual.riskId,
+        { type: atual.type, description: atual.description },
+        { type: control.type, description: control.description },
+      );
+      res.json({ control });
     } catch (err) {
       fail(res, err);
     }

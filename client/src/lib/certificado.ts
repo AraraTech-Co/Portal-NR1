@@ -31,6 +31,12 @@ export type ItensDoCertificado = {
   responsavel: { nome: string | null; qualificacao: string | null };
   /** O que o 1.7.1.1 pede e o cadastro não tem — para a tela avisar. */
   faltando: string[];
+  /**
+   * A parte do que falta que se completa na TURMA, não no curso: no
+   * presencial, local e quem deu a aula vêm dela. A tela mandava completar
+   * tudo "na linha do curso", onde esses itens não se mudam. [B4-B]
+   */
+  faltandoNaTurma: string[];
 };
 
 export const LOCAL_A_DISTANCIA = "A distância, pelo portal";
@@ -68,12 +74,18 @@ export function itensDoCertificado(cert: DadosDoCertificado): ItensDoCertificado
       qualificacao: cert.training.technical_responsible_qualification,
     },
     faltando: [],
+    faltandoNaTurma: [],
   };
   if (!itens.conteudo) itens.faltando.push("conteúdo programático");
   if (!itens.local) itens.faltando.push("local");
   if (!ministrou.nome) itens.faltando.push("quem ministrou");
   if (!ministrou.qualificacao) itens.faltando.push("qualificação de quem ministrou");
   if (!itens.responsavel.nome) itens.faltando.push("responsável técnico");
+  if (turma) {
+    itens.faltandoNaTurma = itens.faltando.filter((item) =>
+      ["local", "quem ministrou", "qualificação de quem ministrou"].includes(item),
+    );
+  }
   return itens;
 }
 

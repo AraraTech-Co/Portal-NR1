@@ -15,6 +15,13 @@ router.get("/api/payslips/open-questions", writeRh, (req, res) =>
   payslips.listOpenQuestions(req, res),
 );
 router.post("/api/payslips", writeRh, (req, res) => payslips.create(req, res));
+/** A folha do mês num arquivo só: conferir antes, depois publicar. [B4-F] */
+router.post("/api/payslips/lote/previa", writeRh, (req, res) =>
+  payslips.previewBatch(req, res),
+);
+router.post("/api/payslips/lote", writeRh, (req, res) =>
+  payslips.publishBatch(req, res),
+);
 router.get("/api/payslips/:id", read, (req, res) => payslips.get(req, res));
 /** A versão que foi substituída, para o trabalhador e para a prova. [S5-F] */
 router.get("/api/payslips/:id/versoes/:versionId/file", read, (req, res) =>

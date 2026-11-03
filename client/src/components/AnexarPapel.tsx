@@ -81,6 +81,10 @@ export function AnexarPapel({
 
   return (
     <div className="anexos">
+      {/* O nome do papel vale para quem só consulta: o rótulo aparecia só
+          no formulário de envio, e a fiscal via um botão com o nome do
+          arquivo sem saber que era a ata. [B4-E] */}
+      <p className="anexos-titulo">{label}</p>
       {anexos.length > 0 ? (
         <ul className="anexos-lista">
           {anexos.map((a) => (
@@ -104,7 +108,7 @@ export function AnexarPapel({
       {canWrite && (
         <form className="anexos-form" onSubmit={enviar}>
           <label className="form-field">
-            {label}
+            Arquivo
             <input
               ref={input}
               type="file"

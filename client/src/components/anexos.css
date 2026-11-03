@@ -4,6 +4,13 @@
   gap: 0.6rem;
 }
 
+/* O nome do papel, acima do que foi anexado. [B4-E] */
+.anexos-titulo {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
 .anexos-lista {
   list-style: none;
   margin: 0;

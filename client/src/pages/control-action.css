@@ -82,3 +82,11 @@
   border-radius: var(--radius);
   background: var(--sem-info);
 }
+
+/* Corrigir o tipo da medida, logo abaixo dela. [B3-2-D] */
+.ctrl-tipo {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0.4rem 0 0.2rem;
+  max-width: 28rem;
+}

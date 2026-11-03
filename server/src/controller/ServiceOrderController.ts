@@ -6,6 +6,8 @@ import { writeAudit } from "../helper/audit";
 import { notifyMany } from "../helper/notify";
 import { canSeeAllInModule } from "../helper/module-access";
 import { mudancasDesdeAEmissao } from "../helper/ordem-desatualizada";
+import { gravarPapel, PAPEL_SELECT, PapelInvalido } from "../helper/papel-anexado";
+import { sendPrivateFile } from "../helper/send-private-file";
 import type { AuthRequest } from "../types/auth";
 
 function fail(res: Response, err: unknown) {
@@ -308,11 +310,17 @@ class ServiceOrderController {
         return;
       }
 
-      const [pessoas, ciencias] = await Promise.all([
+      const [pessoas, ciencias, papeis] = await Promise.all([
         peopleInRole(orgId, order.jobRoleId),
         prisma.serviceOrderAck.findMany({
           where: { serviceOrderId: order.id },
           select: { userId: true, acknowledgedAt: true },
+        }),
+        /* O comprovante assinado, quando anexado: o mesmo público da lista. [CB-74] */
+        prisma.evidence.findMany({
+          where: { serviceOrderId: order.id, organizationId: orgId },
+          orderBy: { uploadedAt: "desc" },
+          select: PAPEL_SELECT,
         }),
       ]);
       const quando = new Map(ciencias.map((c) => [c.userId, c.acknowledgedAt]));
@@ -330,7 +338,77 @@ class ServiceOrderController {
         people: linhas,
         acknowledged: linhas.filter((l) => l.acknowledged_at).length,
         pending: linhas.filter((l) => !l.acknowledged_at).length,
+        papers: papeis,
       });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
+  /**
+   * Anexa o comprovante de ciência assinado no papel. Pela decisão B3-4-F, a
+   * ciência no portal é a prova; o papel é anexo opcional, para quem colheu
+   * assinatura. [CB-74]
+   */
+  async addPaper(req: Request, res: Response) {
+    try {
+      const auth = req as AuthRequest;
+      const orgId = actorOrgId(auth);
+      const userId = actorUserId(auth);
+      const order = await prisma.serviceOrder.findFirst({
+        where: { id: req.params.id, organizationId: orgId },
+        select: { id: true },
+      });
+      if (!order) {
+        res.status(404).json({ message: "Ordem de serviço não encontrada." });
+        return;
+      }
+      const papel = await gravarPapel({
+        organizationId: orgId,
+        uploadedById: userId,
+        body: req.body,
+        eventDate: new Date(),
+        vinculo: { serviceOrderId: order.id },
+      });
+      await writeAudit({
+        organizationId: orgId,
+        actorId: userId,
+        action: "service_order.paper",
+        entityType: "ServiceOrder",
+        entityId: order.id,
+        after: { evidenceId: papel.id, fileName: papel.fileName },
+      });
+      res.status(201).json({ paper: { id: papel.id, fileName: papel.fileName } });
+    } catch (err) {
+      if (err instanceof PapelInvalido) {
+        res.status(400).json({ message: err.message });
+        return;
+      }
+      fail(res, err);
+    }
+  }
+
+  /** O comprovante assinado: só para quem vê a lista de ciência. [CB-74] */
+  async paperFile(req: Request, res: Response) {
+    try {
+      const auth = req as AuthRequest;
+      if (!veCiencias(auth)) {
+        res.status(403).json({ message: "Sem permissão para ver o comprovante." });
+        return;
+      }
+      const papel = await prisma.evidence.findFirst({
+        where: {
+          id: req.params.evidenceId,
+          organizationId: actorOrgId(auth),
+          serviceOrderId: req.params.id,
+        },
+        select: { storagePath: true, fileName: true, mimeType: true },
+      });
+      if (!papel) {
+        res.status(404).json({ message: "Comprovante não encontrado." });
+        return;
+      }
+      sendPrivateFile(res, papel, "Este comprovante foi registrado sem arquivo.");
     } catch (err) {
       fail(res, err);
     }

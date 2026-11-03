@@ -120,7 +120,24 @@ export async function fetchServiceOrderAcks(id: string) {
     }[];
     acknowledged: number;
     pending: number;
+    /** O comprovante assinado no papel, quando anexado. [CB-74] */
+    papers: { id: string; fileName: string | null; description: string | null; uploadedAt: string }[];
   }>(`/api/service-orders/${encodeURIComponent(id)}/ciencias`);
+}
+
+/** Anexa o comprovante de ciência assinado no papel. [CB-74] */
+export async function addServiceOrderPaper(
+  id: string,
+  input: { file_name: string; mime_type: string; content_base64: string; description?: string },
+) {
+  return request<{ paper: { id: string; fileName: string } }>(
+    `/api/service-orders/${encodeURIComponent(id)}/papel`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+export function serviceOrderPaperUrl(id: string, evidenceId: string): string {
+  return `/api/service-orders/${encodeURIComponent(id)}/papel/${encodeURIComponent(evidenceId)}/file`;
 }
 
 export async function issueServiceOrder(input: {

@@ -59,3 +59,33 @@ export function holeriteSemPessoa(competencia: string): string {
     "Assinatura do empregado",
   ]);
 }
+
+/**
+ * Um PDF de várias páginas, cada uma com as suas linhas — a folha do mês num
+ * arquivo só. Gerado pelo `pdf-lib`, o mesmo que divide o arquivo. [B4-F]
+ */
+export async function pdfDePaginas(paginas: string[][]): Promise<Buffer> {
+  const { PDFDocument, StandardFonts } = await import("pdf-lib");
+  const doc = await PDFDocument.create();
+  const fonte = await doc.embedFont(StandardFonts.Helvetica);
+  for (const linhas of paginas) {
+    const pagina = doc.addPage([595, 842]);
+    linhas.forEach((linha, i) => {
+      pagina.drawText(linha, { x: 40, y: 800 - i * 14, size: 10, font: fonte });
+    });
+  }
+  return Buffer.from(await doc.save());
+}
+
+/** A página de uma pessoa no layout da folha (IOB). */
+export function paginaDaFolha(matricula: string, nome: string, competencia: string): string[] {
+  return [
+    "0001 - EMPRESA TESTE LTDA",
+    competencia,
+    "Data do Credito: 05/11/2026",
+    "Codigo - Nome do Funcionario   Data Admissao",
+    `${matricula} - ${nome}   15/01/2024`,
+    "0001 SALARIO   30,00   3.000,00",
+    "TOTAL LIQUIDO 2.450,00",
+  ];
+}

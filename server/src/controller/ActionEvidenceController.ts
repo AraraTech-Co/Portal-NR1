@@ -594,11 +594,13 @@ class ActionEvidenceController {
       /*
         Depois de aprovar, quem validou encontrava no Início o aviso "espera a
         sua validação", como não lido: via como pendente o que acabara de
-        fazer. [CB-59]
+        fazer. [CB-59] O aviso vai a todos que podem validar — dono, outros
+        SST —, e a decisão de um resolve a espera de todos: o aviso dos outros
+        ficava pendente sobre uma ação já validada. [CB-76]
       */
       await prisma.notification.updateMany({
         where: {
-          userId,
+          organizationId: orgId,
           entityType: "Action",
           entityId: result.id,
           kind: NotificationKind.ACTION_WAITING_VALIDATION,

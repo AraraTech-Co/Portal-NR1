@@ -1,6 +1,6 @@
 import { randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
-import { AccountRole, InviteRoleMode, Role } from "@prisma/client";
+import { AccountRole, InviteRoleMode, NotificationKind, Role } from "@prisma/client";
 import { Request, Response } from "express";
 import prisma from "../model/prisma";
 import {
@@ -9,6 +9,7 @@ import {
   loginCandidateFromName,
 } from "../helper/login-name";
 import { writeAudit } from "../helper/audit";
+import { notifyMany } from "../helper/notify";
 import { orgRoleToAccountRole } from "../helper/auth";
 import {
   assertInviteLinkUsable,
@@ -16,6 +17,7 @@ import {
   canAssignOrgRole,
   canDecideJoinRequests,
   canManageInviteLinks,
+  quemDecidePedidosDaConta,
 } from "../helper/invite-access";
 import { resolveAccessUntil } from "../helper/access-period";
 import type { AuthRequest } from "../types/auth";
@@ -111,6 +113,23 @@ function serializeLink(
     used_by: usadoPor.map((u) => ({ name: u.name, status: u.status, at: u.at })),
     created_at: link.createdAt,
   };
+}
+
+/**
+ * Decidido o pedido, o aviso dele deixa de estar pendente para todos que o
+ * receberam — não só para quem decidiu. [CB-29]
+ */
+async function pedidoResolvido(organizationId: string, requestId: string) {
+  await prisma.notification.updateMany({
+    where: {
+      organizationId,
+      entityType: "AccountJoinRequest",
+      entityId: requestId,
+      kind: NotificationKind.JOIN_REQUEST_OPENED,
+      readAt: null,
+    },
+    data: { readAt: new Date() },
+  });
 }
 
 class AccountInviteController {
@@ -402,6 +421,23 @@ class AccountInviteController {
         return created;
       });
 
+      /*
+        O pedido aparecia só no Início de quem decide: o aviso existia e nunca
+        era disparado, e a pessoa ficava esperando do lado de fora. [CB-29]
+      */
+      await notifyMany(
+        await quemDecidePedidosDaConta(link.account.organizationId, link.accountId),
+        {
+          organizationId: link.account.organizationId,
+          kind: NotificationKind.JOIN_REQUEST_OPENED,
+          title: "Pedido de entrada",
+          body: `${cleanName} pediu para entrar em ${link.account.name}.`,
+          link: "/conta?parte=entrada",
+          entityType: "AccountJoinRequest",
+          entityId: request.id,
+        },
+      );
+
       res.status(201).json({
         ok: true,
         pending: true,
@@ -543,6 +579,7 @@ class AccountInviteController {
           entityId: request.id,
           after: { email: request.email, accountId: request.accountId },
         });
+        await pedidoResolvido(actor.organizationId, request.id);
         res.json({ ok: true, status: "REJECTED" });
         return;
       }
@@ -703,6 +740,7 @@ class AccountInviteController {
           ...(fiscalUntil ? { accessExpiresAt: fiscalUntil.toISOString() } : {}),
         },
       });
+      await pedidoResolvido(actor.organizationId, request.id);
 
       res.json({
         ok: true,

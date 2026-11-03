@@ -11,7 +11,7 @@ import { useAuth } from "@/auth/AuthContext";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
 import { PageHeader } from "@/components/PageHeader";
-import { formatDay } from "@/lib/labels";
+import { formatDay, PAYSLIP_KIND_LABEL } from "@/lib/labels";
 import "@/components/data-table.css";
 import "@/components/form.css";
 import { LoadingState } from "@/components/LoadingState";
@@ -105,7 +105,7 @@ export function PayslipDetailPage() {
   return (
     <div>
       <PageHeader
-        title={`${MONTHS[payslip.referenceMonth - 1] ?? payslip.referenceMonth}/${payslip.referenceYear}`}
+        title={`${MONTHS[payslip.referenceMonth - 1] ?? payslip.referenceMonth}/${payslip.referenceYear} · ${PAYSLIP_KIND_LABEL[payslip.kind] ?? payslip.kind}`}
         description={payslip.fileName}
         actions={
           <Button

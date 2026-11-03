@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { fetchActions, type ActionRow } from "@/api/actions";
 import { fetchEstablishments, type Establishment } from "@/api/operation";
 import { useAuth } from "@/auth/AuthContext";
@@ -68,6 +69,13 @@ export function ActionsPage() {
   const [establishments, setEstablishments] = useState<Establishment[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
   /*
+    Vindo de outra tela com uma ação escolhida (a ocorrência, em "Ações
+    vinculadas"): a ação abre e a tela vai até ela. O nome levava à lista
+    geral, e a pessoa tinha de procurar. [CB-73]
+  */
+  const [parametros] = useSearchParams();
+  const acaoPedida = parametros.get("acao");
+  /*
     A tela convidava a validar quem o servidor agora recusa: validar é de
     quem responde tecnicamente, não de qualquer um com escrita no plano.
     [OB-6]
@@ -94,12 +102,18 @@ export function ActionsPage() {
           Quem tem ação aberta no próprio nome abre a tela já filtrada: a
           pessoa entra aqui para resolver a dela. [S3-C]
         */
+        if (acaoPedida && data.actions.some((a) => a.id === acaoPedida)) {
+          setOpenId(acaoPedida);
+        }
         if (!autoMine && user) {
-          const minhas = data.actions.filter(
-            (a) =>
-              (a.assigneeId ?? a.createdById) === user.id &&
-              (a.status === "OPEN" || a.status === "IN_PROGRESS"),
-          );
+          /* Com uma ação pedida, o filtro "minhas" a esconderia. [CB-73] */
+          const minhas = acaoPedida
+            ? []
+            : data.actions.filter(
+                (a) =>
+                  (a.assigneeId ?? a.createdById) === user.id &&
+                  (a.status === "OPEN" || a.status === "IN_PROGRESS"),
+              );
           if (minhas.length > 0) setMine(true);
           setAutoMine(true);
         }
@@ -115,7 +129,13 @@ export function ActionsPage() {
     return () => {
       cancelled = true;
     };
-  }, [autoMine, user]);
+  }, [autoMine, user, acaoPedida]);
+
+  useEffect(() => {
+    if (!loading && acaoPedida && openId === acaoPedida) {
+      document.getElementById(`acao-${acaoPedida}`)?.scrollIntoView({ block: "center" });
+    }
+  }, [loading, acaoPedida, openId]);
 
   const filtered = useMemo(() => {
     return actions.filter((a) => {
@@ -275,6 +295,7 @@ export function ActionsPage() {
                 return (
                   <Fragment key={a.id}>
                   <tr
+                    id={`acao-${a.id}`}
                     className={`action-row is-clickable${open ? " is-open" : ""}`}
                     onClick={toggle}
                     onKeyDown={(e) => {

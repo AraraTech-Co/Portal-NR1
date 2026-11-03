@@ -107,6 +107,12 @@ function quando(value: Date | string | null | undefined): string | null {
   return value ? formatCalendarDay(value) : null;
 }
 
+/** Quantos papéis (lista de presença, foto, ata) há no registro. [B4-E] */
+function papelAnexado(n: number): string {
+  if (n === 0) return "sem papel anexado";
+  return n === 1 ? "1 papel anexado (lista, foto ou ata)" : `${n} papéis anexados (lista, foto ou ata)`;
+}
+
 class InspectionController {
   /**
    * O que a fiscalização vê, inteiro e com as lacunas à mostra.
@@ -262,7 +268,11 @@ class InspectionController {
             drills: {
               orderBy: { performedAt: "desc" },
               take: 1,
-              select: { performedAt: true, recordedBy: { select: { name: true } } },
+              select: {
+                performedAt: true,
+                recordedBy: { select: { name: true } },
+                _count: { select: { evidences: true } },
+              },
             },
           },
         }),
@@ -672,7 +682,11 @@ class InspectionController {
               detail:
                 problemas.length > 0
                   ? problemas.join(" · ")
-                  : `${planos.length} cenário(s) · último simulado registrado`,
+                  : `${planos.length} cenário(s) · último simulado registrado${
+                      comSimulado?.drills[0]?._count.evidences
+                        ? " · ata anexada"
+                        : " · sem ata anexada"
+                    }`,
               who: comSimulado?.drills[0]?.recordedBy.name ?? null,
               when: quando(comSimulado?.drills[0]?.performedAt),
               link: "/emergencias",
@@ -691,7 +705,9 @@ class InspectionController {
           participacoes.slice(0, 20).map((p) => ({
             ok: true,
             label: p.subject,
-            detail: `${PARTICIPATION_TYPE_LABEL[p.type]} · ${p._count.evidences} evidência(s)`,
+            /* "1 evidência(s)" não dizia que era o papel, e a fiscal não
+               achou a ata. [B4-E] */
+            detail: `${PARTICIPATION_TYPE_LABEL[p.type]} · ${papelAnexado(p._count.evidences)}`,
             who: p.recordedBy.name,
             when: quando(p.occurredAt),
             link: "/participacao",
@@ -854,6 +870,8 @@ class InspectionController {
         "establishment",
         "sector",
         "job_role",
+        /* A exigência decide quem o Painel conta em dia. [CB-75] */
+        "job_role_requirement",
         "activity",
         "hazard",
         "risk",

@@ -18,7 +18,8 @@ import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
 import { PageHeader } from "@/components/PageHeader";
 import { PeoplePicker } from "@/components/PeoplePicker";
-import { formatDay } from "@/lib/labels";
+import { PayslipBatchSection } from "./PayslipBatchSection";
+import { formatDay, PAYSLIP_KIND_LABEL, PAYSLIP_KIND_VALUES } from "@/lib/labels";
 import { useModuleAccess } from "@/lib/module-access";
 import "@/components/data-table.css";
 import "@/components/form.css";
@@ -40,6 +41,11 @@ const MONTHS = [
 
 function competenceLabel(month: number, year: number): string {
   return `${MONTHS[month - 1] ?? month}/${year}`;
+}
+
+/** O tipo vai junto da competência: no mesmo mês há mensal e adiantamento. [B4-G] */
+function kindLabel(kind: string): string {
+  return PAYSLIP_KIND_LABEL[kind] ?? kind;
 }
 
 export function PayslipsPage() {
@@ -66,6 +72,7 @@ export function PayslipsPage() {
   const [userId, setUserId] = useState("");
   const [month, setMonth] = useState(String(now.getMonth() + 1));
   const [year, setYear] = useState(String(now.getFullYear()));
+  const [kind, setKind] = useState("MONTHLY");
   const [file, setFile] = useState<File | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -140,6 +147,7 @@ export function PayslipsPage() {
         mime_type: file.type || "application/pdf",
         content_base64,
         override_reason: motivoForaDoPadrao.trim() || undefined,
+        kind,
       });
       setFormOk(
         result.replaced
@@ -201,6 +209,7 @@ export function PayslipsPage() {
           <strong>
             {competenceLabel(r.referenceMonth, r.referenceYear)}
           </strong>
+          <div className="muted">{kindLabel(r.kind)}</div>
         </td>
         <td className="muted">{r.fileName}</td>
         <td>
@@ -288,8 +297,9 @@ export function PayslipsPage() {
               fica guardada. [S5-F] */}
           <p className="muted">
             Após publicar, o arquivo fica acessível apenas ao colaborador. Se já
-            existir na mesma competência, o novo passa a valer e o anterior fica
-            no histórico do holerite.
+            existir um do mesmo tipo na mesma competência, o novo passa a valer
+            e o anterior fica no histórico do holerite. Adiantamento e mensal do
+            mesmo mês são dois holerites.
           </p>
           <form className="form-grid" onSubmit={onPublish}>
             <div className="form-grid cols-2">
@@ -341,6 +351,20 @@ export function PayslipsPage() {
                 />
               </label>
             </div>
+            <label className="form-field">
+              Tipo
+              <select
+                value={kind}
+                onChange={(e) => setKind(e.target.value)}
+                disabled={publishing}
+              >
+                {PAYSLIP_KIND_VALUES.map((k) => (
+                  <option key={k} value={k}>
+                    {PAYSLIP_KIND_LABEL[k]}
+                  </option>
+                ))}
+              </select>
+            </label>
             {formError && <p className="form-error">{formError}</p>}
             {/* O servidor sempre soube qual campo não bateu; a tela mostrava
                 só "não confere". [B2-3-B] */}
@@ -386,6 +410,8 @@ export function PayslipsPage() {
         </section>
       )}
 
+      {isRh && <PayslipBatchSection onPublished={reload} />}
+
       {isRh && (
         <section className="form-section">
           <h2>Dúvidas em aberto</h2>
@@ -411,6 +437,7 @@ export function PayslipsPage() {
                   <span className="muted">
                     {" "}
                     · {competenceLabel(q.reference_month, q.reference_year)} ·{" "}
+                    {kindLabel(q.kind)} ·{" "}
                     {formatDay(q.created_at)}
                   </span>
                 </p>

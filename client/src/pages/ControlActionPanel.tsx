@@ -4,6 +4,7 @@ import {
   createRiskAction,
   fetchAssessments,
   fetchControls,
+  updateControlType,
   type Control,
 } from "@/api/risks";
 import { fetchActions, type ActionRow } from "@/api/actions";
@@ -18,39 +19,15 @@ import {
   CONTROL_TYPE_LABEL,
   CRITERIO_HINT,
   CRITERIO_LABEL,
+  DAYS_BY_PRIORITY,
   formatDay,
   nivelParaPrazo,
+  PRIORITY_BY_LEVEL,
+  RISK_LEVEL_LABEL,
+  sugestaoDoNivel,
 } from "@/lib/labels";
 import "@/components/form.css";
 import "./control-action.css";
-
-/**
- * A prioridade vem do nível do risco: intolerável não espera. Fica editável,
- * porque quem conhece a operação pode discordar. [S2-M]
- */
-const PRIORITY_BY_LEVEL: Record<string, string> = {
-  INTOLERABLE: "CRITICAL",
-  SUBSTANTIAL: "HIGH",
-  MODERATE: "MEDIUM",
-  TOLERABLE: "LOW",
-  TRIVIAL: "LOW",
-};
-
-const RISK_LEVEL_LABEL: Record<string, string> = {
-  INTOLERABLE: "Intolerável",
-  SUBSTANTIAL: "Substancial",
-  MODERATE: "Moderado",
-  TOLERABLE: "Tolerável",
-  TRIVIAL: "Trivial",
-};
-
-/** Prazo sugerido: quanto pior o risco, mais curto. */
-const DAYS_BY_PRIORITY: Record<string, number> = {
-  CRITICAL: 7,
-  HIGH: 30,
-  MEDIUM: 90,
-  LOW: 180,
-};
 
 function isoInDays(days: number): string {
   return new Date(Date.now() - 3 * 3_600_000 + days * 86_400_000).toISOString().slice(0, 10);
@@ -59,12 +36,6 @@ function isoInDays(days: number): string {
 /** Hoje em Brasília: o prazo não pode ser uma data que já passou. [CB-21] */
 function hojeIso(): string {
   return isoInDays(0);
-}
-
-/** O que o nível do risco pede: prioridade e dias. [B2-2-A] [S2-M] */
-function sugestaoDoNivel(nivel: string | null) {
-  const prioridade = PRIORITY_BY_LEVEL[nivel ?? ""] ?? "MEDIUM";
-  return { prioridade, dias: DAYS_BY_PRIORITY[prioridade] ?? 90 };
 }
 
 /** Medidas de prevenção e as ações que as implantam. [S2-A] */
@@ -93,6 +64,10 @@ export function ControlActionPanel({
   const [controlType, setControlType] = useState("ENGINEERING");
   const [controlDescription, setControlDescription] = useState("");
   const [savingControl, setSavingControl] = useState(false);
+  /* A medida registrada com o tipo errado (EPI no lugar de EPC). [B3-2-D] */
+  const [corrigindo, setCorrigindo] = useState<string | null>(null);
+  const [tipoCorrigido, setTipoCorrigido] = useState("");
+  const [salvandoTipo, setSalvandoTipo] = useState(false);
 
   const [openAction, setOpenAction] = useState<string | null>(null);
   const [title, setTitle] = useState("");
@@ -208,6 +183,21 @@ export function ControlActionPanel({
     }
   }
 
+  async function salvarTipo(controlId: string) {
+    setSalvandoTipo(true);
+    setError(null);
+    try {
+      await updateControlType(controlId, tipoCorrigido);
+      setCorrigindo(null);
+      await reload();
+      await onChanged?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao corrigir o tipo");
+    } finally {
+      setSalvandoTipo(false);
+    }
+  }
+
   const actionsOf = (controlId: string) => actions.filter((a) => a.controlId === controlId);
 
   /*
@@ -262,7 +252,60 @@ export function ControlActionPanel({
                 {openAction === c.id && (
                   <Chip tone="info">Preenchendo a ação abaixo</Chip>
                 )}
+                {canWrite && corrigindo !== c.id && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      setTipoCorrigido(c.type);
+                      setCorrigindo(c.id);
+                    }}
+                  >
+                    Corrigir tipo
+                  </Button>
+                )}
               </div>
+              {corrigindo === c.id && (
+                <div className="ctrl-tipo">
+                  <label className="form-field">
+                    Tipo da medida
+                    <select
+                      value={tipoCorrigido}
+                      onChange={(e) => setTipoCorrigido(e.target.value)}
+                      disabled={salvandoTipo}
+                    >
+                      {Object.entries(CONTROL_TYPE_LABEL).map(([valor, rotulo]) => (
+                        <option key={valor} value={valor}>
+                          {rotulo}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="form-hint">
+                      A correção fica no histórico do risco. A ordem de serviço já
+                      emitida não muda; ela avisa que o inventário mudou.
+                    </span>
+                  </label>
+                  <div className="form-actions">
+                    <Button
+                      type="button"
+                      size="compact"
+                      disabled={salvandoTipo || tipoCorrigido === c.type}
+                      onClick={() => void salvarTipo(c.id)}
+                    >
+                      {salvandoTipo ? "Salvando…" : "Salvar tipo"}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="compact"
+                      variant="ghost"
+                      disabled={salvandoTipo}
+                      onClick={() => setCorrigindo(null)}
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              )}
               {actionsOf(c.id).map((a) => (
                 <p key={a.id} className="muted ctrl-action">
                   {a.title} · {ACTION_STATUS_LABEL[a.status] ?? a.status}
