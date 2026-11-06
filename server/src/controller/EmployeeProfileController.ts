@@ -6,6 +6,7 @@ import { JobRole } from "../model/schema/JobRole/JobRole";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
 import { isValidCpf, normalizeCpf } from "../helper/cpf";
+import { parseBirthDate } from "../helper/birth-date";
 import {
   canChangePersonnelRecord,
   canManageModule,
@@ -98,6 +99,7 @@ function forViewer<
   T extends {
     taxId?: unknown;
     phone?: unknown;
+    birthDate?: unknown;
     user?: unknown;
     dismissalReason?: unknown;
   },
@@ -108,6 +110,8 @@ function forViewer<
     ...profile,
     taxId: null,
     phone: null,
+    /* O nascimento segue a regra do CPF: quem não vê um não vê o outro. [C1-7] */
+    ...("birthDate" in profile ? { birthDate: null } : {}),
     ...("dismissalReason" in profile ? { dismissalReason: null } : {}),
     user: user ? { id: user.id, name: user.name } : user,
   };
@@ -128,11 +132,12 @@ const CAMPOS_DA_FICHA: Record<string, string> = {
   bond: "vínculo",
   contractorId: "empresa contratada",
   admittedAt: "admissão",
+  birthDate: "nascimento",
   dismissedAt: "desligamento",
 };
 
 /** Campos que não se mostram a quem não pode vê-los na própria ficha. [CB-43] */
-const CAMPOS_RESERVADOS = new Set(["taxId", "phone"]);
+const CAMPOS_RESERVADOS = new Set(["taxId", "phone", "birthDate"]);
 
 function comoTexto(valor: unknown): string | null {
   if (valor === null || valor === undefined) return null;
@@ -590,12 +595,15 @@ class EmployeeProfileController {
       }
 
       // CPF e matrícula são identidade: não entram por escrita comum. [OB-8]
+      // O nascimento também: é um dos dados do primeiro acesso. [C1-7]
       if (
-        (body.tax_id !== undefined || body.registration !== undefined) &&
+        (body.tax_id !== undefined ||
+          body.registration !== undefined ||
+          body.birth_date !== undefined) &&
         !cuidaDoQuadro(auth)
       ) {
         res.status(403).json({
-          message: "CPF e matrícula só podem ser alterados pelo RH.",
+          message: "CPF, matrícula e nascimento só podem ser alterados pelo RH.",
           code: "PERSONNEL_RECORD_ONLY",
         });
         return;
@@ -613,6 +621,8 @@ class EmployeeProfileController {
       if (body.tax_id !== undefined) {
         taxId = cpfDoColaborador(body.tax_id);
       }
+      const birthDate =
+        body.birth_date !== undefined ? parseBirthDate(body.birth_date) : undefined;
 
       // Vínculo e empresa contratada andam juntos: empregado não pertence a
       // contratada, e terceirizado sem empresa deixa a lacuna à mostra. [S1-G]
@@ -655,6 +665,7 @@ class EmployeeProfileController {
             ? { registration: blank(body.registration as string) }
             : {}),
           ...(taxId !== undefined ? { taxId } : {}),
+          ...(birthDate !== undefined ? { birthDate } : {}),
           ...(body.phone !== undefined
             ? { phone: blank(body.phone as string) }
             : {}),

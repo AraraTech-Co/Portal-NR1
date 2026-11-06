@@ -12,6 +12,7 @@ import {
   loginCandidateFromName,
 } from "../helper/login-name";
 import { temporaryPassword } from "../helper/temporary-password";
+import { parseBirthDate } from "../helper/birth-date";
 import type { AuthRequest } from "../types/auth";
 
 function fail(res: Response, err: unknown) {
@@ -29,6 +30,8 @@ type Entrada = {
   email?: unknown;
   job_role_id?: unknown;
   admitted_at?: unknown;
+  /** Nascimento: um dos três dados do primeiro acesso. [C1-7] */
+  birth_date?: unknown;
   bond?: unknown;
   contractor_id?: unknown;
   org_role?: unknown;
@@ -89,12 +92,14 @@ class PeopleImportController {
       registration: string | null;
       jobRoleId: string | null;
       admittedAt: Date | null;
+      birthDate: Date | null;
     };
     daPlanilha: {
       taxId: string | null;
       matricula: string | null;
       jobRoleId: string | null;
       admittedAt: Date | null;
+      birthDate: Date | null;
     };
     simulacao: boolean;
   }): Promise<string[]> {
@@ -142,6 +147,11 @@ class PeopleImportController {
     if (!atual.admittedAt && daPlanilha.admittedAt) {
       dados.admittedAt = daPlanilha.admittedAt;
       mudou.push("admissão");
+    }
+    /* Como o CPF: completa o que está em branco, nunca sobrescreve. [C1-7] */
+    if (!atual.birthDate && daPlanilha.birthDate) {
+      dados.birthDate = daPlanilha.birthDate;
+      mudou.push("nascimento");
     }
 
     if (mudou.length > 0 && !simulacao) {
@@ -231,6 +241,7 @@ class PeopleImportController {
           const email = texto(linha.email)?.toLowerCase() ?? null;
           const jobRoleId = texto(linha.job_role_id);
           const admittedAt = dataDeCalendario(linha.admitted_at, "Data de admissão");
+          const birthDate = parseBirthDate(linha.birth_date);
 
           let taxId: string | null = null;
           const cpfBruto = texto(linha.tax_id);
@@ -288,6 +299,7 @@ class PeopleImportController {
             registration: true,
             jobRoleId: true,
             admittedAt: true,
+            birthDate: true,
             user: { select: { name: true, login: true } },
           } as const;
           const [porCpf, porMatricula, porEmail] = await Promise.all([
@@ -322,7 +334,7 @@ class PeopleImportController {
               orgId,
               profileId: jaExiste.id,
               atual: jaExiste,
-              daPlanilha: { taxId, matricula, jobRoleId, admittedAt },
+              daPlanilha: { taxId, matricula, jobRoleId, admittedAt, birthDate },
               simulacao,
             });
             registro.login = jaExiste.user.login;
@@ -392,6 +404,7 @@ class PeopleImportController {
                 taxId,
                 jobRoleId,
                 admittedAt,
+                birthDate,
                 bond,
                 contractorId,
               },

@@ -1586,6 +1586,9 @@ model EmployeeProfile {
   /// Empresa contratada a que a pessoa pertence, quando não é empregada.
   contractorId   String?
   admittedAt     DateTime?
+  /// Data de nascimento (sem hora). Visível só para quem vê o CPF; é um dos
+  /// três dados do primeiro acesso. [C1-7]
+  birthDate      DateTime?
   dismissedAt    DateTime?
   /// Por que a pessoa saiu. A fiscalização pergunta, e o RH precisa do
   /// registro — sem isto o desligamento é só uma data. [S5-H]
