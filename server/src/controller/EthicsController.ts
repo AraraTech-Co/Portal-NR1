@@ -225,16 +225,29 @@ class EthicsController {
         return;
       }
 
-      if (establishment_id) {
-        const est = await new Establishment().read.one({
-          id: establishment_id,
-          organizationId: orgId,
-          archivedAt: null,
+      /*
+        A unidade passa a ser obrigatória: sem ela a coluna "Estabelecimento"
+        saía sempre vazia, e o comitê não sabia de onde vinha o relato.
+        [C1-3]
+      */
+      if (typeof establishment_id !== "string" || !establishment_id.trim()) {
+        res.status(400).json({
+          message: "Escolha a unidade onde o fato aconteceu.",
+          field: "establishment_id",
         });
-        if (!est) {
-          res.status(400).json({ message: "Estabelecimento inválido." });
-          return;
-        }
+        return;
+      }
+      const est = await new Establishment().read.one({
+        id: establishment_id,
+        organizationId: orgId,
+        archivedAt: null,
+      });
+      if (!est) {
+        res.status(400).json({
+          message: "Unidade inválida para esta empresa.",
+          field: "establishment_id",
+        });
+        return;
       }
 
       const anonymous = is_anonymous !== false;
@@ -270,7 +283,7 @@ class EthicsController {
         reporterUserId,
         accessCodeHash,
         status: REPORT_STATUSES.RECEIVED,
-        establishmentId: establishment_id ?? null,
+        establishmentId: est.id,
         committeeInvolved: committee_involved === true,
         /* Quem define a gravidade é o servidor, pela categoria. [C1-1] */
         severity,
@@ -1262,6 +1275,26 @@ class EthicsController {
    */
   async listCategories(req: Request, res: Response) {
     const orgId = (req.query.organization_id as string | undefined) ?? null;
+    /*
+      As unidades para quem relata escolher. Dentro do portal, as da empresa
+      da sessão; no canal público, as da empresa do link. A empresa é a
+      mesma que a criação usa — a da sessão, quando há uma —, para a unidade
+      escolhida sempre conferir. Sem empresa nenhuma, nada sai. Só id e
+      nome: endereço não. [C1-3] [CB-63]
+    */
+    const actorOrg = (req as AuthRequest).actor?.organizationId ?? null;
+    const unidadesDe = actorOrg ?? orgId;
+    const establishments = unidadesDe
+      ? await prisma.establishment.findMany({
+          where: {
+            organizationId: unidadesDe,
+            archivedAt: null,
+            organization: { active: true },
+          },
+          orderBy: { name: "asc" },
+          select: { id: true, name: true },
+        })
+      : [];
     const organization = orgId
       ? await prisma.organization.findFirst({
           where: { id: orgId, active: true },
@@ -1290,6 +1323,7 @@ class EthicsController {
       statuses: REPORT_STATUS_VALUES.map((id) => ({ id })),
       organization,
       single_organization: ativas.length === 1 ? ativas[0] : null,
+      establishments,
     });
   }
 }

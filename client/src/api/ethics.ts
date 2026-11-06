@@ -17,6 +17,8 @@ export function fetchEthicsMeta(organizationId?: string) {
      * precisa para saber se há escolha a fazer. [CB-63]
      */
     single_organization: { id: string; name: string } | null;
+    /** As unidades para quem relata escolher (só id e nome). [C1-3] */
+    establishments: Array<{ id: string; name: string }>;
   }>(`/api/ethics-reports/meta${qs}`);
 }
 
@@ -24,7 +26,8 @@ export function createEthicsReport(input: {
   category: string;
   description: string;
   is_anonymous: boolean;
-  establishment_id?: string;
+  /** Onde o fato aconteceu — obrigatório. [C1-3] */
+  establishment_id: string;
   /** Fora do portal não há sessão: a empresa vem do link. [S4-L] */
   organization_id?: string;
   /**

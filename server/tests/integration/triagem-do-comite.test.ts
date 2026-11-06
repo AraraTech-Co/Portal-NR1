@@ -21,6 +21,7 @@ import prisma from "../../src/model/prisma";
  * Exige a organização do `scripts/seed-teste-org.ts`.
  */
 const ORG_ID = "aaaaaaaa-0001-4000-8000-000000000001";
+const EST_ID = "aaaaaaaa-0001-4000-8000-000000000011";
 const SENHA = "teste1234";
 const SUFIXO = Date.now().toString(36);
 
@@ -46,7 +47,7 @@ async function relatar(opts: { envolveComite: boolean; texto: string }) {
     organization_id: ORG_ID,
     category: "HARASSMENT_MORAL",
     description: opts.texto,
-    is_anonymous: true,
+    is_anonymous: true, establishment_id: EST_ID,
     committee_involved: opts.envolveComite,
   });
   expect(res.status, JSON.stringify(res.body)).toBe(201);

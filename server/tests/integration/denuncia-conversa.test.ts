@@ -4,6 +4,8 @@ import type { Express } from "express";
 import { createApp } from "../../src/app";
 import prisma from "../../src/model/prisma";
 
+const EST_ID = "aaaaaaaa-0001-4000-8000-000000000011";
+
 /**
  * Comitê abre o relato e responde [S5-L]; quem denunciou responde de volta
  * pelo protocolo, sem se identificar [S5-P].
@@ -37,7 +39,7 @@ beforeAll(async () => {
   const res = await request(app)
     .post("/api/ethics-reports")
     .set(as(colaborador))
-    .send({ category: "HARASSMENT_MORAL", description: "Gritos frequentes na reunião da manhã", is_anonymous: true });
+    .send({ category: "HARASSMENT_MORAL", description: "Gritos frequentes na reunião da manhã", is_anonymous: true, establishment_id: EST_ID, committee_involved: false });
   expect(res.status).toBe(201);
   protocol = res.body.report.protocol;
   code = res.body.access_code;

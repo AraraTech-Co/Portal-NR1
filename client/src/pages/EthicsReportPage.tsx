@@ -41,6 +41,9 @@ export function EthicsReportPage({
   const [mode, setMode] = useState<Mode>(semEmpresa ? "track" : "new");
   const [categories, setCategories] = useState<string[]>([]);
   const [category, setCategory] = useState("");
+  /** A unidade onde o fato aconteceu: obrigatória; com uma só, já vem escolhida. [C1-3] */
+  const [units, setUnits] = useState<Array<{ id: string; name: string }> | null>(null);
+  const [establishmentId, setEstablishmentId] = useState("");
   const [description, setDescription] = useState("");
   // Fora do portal não há nome a vincular: a denúncia é sempre anônima.
   const [isAnonymous, setIsAnonymous] = useState(true);
@@ -82,8 +85,13 @@ export function EthicsReportPage({
         const ids = meta.categories.map((c) => c.id);
         setCategories(ids);
         if (ids[0]) setCategory(ids[0]);
+        setUnits(meta.establishments ?? []);
+        if (meta.establishments?.length === 1) setEstablishmentId(meta.establishments[0].id);
       })
-      .catch(() => setCategories(Object.keys(REPORT_CATEGORY_LABEL)));
+      .catch(() => {
+        setCategories(Object.keys(REPORT_CATEGORY_LABEL));
+        setUnits([]);
+      });
   }, [organizationId]);
 
   async function onSubmitNew(e: FormEvent) {
@@ -104,6 +112,7 @@ export function EthicsReportPage({
       const data = await createEthicsReport({
         category,
         description,
+        establishment_id: establishmentId,
         is_anonymous: publico ? true : isAnonymous,
         committee_involved: envolveComite,
         ...(organizationId ? { organization_id: organizationId } : {}),
@@ -341,6 +350,31 @@ export function EthicsReportPage({
                   </option>
                 ))}
               </select>
+            </label>
+            {/* Sem a unidade, a coluna "Estabelecimento" do comitê saía
+                sempre vazia. [C1-3] */}
+            <label className="form-field">
+              Unidade
+              <select
+                value={establishmentId}
+                onChange={(e) => setEstablishmentId(e.target.value)}
+                required
+                disabled={units === null}
+              >
+                <option value="">{units === null ? "Carregando…" : "Selecione…"}</option>
+                {(units ?? []).map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+              </select>
+              {units !== null && units.length === 0 && (
+                <span className="form-hint" role="note">
+                  Esta empresa ainda não tem unidade cadastrada no portal, e a
+                  denúncia precisa dizer onde o fato aconteceu. Avise quem
+                  administra o portal.
+                </span>
+              )}
             </label>
             <label className="form-field">
               Descrição
