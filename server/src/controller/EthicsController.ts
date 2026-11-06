@@ -28,7 +28,9 @@ import {
   REPORT_STATUSES,
   REPORT_STATUS_VALUES,
   isReportCategory,
+  isReportSeverity,
   isReportStatus,
+  severityForCategory,
 } from "../constants";
 import type { AuthRequest } from "../types/auth";
 
@@ -233,6 +235,10 @@ class EthicsController {
         status: REPORT_STATUSES.RECEIVED,
         establishmentId: establishment_id ?? null,
         committeeInvolved: committee_involved === true,
+        /* Quem define a gravidade é o servidor, pela categoria. [C1-1] */
+        /* Quem define a gravidade é o servidor, pela categoria. [C1-1] */
+        severity: severityForCategory(category),
+        severitySource: "AUTO",
       });
 
       // Auditoria sem revelar identidade do denunciante anônimo.
@@ -465,6 +471,9 @@ class EthicsController {
           /** O caso que passou pela triagem, e quando voltou. [B3-3-H] */
           committeeInvolved: r.committeeInvolved,
           triagedAt: r.triagedAt,
+          /** Alta ou Normal; `COMMITTEE` = ajustada pelo comitê. [C1-1] */
+          severity: r.severity,
+          severitySource: r.severitySource,
           createdAt: r.createdAt,
           updatedAt: r.updatedAt,
           _count: r._count,
@@ -879,6 +888,18 @@ class EthicsController {
               author: { select: { id: true, name: true } },
             },
           },
+          /** Os ajustes de gravidade, com autor e justificativa. [C1-1] */
+          severityChanges: {
+            orderBy: { at: "asc" },
+            select: {
+              id: true,
+              fromSeverity: true,
+              toSeverity: true,
+              reason: true,
+              at: true,
+              by: { select: { id: true, name: true } },
+            },
+          },
         },
       });
       if (!report) {
@@ -1003,6 +1024,98 @@ class EthicsController {
 
       const { accessCodeHash: _h, ...safe } = report;
       res.json({ report: safe });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
+  /**
+   * O comitê ajusta a gravidade (Alta ↔ Normal), sempre com justificativa.
+   *
+   * O ajuste fica registrado — quem, quando, de → para e por quê — e aparece
+   * no detalhe do caso. [C1-1]
+   */
+  async setSeverity(req: Request, res: Response) {
+    try {
+      const auth = req as AuthRequest;
+      const orgId = actorOrgId(auth);
+      const actorId = actorUserId(auth);
+      /* Fora do alcance de quem abriu: 404, como nas outras ações. [CB-27] */
+      if (await estouImpedido(req, req.params.id)) {
+        res.status(404).json({ message: "Relato não encontrado." });
+        return;
+      }
+      const { severity, reason } = req.body as {
+        severity?: unknown;
+        reason?: unknown;
+      };
+      if (!isReportSeverity(severity)) {
+        res.status(400).json({
+          message: "Informe a gravidade: Alta (HIGH) ou Normal (NORMAL).",
+          field: "severity",
+        });
+        return;
+      }
+      const justificativa = typeof reason === "string" ? reason.trim() : "";
+      if (!justificativa) {
+        res.status(400).json({
+          message: "Escreva por que a gravidade está sendo ajustada.",
+          field: "reason",
+        });
+        return;
+      }
+
+      const report = await prisma.ethicsReport.findFirst({
+        where: { id: req.params.id, organizationId: orgId },
+        select: { id: true, severity: true },
+      });
+      if (!report) {
+        res.status(404).json({ message: "Relato não encontrado." });
+        return;
+      }
+      if (report.severity === severity) {
+        res.status(400).json({
+          message: "A denúncia já está com essa gravidade.",
+          field: "severity",
+        });
+        return;
+      }
+
+      const [, change] = await prisma.$transaction([
+        prisma.ethicsReport.update({
+          where: { id: report.id },
+          data: { severity, severitySource: "COMMITTEE" },
+        }),
+        prisma.ethicsReportSeverityChange.create({
+          data: {
+            reportId: report.id,
+            fromSeverity: report.severity,
+            toSeverity: severity,
+            reason: justificativa,
+            byId: actorId,
+          },
+          select: {
+            id: true,
+            fromSeverity: true,
+            toSeverity: true,
+            reason: true,
+            at: true,
+            by: { select: { id: true, name: true } },
+          },
+        }),
+      ]);
+
+      await writeAudit({
+        organizationId: orgId,
+        actorId,
+        action: "ethics_report.severity",
+        entityType: "EthicsReport",
+        entityId: report.id,
+        before: { severity: report.severity },
+        after: { severity, reason: justificativa },
+      });
+
+      res.json({ change });
     } catch (err) {
       fail(res, err);
     }

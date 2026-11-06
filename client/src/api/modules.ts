@@ -302,6 +302,9 @@ export const fetchEthicsReports = () =>
        */
       committeeInvolved: boolean;
       triagedAt: string | null;
+      /** Alta ou Normal; `COMMITTEE` = ajustada pelo comitê. [C1-1] */
+      severity: "HIGH" | "NORMAL";
+      severitySource: "AUTO" | "COMMITTEE";
     }>;
   }>("/api/ethics-reports").then((d) => d.reports);
 

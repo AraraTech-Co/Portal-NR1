@@ -40,6 +40,7 @@ import {
   ReferralStatus,
   ReportAuthorSide,
   ReportCategory,
+  ReportSeverity,
   ReportStatus,
   RequirementKind,
   SummonAttendanceStatus,
@@ -292,6 +293,29 @@ export const REPORT_STATUS_VALUES: readonly ReportStatus[] =
 
 /** Lado da mensagem no histórico (ADR-16). */
 export const REPORT_AUTHOR_SIDES = ReportAuthorSide;
+
+/**
+ * Gravidade da denúncia. Alta: assédio sexual e discriminação; Normal: as
+ * outras. Quem define é o servidor, pela categoria; o comitê pode ajustar,
+ * com justificativa. [C1-1]
+ */
+export const REPORT_SEVERITY_VALUES: readonly ReportSeverity[] =
+  Object.values(ReportSeverity);
+
+export const HIGH_SEVERITY_CATEGORIES: readonly ReportCategory[] = [
+  ReportCategory.HARASSMENT_SEXUAL,
+  ReportCategory.DISCRIMINATION,
+];
+
+export function severityForCategory(category: ReportCategory): ReportSeverity {
+  return HIGH_SEVERITY_CATEGORIES.includes(category)
+    ? ReportSeverity.HIGH
+    : ReportSeverity.NORMAL;
+}
+
+export function isReportSeverity(v: unknown): v is ReportSeverity {
+  return typeof v === "string" && (REPORT_SEVERITY_VALUES as readonly string[]).includes(v);
+}
 
 /**
  * Prefixo do protocolo público (ex.: CX-7232).

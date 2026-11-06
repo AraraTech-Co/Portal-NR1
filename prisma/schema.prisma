@@ -68,6 +68,7 @@ model User {
   ergonomicComplaintsHandled ErgonomicComplaint[] @relation("ErgonomicComplaintHandler")
   ethicsCited       EthicsReportCited[]   @relation("EthicsCited")
   ethicsCitedMarked EthicsReportCited[]   @relation("EthicsCitedMarker")
+  ethicsSeverityChanges EthicsReportSeverityChange[] @relation("EthicsSeverityChanger")
   reportMessages    EthicsReportMessage[] @relation("ReportMessageAuthor")
   employeeProfiles  EmployeeProfile[]
   ideasAuthored     Idea[]                @relation("IdeaAuthor")
@@ -1407,6 +1408,36 @@ enum ReportStatus {
   ARCHIVED
 }
 
+/// Gravidade da denúncia. O servidor a define pela categoria; o comitê pode
+/// ajustar, com justificativa. [C1-1]
+enum ReportSeverity {
+  HIGH
+  NORMAL
+}
+
+/// De onde veio a gravidade: da categoria, ou de um ajuste do comitê. [C1-1]
+enum ReportSeveritySource {
+  AUTO
+  COMMITTEE
+}
+
+/// Cada ajuste de gravidade feito pelo comitê: quem, quando, de → para e por
+/// quê. O comitê vê esta lista no detalhe do caso. [C1-1]
+model EthicsReportSeverityChange {
+  id           String         @id @default(uuid())
+  reportId     String
+  fromSeverity ReportSeverity
+  toSeverity   ReportSeverity
+  reason       String
+  byId         String
+  at           DateTime       @default(now())
+
+  report EthicsReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  by     User         @relation("EthicsSeverityChanger", fields: [byId], references: [id])
+
+  @@index([reportId, at])
+}
+
 /// Quem é o comitê de ética desta empresa.
 ///
 /// Antes, comitê era "todo mundo com leitura no módulo comite" — na prática,
@@ -1472,6 +1503,9 @@ model EthicsReport {
   /// caso ao comitê. [B3-3-H]
   triagedAt      DateTime?
   triagedById    String?
+  /// Alta para assédio sexual e discriminação; Normal para as outras. [C1-1]
+  severity       ReportSeverity       @default(NORMAL)
+  severitySource ReportSeveritySource @default(AUTO)
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
@@ -1481,6 +1515,7 @@ model EthicsReport {
   triagedBy     User?                @relation("ReportTriage", fields: [triagedById], references: [id])
   messages      EthicsReportMessage[]
   cited         EthicsReportCited[]
+  severityChanges EthicsReportSeverityChange[]
 
   @@unique([organizationId, protocol])
   @@index([organizationId, status])

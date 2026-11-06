@@ -65,6 +65,10 @@ router.post("/api/ethics-reports/:id/messages", ...committeeWrite, (req, res) =>
 router.post("/api/ethics-reports/:id/citados", ...committeeWrite, (req, res) =>
   ethics.setCited(req, res),
 );
+/** Ajustar a gravidade, com justificativa. [C1-1] */
+router.post("/api/ethics-reports/:id/gravidade", ...committeeWrite, (req, res) =>
+  ethics.setSeverity(req, res),
+);
 /** Devolver ao comitê o caso que dizia envolver alguém dele. [B3-3-H] */
 router.post("/api/ethics-reports/:id/triagem", ...committeeWrite, (req, res) =>
   ethics.triar(req, res),

@@ -3,7 +3,12 @@ import { useResourceList } from "@/hooks/useResourceList";
 import { fetchEthicsReports } from "@/api/modules";
 import { ListShell } from "@/components/ListShell";
 import { Chip } from "@/components/Chip";
-import { formatDay, REPORT_CATEGORY_LABEL, REPORT_STATUS_LABEL } from "@/lib/labels";
+import {
+  formatDay,
+  REPORT_CATEGORY_LABEL,
+  REPORT_SEVERITY_LABEL,
+  REPORT_STATUS_LABEL,
+} from "@/lib/labels";
 import "@/components/ethics-thread.css";
 import "./denuncia.css";
 
@@ -35,6 +40,7 @@ export function EthicsPage() {
             <tr>
               <th>Protocolo</th>
               <th>Categoria</th>
+              <th>Gravidade</th>
               <th>Situação</th>
               <th>Quem</th>
               <th>Estabelecimento</th>
@@ -72,6 +78,15 @@ export function EthicsPage() {
                     </div>
                   </td>
                   <td>{REPORT_CATEGORY_LABEL[r.category] ?? r.category}</td>
+                  <td>
+                    <Chip tone={r.severity === "HIGH" ? "danger" : "neutral"}>
+                      {REPORT_SEVERITY_LABEL[r.severity] ?? r.severity}
+                    </Chip>
+                    {/* O comitê mudou a gravidade da categoria. [C1-1] */}
+                    {r.severitySource === "COMMITTEE" && (
+                      <div className="muted ethics-excerpt">ajustada pelo comitê</div>
+                    )}
+                  </td>
                   <td>
                     <Chip tone={statusTone(r.status)}>{REPORT_STATUS_LABEL[r.status] ?? r.status}</Chip>
                     {/* Quem tria vê o caso que ainda não foi ao comitê. [B3-3-H] */}

@@ -173,6 +173,7 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   "ethics_committee.set": "Comitê de ética alterado",
   "ethics_report.cited": "Pessoa citada numa denúncia",
   "ethics_report.triage": "Denúncia devolvida ao comitê depois da triagem",
+  "ethics_report.severity": "Gravidade de uma denúncia ajustada pelo comitê",
   "training_session.attendance": "Presença em turma registrada",
   /*
     Escritos como ternário, escapavam da varredura dos rótulos até ela ser

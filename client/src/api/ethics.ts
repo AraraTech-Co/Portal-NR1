@@ -107,6 +107,10 @@ export type EthicsReportDetail = {
   /** O caso que passou pela triagem, e quando voltou ao comitê. [B3-3-H] */
   committeeInvolved: boolean;
   triagedAt: string | null;
+  /** Alta ou Normal; `COMMITTEE` = ajustada pelo comitê. [C1-1] */
+  severity: "HIGH" | "NORMAL";
+  severitySource: "AUTO" | "COMMITTEE";
+  severityChanges: SeverityChange[];
   messages: EthicsMessage[];
   /** Quem a denúncia envolve — e por isso está fora do caso. [CB-27] */
   cited: Array<{
@@ -116,6 +120,24 @@ export type EthicsReportDetail = {
     markedBy: { id: string; name: string } | null;
   }>;
 };
+
+/** Um ajuste de gravidade feito pelo comitê. [C1-1] */
+export type SeverityChange = {
+  id: string;
+  fromSeverity: "HIGH" | "NORMAL";
+  toSeverity: "HIGH" | "NORMAL";
+  reason: string;
+  at: string;
+  by: { id: string; name: string } | null;
+};
+
+/** O comitê ajusta a gravidade, sempre com justificativa. [C1-1] */
+export function setEthicsSeverity(id: string, severity: "HIGH" | "NORMAL", reason: string) {
+  return request<{ change: SeverityChange }>(
+    `/api/ethics-reports/${encodeURIComponent(id)}/gravidade`,
+    { method: "POST", body: JSON.stringify({ severity, reason }) },
+  );
+}
 
 /** Comitê abre o relato (e marca como lidas as mensagens do denunciante). [S5-L] */
 export function fetchEthicsReport(id: string) {
