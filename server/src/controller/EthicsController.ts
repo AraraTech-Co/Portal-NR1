@@ -22,10 +22,18 @@ import { writeAudit } from "../helper/audit";
 import { computeDueAt } from "../helper/business-days";
 import { ethicsDeadline, holidayCalendarFor } from "../helper/ethics-deadline";
 import {
+  ethicsFiltersWhere,
+  parseEthicsFilters,
+  situationRank,
+  type EthicsFilters,
+} from "../helper/ethics-filters";
+import {
   ETHICS_ACCESS_CODE_BCRYPT_ROUNDS,
   ETHICS_ACCESS_CODE_LENGTH,
   ETHICS_PROTOCOL_PREFIX,
   ETHICS_ACK_COMMENT_MAX,
+  ETHICS_EXPORT_MAX_ROWS,
+  ETHICS_LIST_PAGE_SIZE,
   REPORT_AUTHOR_SIDES,
   REPORT_CATEGORY_VALUES,
   REPORT_STATUSES,
@@ -171,6 +179,48 @@ function prazoNaResposta(r: {
     firstActionAt: r.firstActionAt,
     deadline_situation: prazo.situation,
   };
+}
+
+/**
+ * As denúncias que o filtro traz, já no recorte de quem está olhando e na
+ * ordem da lista: atrasadas, depois as que vencem hoje, depois as mais
+ * recentes. A situação do prazo depende do relógio, então é calculada
+ * aqui, e não no banco. [C1-6] [CB-27] [B3-3-H]
+ */
+async function denunciasFiltradas(
+  orgId: string,
+  actor: NonNullable<AuthRequest["actor"]>,
+  filters: EthicsFilters,
+) {
+  const recorte = await ethicsReportScope(orgId, actor);
+  /*
+    `AND`, e não espalhar: o recorte fala em `id`, e espalhar outro filtro
+    por cima o apagaria.
+  */
+  const leves = await prisma.ethicsReport.findMany({
+    where: { AND: [{ organizationId: orgId }, recorte, ...ethicsFiltersWhere(filters)] },
+    select: {
+      id: true,
+      organizationId: true,
+      status: true,
+      severity: true,
+      createdAt: true,
+      dueAt: true,
+      firstActionAt: true,
+    },
+  });
+  const agora = new Date();
+  return leves
+    .map((r) => {
+      const prazo = ethicsDeadline(r, agora);
+      return { ...r, dueAt: prazo.dueAt, situation: prazo.situation };
+    })
+    .filter((r) => !filters.situation || r.situation === filters.situation)
+    .sort(
+      (a, b) =>
+        situationRank(a.situation) - situationRank(b.situation) ||
+        b.createdAt.getTime() - a.createdAt.getTime(),
+    );
 }
 
 class EthicsController {
@@ -557,35 +607,47 @@ class EthicsController {
 
   // —— Comitê ——
 
+  /**
+   * A lista do comitê, com filtros e paginação no servidor. [C1-6]
+   *
+   * O recorte de acesso vem antes de qualquer filtro e nunca por fora dele:
+   * quem é citado não vê o caso, e o caso na triagem só aparece para quem
+   * tria. [CB-27] [B3-3-H]
+   */
   async list(req: Request, res: Response) {
     try {
-      const orgId = actorOrgId(req as AuthRequest);
-      const status = req.query.status as string | undefined;
-      /*
-        Quem é citado numa denúncia sai do caso: nem na lista ela aparece.
-        Era a denúncia contra alguém do RH indo parar na mesa dele. [CB-27]
-        E o caso que diz envolver o comitê só aparece depois da triagem, para
-        quem não a faz. [B3-3-H]
-      */
-      const recorte = await ethicsReportScope(orgId, (req as AuthRequest).actor!);
+      const auth = req as AuthRequest;
+      const orgId = actorOrgId(auth);
+      const lido = parseEthicsFilters(req.query as Record<string, unknown>);
+      if ("error" in lido) {
+        res.status(400).json(lido.error);
+        return;
+      }
+      const ordenadas = await denunciasFiltradas(orgId, auth.actor!, lido.filters);
 
-      const rows = await prisma.ethicsReport.findMany({
-        where: {
-          organizationId: orgId,
-          ...recorte,
-          ...(status && isReportStatus(status) ? { status } : {}),
-        },
-        orderBy: { createdAt: "desc" },
+      const pedida = Number.parseInt(String(req.query.pagina ?? "1"), 10);
+      const page = Number.isFinite(pedida) && pedida > 0 ? pedida : 1;
+      const daPagina = ordenadas.slice(
+        (page - 1) * ETHICS_LIST_PAGE_SIZE,
+        page * ETHICS_LIST_PAGE_SIZE,
+      );
+      const ids = daPagina.map((r) => r.id);
+
+      const encontradas = await prisma.ethicsReport.findMany({
+        where: { id: { in: ids }, organizationId: orgId },
         include: {
           establishment: { select: { id: true, name: true } },
           _count: { select: { messages: true } },
         },
       });
+      const porId = new Map(encontradas.map((r) => [r.id, r]));
+      const rows = ids.map((id) => porId.get(id)!).filter(Boolean);
+
       // Mensagens do denunciante que o comitê ainda não abriu. [S5-L]
       const unread = await prisma.ethicsReportMessage.groupBy({
         by: ["reportId"],
         where: {
-          reportId: { in: rows.map((r) => r.id) },
+          reportId: { in: ids },
           side: REPORT_AUTHOR_SIDES.REPORTER,
           readByCommitteeAt: null,
         },
@@ -602,7 +664,7 @@ class EthicsController {
       const doComite = await prisma.ethicsReportMessage.groupBy({
         by: ["reportId"],
         where: {
-          reportId: { in: rows.map((r) => r.id) },
+          reportId: { in: ids },
           side: REPORT_AUTHOR_SIDES.COMMITTEE,
         },
         _count: { _all: true },
@@ -610,6 +672,9 @@ class EthicsController {
       const respondidas = new Map(doComite.map((u) => [u.reportId, u._count._all]));
       // Nunca devolver accessCodeHash nem reporter em listagens anônimas.
       res.json({
+        total: ordenadas.length,
+        page,
+        page_size: ETHICS_LIST_PAGE_SIZE,
         reports: rows.map((r) => ({
           id: r.id,
           protocol: r.protocol,
@@ -639,6 +704,216 @@ class EthicsController {
           /** Zero = o comitê nunca falou nesta denúncia. [B2-3-D] */
           committee_messages: respondidas.get(r.id) ?? 0,
         })),
+      });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
+  /**
+   * Os dados do PDF da lista: tudo o que o filtro traz, sem paginação, e sem
+   * o texto da denúncia nem as mensagens. A exportação fica na trilha, com
+   * quem gerou, os filtros e a quantidade. [C1-6]
+   */
+  async exportList(req: Request, res: Response) {
+    try {
+      const auth = req as AuthRequest;
+      const orgId = actorOrgId(auth);
+      const actorId = actorUserId(auth);
+      const lido = parseEthicsFilters(req.query as Record<string, unknown>);
+      if ("error" in lido) {
+        res.status(400).json(lido.error);
+        return;
+      }
+      const ordenadas = await denunciasFiltradas(orgId, auth.actor!, lido.filters);
+      if (ordenadas.length > ETHICS_EXPORT_MAX_ROWS) {
+        res.status(400).json({
+          message:
+            `O filtro traz ${ordenadas.length} denúncias; o PDF vai até ` +
+            `${ETHICS_EXPORT_MAX_ROWS}. Filtre mais (por período ou unidade) e exporte de novo.`,
+          code: "TOO_MANY",
+          total: ordenadas.length,
+        });
+        return;
+      }
+      const ids = ordenadas.map((r) => r.id);
+      const encontradas = await prisma.ethicsReport.findMany({
+        where: { id: { in: ids }, organizationId: orgId },
+        select: {
+          id: true,
+          protocol: true,
+          createdAt: true,
+          category: true,
+          severity: true,
+          severitySource: true,
+          status: true,
+          reporterAckAt: true,
+          establishment: { select: { name: true } },
+        },
+      });
+      const porId = new Map(encontradas.map((r) => [r.id, r]));
+
+      const [organizacao, quem, unidade] = await Promise.all([
+        prisma.organization.findUnique({ where: { id: orgId }, select: { name: true } }),
+        prisma.user.findUnique({ where: { id: actorId }, select: { name: true } }),
+        lido.filters.establishmentId
+          ? prisma.establishment.findFirst({
+              where: { id: lido.filters.establishmentId, organizationId: orgId },
+              select: { name: true },
+            })
+          : null,
+      ]);
+
+      const contar = (chave: (r: (typeof ordenadas)[number]) => string) => {
+        const m: Record<string, number> = {};
+        for (const r of ordenadas) m[chave(r)] = (m[chave(r)] ?? 0) + 1;
+        return m;
+      };
+
+      const geradoEm = new Date();
+      await writeAudit({
+        organizationId: orgId,
+        actorId,
+        action: "ethics_report.export_list",
+        entityType: "EthicsReport",
+        entityId: orgId,
+        context: { filters: lido.filters, count: ordenadas.length },
+      });
+
+      res.json({
+        organization: { name: organizacao?.name ?? "" },
+        generated_at: geradoEm,
+        generated_by: { name: quem?.name ?? "" },
+        filters: lido.filters,
+        establishment_name: unidade?.name ?? null,
+        total: ordenadas.length,
+        totals: {
+          by_status: contar((r) => r.status),
+          by_severity: contar((r) => r.severity),
+          by_situation: contar((r) => r.situation),
+        },
+        rows: ordenadas.map((r) => {
+          const d = porId.get(r.id)!;
+          return {
+            protocol: d.protocol,
+            createdAt: d.createdAt,
+            establishment: d.establishment?.name ?? null,
+            category: d.category,
+            severity: d.severity,
+            severitySource: d.severitySource,
+            status: d.status,
+            dueAt: r.dueAt,
+            deadline_situation: r.situation,
+            firstActionAt: r.firstActionAt,
+            reporterAckAt: d.reporterAckAt,
+          };
+        }),
+      });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
+  /**
+   * Os dados do PDF de uma denúncia: relato, mensagens, gravidade, prazo,
+   * encerramento e ciência.
+   *
+   * Nenhum identificador de quem denunciou sai daqui, nem na identificada:
+   * ela sai como "Identificada (consultar no portal)". As mensagens saem
+   * com data e lado; quem escreveu pelo comitê sai como "Comitê". O texto
+   * livre (relato, mensagens) vai como foi escrito e pode conter nomes: a
+   * tela avisa antes de exportar. A exportação fica na trilha. [C1-6]
+   */
+  async exportOne(req: Request, res: Response) {
+    try {
+      const auth = req as AuthRequest;
+      const orgId = actorOrgId(auth);
+      const actorId = actorUserId(auth);
+      if (await estouImpedido(req, req.params.id)) {
+        res.status(404).json({ message: "Relato não encontrado." });
+        return;
+      }
+      const report = await prisma.ethicsReport.findFirst({
+        where: { id: req.params.id, organizationId: orgId },
+        select: {
+          id: true,
+          organizationId: true,
+          protocol: true,
+          createdAt: true,
+          category: true,
+          description: true,
+          isAnonymous: true,
+          status: true,
+          severity: true,
+          severitySource: true,
+          dueAt: true,
+          firstActionAt: true,
+          resolutionNote: true,
+          resolvedAt: true,
+          reporterAckAt: true,
+          reporterAckComment: true,
+          organization: { select: { name: true } },
+          establishment: { select: { name: true } },
+          severityChanges: {
+            orderBy: { at: "asc" },
+            select: { fromSeverity: true, toSeverity: true, reason: true, at: true },
+          },
+          messages: {
+            orderBy: { createdAt: "asc" },
+            select: { side: true, body: true, createdAt: true },
+          },
+          cited: {
+            orderBy: { markedAt: "asc" },
+            select: { user: { select: { name: true } } },
+          },
+        },
+      });
+      if (!report) {
+        res.status(404).json({ message: "Relato não encontrado." });
+        return;
+      }
+      const quem = await prisma.user.findUnique({ where: { id: actorId }, select: { name: true } });
+
+      await writeAudit({
+        organizationId: orgId,
+        actorId,
+        action: "ethics_report.export",
+        entityType: "EthicsReport",
+        entityId: report.id,
+        context: { protocol: report.protocol },
+      });
+
+      const prazo = ethicsDeadline(report);
+      res.json({
+        organization: { name: report.organization.name },
+        generated_at: new Date(),
+        generated_by: { name: quem?.name ?? "" },
+        report: {
+          protocol: report.protocol,
+          createdAt: report.createdAt,
+          establishment: report.establishment?.name ?? null,
+          category: report.category,
+          severity: report.severity,
+          severitySource: report.severitySource,
+          severityChanges: report.severityChanges.map((c) => ({ ...c, by: "Comitê" })),
+          dueAt: prazo.dueAt,
+          deadline_situation: prazo.situation,
+          firstActionAt: report.firstActionAt,
+          status: report.status,
+          reporter: report.isAnonymous ? "Anônima" : "Identificada (consultar no portal)",
+          description: report.description,
+          messages: report.messages.map((m) => ({
+            side: m.side,
+            author: m.side === REPORT_AUTHOR_SIDES.COMMITTEE ? "Comitê" : "Denunciante",
+            body: m.body,
+            createdAt: m.createdAt,
+          })),
+          cited: report.cited.map((c) => c.user.name),
+          resolutionNote: report.resolutionNote,
+          resolvedAt: report.resolvedAt,
+          reporterAckAt: report.reporterAckAt,
+          reporterAckComment: report.reporterAckComment,
+        },
       });
     } catch (err) {
       fail(res, err);

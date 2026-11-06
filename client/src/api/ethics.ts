@@ -236,3 +236,124 @@ export function fetchEthicsPeople() {
     people: Array<{ id: string; name: string; active: boolean }>;
   }>("/api/ethics-reports/pessoas").then((d) => d.people);
 }
+
+/** Uma linha da lista do comitê. [S5-L] [C1-1] [C1-2] [C1-5] */
+export type EthicsListRow = {
+  id: string;
+  protocol: string;
+  category: string;
+  /** O começo do relato, para a lista não ser só protocolos. [B2-3-D] */
+  description: string;
+  status: string;
+  isAnonymous: boolean;
+  createdAt: string;
+  establishment: { name: string } | null;
+  _count: { messages: number };
+  unread_from_reporter: number;
+  /** Zero = o comitê nunca falou nesta denúncia. [B2-3-D] */
+  committee_messages: number;
+  /**
+   * Quem relatou disse que alguém do comitê está envolvido; enquanto
+   * `triagedAt` for nulo, o caso só chega a quem tria. [B3-3-H]
+   */
+  committeeInvolved: boolean;
+  triagedAt: string | null;
+  severity: "HIGH" | "NORMAL";
+  severitySource: "AUTO" | "COMMITTEE";
+  dueAt: string;
+  firstActionAt: string | null;
+  deadline_situation: string;
+  reporterAckAt: string | null;
+};
+
+/**
+ * A lista do comitê, filtrada e paginada no servidor. O filtro vem da query
+ * string da página, como está — o mesmo que o PDF usa. [C1-6]
+ */
+export function fetchEthicsList(query: string) {
+  return request<{
+    reports: EthicsListRow[];
+    total: number;
+    page: number;
+    page_size: number;
+  }>(`/api/ethics-reports${query ? `?${query}` : ""}`);
+}
+
+/** Os filtros como o servidor os entendeu. [C1-6] */
+export type EthicsFilters = {
+  establishmentId?: string;
+  statuses?: string[];
+  severity?: string;
+  category?: string;
+  from?: string;
+  to?: string;
+  situation?: string;
+  ack?: "com" | "sem";
+  protocol?: string;
+};
+
+/** Os dados do PDF da lista. Sem relato e sem mensagens. [C1-6] */
+export function fetchEthicsListExport(query: string) {
+  return request<{
+    organization: { name: string };
+    generated_at: string;
+    generated_by: { name: string };
+    filters: EthicsFilters;
+    establishment_name: string | null;
+    total: number;
+    totals: {
+      by_status: Record<string, number>;
+      by_severity: Record<string, number>;
+      by_situation: Record<string, number>;
+    };
+    rows: Array<{
+      protocol: string;
+      createdAt: string;
+      establishment: string | null;
+      category: string;
+      severity: string;
+      severitySource: string;
+      status: string;
+      dueAt: string;
+      deadline_situation: string;
+      firstActionAt: string | null;
+      reporterAckAt: string | null;
+    }>;
+  }>(`/api/ethics-reports/export${query ? `?${query}` : ""}`);
+}
+
+/** Os dados do PDF de uma denúncia. Nenhum identificador de quem relatou. [C1-6] */
+export function fetchEthicsReportExport(id: string) {
+  return request<{
+    organization: { name: string };
+    generated_at: string;
+    generated_by: { name: string };
+    report: {
+      protocol: string;
+      createdAt: string;
+      establishment: string | null;
+      category: string;
+      severity: string;
+      severitySource: string;
+      severityChanges: Array<{
+        fromSeverity: string;
+        toSeverity: string;
+        reason: string;
+        at: string;
+        by: string;
+      }>;
+      dueAt: string;
+      deadline_situation: string;
+      firstActionAt: string | null;
+      status: string;
+      reporter: string;
+      description: string;
+      messages: Array<{ side: string; author: string; body: string; createdAt: string }>;
+      cited: string[];
+      resolutionNote: string | null;
+      resolvedAt: string | null;
+      reporterAckAt: string | null;
+      reporterAckComment: string | null;
+    };
+  }>(`/api/ethics-reports/${encodeURIComponent(id)}/export`);
+}

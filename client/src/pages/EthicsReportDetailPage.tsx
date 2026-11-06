@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   fetchEthicsPeople,
   fetchEthicsReport,
@@ -40,6 +40,10 @@ function statusTone(status: string): "warning" | "info" | "success" | "neutral" 
 /** Comitê abre o relato, conversa com quem denunciou e encerra. [S5-L] */
 export function EthicsReportDetailPage() {
   const { id = "" } = useParams();
+  const navigate = useNavigate();
+  /* Volta para a lista com o filtro de onde a pessoa veio. [C1-6] */
+  const voltar =
+    (useLocation().state as { voltar?: string } | null)?.voltar ?? "/comite";
   const { canWrite } = useModuleAccess("comite");
   /*
     A triagem é de quem é dono da conta, ou do master: é a eles que vai a
@@ -173,7 +177,7 @@ export function EthicsReportDetailPage() {
         <p className="page-error" role="alert">
           {error}
         </p>
-        <Link to="/comite">Voltar aos relatos</Link>
+        <Link to={voltar}>Voltar aos relatos</Link>
       </div>
     );
   }
@@ -184,11 +188,27 @@ export function EthicsReportDetailPage() {
   return (
     <div>
       <p style={{ margin: "0 0 0.5rem" }}>
-        <Link to="/comite" className="muted">
+        <Link to={voltar} className="muted">
           ← Relatos do comitê
         </Link>
       </p>
       <PageHeader
+        actions={
+          /* O texto livre vai como foi escrito: avisar antes. [C1-6] */
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => {
+              const ok = window.confirm(
+                "O PDF traz o relato e as mensagens como foram escritos, e texto livre pode conter nomes e outros dados pessoais. " +
+                  "O portal não tira esses dados do texto.\n\nA exportação fica registrada na trilha de auditoria. Continuar?",
+              );
+              if (ok) navigate(`/comite/${encodeURIComponent(id)}/imprimir`);
+            }}
+          >
+            Exportar PDF
+          </Button>
+        }
         title={`Relato ${report.protocol}`}
         description={`${REPORT_CATEGORY_LABEL[report.category] ?? report.category} · recebido em ${formatDay(report.createdAt)}${
           report.establishment ? ` · ${report.establishment.name}` : ""

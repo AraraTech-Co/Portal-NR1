@@ -56,8 +56,16 @@ router.get("/api/ethics-reports", ...committee, (req, res) =>
 router.get("/api/ethics-reports/pessoas", ...committee, (req, res) =>
   ethics.listPeople(req, res),
 );
+/** Os dados do PDF da lista, com o mesmo filtro da tela. [C1-6] */
+router.get("/api/ethics-reports/export", ...committee, (req, res) =>
+  ethics.exportList(req, res),
+);
 router.get("/api/ethics-reports/:id", ...committee, (req, res) =>
   ethics.get(req, res),
+);
+/** Os dados do PDF de uma denúncia. [C1-6] */
+router.get("/api/ethics-reports/:id/export", ...committee, (req, res) =>
+  ethics.exportOne(req, res),
 );
 router.patch("/api/ethics-reports/:id", ...committeeWrite, (req, res) =>
   ethics.updateStatus(req, res),

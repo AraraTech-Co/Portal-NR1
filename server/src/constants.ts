@@ -332,6 +332,12 @@ export const ETHICS_ACCESS_CODE_BCRYPT_ROUNDS = 10;
 /** Tamanho máximo do comentário da ciência do encerramento. [C1-5] */
 export const ETHICS_ACK_COMMENT_MAX = 2000;
 
+/** Denúncias por página na lista do comitê. [C1-6] */
+export const ETHICS_LIST_PAGE_SIZE = 50;
+
+/** Teto de linhas do PDF da lista; acima disso, pede-se filtrar mais. [C1-6] */
+export const ETHICS_EXPORT_MAX_ROWS = 2000;
+
 // ─── RH / perfil do colaborador ──────────────────────────────────────────────
 
 /**

@@ -21,6 +21,8 @@ import { EmployeesPage } from "@/pages/EmployeesPage";
 import { EthicsPage } from "@/pages/EthicsPage";
 import { EthicsReportDetailPage } from "@/pages/EthicsReportDetailPage";
 import { EthicsReportPage } from "@/pages/EthicsReportPage";
+import { EthicsListPrintPage } from "@/pages/EthicsListPrintPage";
+import { EthicsReportPrintPage } from "@/pages/EthicsReportPrintPage";
 import { GamificationPage } from "@/pages/GamificationPage";
 import { HealthPage } from "@/pages/HealthPage";
 import { HomePage } from "@/pages/HomePage";
@@ -145,7 +147,9 @@ function AppRoutes() {
               <Route path="participacao" element={<ParticipationsPage />} />
               <Route path="denuncia" element={<EthicsReportPage />} />
               <Route path="comite" element={<EthicsPage />} />
+              <Route path="comite/relatorio" element={<EthicsListPrintPage />} />
               <Route path="comite/:id" element={<EthicsReportDetailPage />} />
+              <Route path="comite/:id/imprimir" element={<EthicsReportPrintPage />} />
               <Route path="clima" element={<ClimatePage />} />
               <Route path="ideias" element={<IdeasPage />} />
               <Route path="mural" element={<AnnouncementsPage />} />
