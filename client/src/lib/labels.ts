@@ -113,6 +113,24 @@ export const REPORT_SEVERITY_LABEL: Record<string, string> = {
   NORMAL: "Normal",
 };
 
+/** Situação do prazo da primeira providência — uma só por denúncia. [C1-2] */
+export const DEADLINE_SITUATION_LABEL: Record<string, string> = {
+  OVERDUE: "Atrasada",
+  DUE_TODAY: "Vence hoje",
+  ON_TIME: "No prazo",
+  MET_ON_TIME: "Atendida no prazo",
+  MET_LATE: "Atendida com atraso",
+  NOT_ASSESSED: "Não apurada (legado)",
+};
+
+export function deadlineTone(situation: string): "danger" | "warning" | "success" | "neutral" | "info" {
+  if (situation === "OVERDUE" || situation === "MET_LATE") return "danger";
+  if (situation === "DUE_TODAY") return "warning";
+  if (situation === "MET_ON_TIME") return "success";
+  if (situation === "ON_TIME") return "info";
+  return "neutral";
+}
+
 export const ANNOUNCEMENT_KIND_LABEL: Record<string, string> = {
   NOTICE: "Aviso",
   CAMPAIGN: "Campanha",

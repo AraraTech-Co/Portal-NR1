@@ -19,6 +19,8 @@ import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { canReadModule } from "../helper/module-access";
 import { effectivePermission } from "../helper/auth";
 import { writeAudit } from "../helper/audit";
+import { computeDueAt } from "../helper/business-days";
+import { ethicsDeadline, holidayCalendarFor } from "../helper/ethics-deadline";
 import {
   ETHICS_ACCESS_CODE_BCRYPT_ROUNDS,
   ETHICS_ACCESS_CODE_LENGTH,
@@ -138,6 +140,35 @@ async function estouImpedido(req: Request, reportId: string): Promise<boolean> {
   return reportIsHidden(actorOrgId(auth), auth.actor!, reportId);
 }
 
+/**
+ * Grava quando a denúncia teve a primeira providência — só a primeira vez.
+ * O filtro em `firstActionAt: null` faz a gravação valer uma vez só, mesmo
+ * com duas pessoas do comitê agindo ao mesmo tempo. [C1-2]
+ */
+async function marcarPrimeiraProvidencia(reportId: string) {
+  await prisma.ethicsReport.updateMany({
+    where: { id: reportId, firstActionAt: null },
+    data: { firstActionAt: new Date() },
+  });
+}
+
+/** Vencimento, primeira providência e a situação do prazo — uma só. [C1-2] */
+function prazoNaResposta(r: {
+  organizationId: string;
+  status: string;
+  severity: "HIGH" | "NORMAL";
+  createdAt: Date;
+  dueAt: Date | null;
+  firstActionAt: Date | null;
+}) {
+  const prazo = ethicsDeadline(r);
+  return {
+    dueAt: prazo.dueAt,
+    firstActionAt: r.firstActionAt,
+    deadline_situation: prazo.situation,
+  };
+}
+
 class EthicsController {
   /**
    * Abre relato. Anônimo por padrão: não grava reporterUserId.
@@ -224,6 +255,12 @@ class EthicsController {
         ETHICS_ACCESS_CODE_BCRYPT_ROUNDS,
       );
 
+      /*
+        O prazo da primeira providência conta do recebimento: o instante é
+        o mesmo que fica gravado como `createdAt`. [C1-2]
+      */
+      const recebidaEm = new Date();
+      const severity = severityForCategory(category);
       const report = await new EthicsReport().create.new({
         organizationId: orgId,
         protocol,
@@ -236,9 +273,10 @@ class EthicsController {
         establishmentId: establishment_id ?? null,
         committeeInvolved: committee_involved === true,
         /* Quem define a gravidade é o servidor, pela categoria. [C1-1] */
-        /* Quem define a gravidade é o servidor, pela categoria. [C1-1] */
-        severity: severityForCategory(category),
+        severity,
         severitySource: "AUTO",
+        createdAt: recebidaEm,
+        dueAt: computeDueAt(recebidaEm, severity, holidayCalendarFor(orgId)),
       });
 
       // Auditoria sem revelar identidade do denunciante anônimo.
@@ -474,6 +512,7 @@ class EthicsController {
           /** Alta ou Normal; `COMMITTEE` = ajustada pelo comitê. [C1-1] */
           severity: r.severity,
           severitySource: r.severitySource,
+          ...prazoNaResposta(r),
           createdAt: r.createdAt,
           updatedAt: r.updatedAt,
           _count: r._count,
@@ -920,6 +959,7 @@ class EthicsController {
       res.json({
         report: {
           ...safe,
+          ...prazoNaResposta(report),
           reporterUserId: report.isAnonymous ? null : report.reporterUserId,
           reporter: undefined,
         },
@@ -1008,6 +1048,11 @@ class EthicsController {
         },
       );
 
+      /* Sair de "Recebido" é a primeira providência do comitê. [C1-2] */
+      if (status !== REPORT_STATUSES.RECEIVED) {
+        await marcarPrimeiraProvidencia(current.id);
+      }
+
       await writeAudit({
         organizationId: orgId,
         actorId: userId,
@@ -1067,7 +1112,7 @@ class EthicsController {
 
       const report = await prisma.ethicsReport.findFirst({
         where: { id: req.params.id, organizationId: orgId },
-        select: { id: true, severity: true },
+        select: { id: true, severity: true, createdAt: true },
       });
       if (!report) {
         res.status(404).json({ message: "Relato não encontrado." });
@@ -1084,7 +1129,16 @@ class EthicsController {
       const [, change] = await prisma.$transaction([
         prisma.ethicsReport.update({
           where: { id: report.id },
-          data: { severity, severitySource: "COMMITTEE" },
+          data: {
+            severity,
+            severitySource: "COMMITTEE",
+            /*
+              O prazo continua contando do recebimento, com o nível novo: se
+              a Alta deixar o vencimento no passado, a denúncia aparece
+              atrasada. [C1-2]
+            */
+            dueAt: computeDueAt(report.createdAt, severity, holidayCalendarFor(orgId)),
+          },
         }),
         prisma.ethicsReportSeverityChange.create({
           data: {
@@ -1170,6 +1224,8 @@ class EthicsController {
           { status: REPORT_STATUSES.IN_ANALYSIS },
         );
       }
+      /* A primeira mensagem do comitê é providência. [C1-2] */
+      await marcarPrimeiraProvidencia(report.id);
 
       /*
         A pergunta do comitê ficava esperando a pessoa voltar sozinha ao

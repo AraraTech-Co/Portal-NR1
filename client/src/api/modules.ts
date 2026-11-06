@@ -305,6 +305,10 @@ export const fetchEthicsReports = () =>
       /** Alta ou Normal; `COMMITTEE` = ajustada pelo comitê. [C1-1] */
       severity: "HIGH" | "NORMAL";
       severitySource: "AUTO" | "COMMITTEE";
+      /** Prazo da primeira providência e a situação dele. [C1-2] */
+      dueAt: string;
+      firstActionAt: string | null;
+      deadline_situation: string;
     }>;
   }>("/api/ethics-reports").then((d) => d.reports);
 

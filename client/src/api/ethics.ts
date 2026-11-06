@@ -111,6 +111,10 @@ export type EthicsReportDetail = {
   severity: "HIGH" | "NORMAL";
   severitySource: "AUTO" | "COMMITTEE";
   severityChanges: SeverityChange[];
+  /** Prazo da primeira providência e a situação dele. [C1-2] */
+  dueAt: string;
+  firstActionAt: string | null;
+  deadline_situation: string;
   messages: EthicsMessage[];
   /** Quem a denúncia envolve — e por isso está fora do caso. [CB-27] */
   cited: Array<{

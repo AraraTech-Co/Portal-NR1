@@ -16,6 +16,8 @@ import { EthicsThread } from "@/components/EthicsThread";
 import { LoadingState } from "@/components/LoadingState";
 import { PageHeader } from "@/components/PageHeader";
 import {
+  DEADLINE_SITUATION_LABEL,
+  deadlineTone,
   formatDay,
   formatInstant,
   REPORT_CATEGORY_LABEL,
@@ -246,6 +248,27 @@ export function EthicsReportDetailPage() {
           {formatDay(report.triagedAt)}.
         </p>
       )}
+
+      {/* Prazo da primeira providência: conta do recebimento, em dias
+          úteis; um ajuste de gravidade refaz a conta com o nível novo. [C1-2] */}
+      <section className="form-section">
+        <h2>Prazo da primeira providência</h2>
+        <p style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center", margin: 0 }}>
+          <Chip tone={deadlineTone(report.deadline_situation)}>
+            {DEADLINE_SITUATION_LABEL[report.deadline_situation] ?? report.deadline_situation}
+          </Chip>
+          <span className="muted">
+            Vence {formatInstant(report.dueAt)} ({report.severity === "HIGH" ? "1 dia útil" : "3 dias úteis"} a partir do recebimento)
+          </span>
+        </p>
+        <p className="muted" style={{ maxWidth: "70ch" }}>
+          {report.firstActionAt
+            ? `Primeira providência em ${formatInstant(report.firstActionAt)}.`
+            : report.deadline_situation === "NOT_ASSESSED"
+              ? "Denúncia anterior ao controle de prazo: não há registro de quando saiu de “Recebido”."
+              : "Ainda sem providência: responder ou mudar a situação conta como primeira providência."}
+        </p>
+      </section>
 
       {/* A gravidade sai da categoria; o comitê ajusta com justificativa,
           e o ajuste fica à vista com autor e data. [C1-1] */}

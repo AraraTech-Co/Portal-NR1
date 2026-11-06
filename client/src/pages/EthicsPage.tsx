@@ -4,7 +4,10 @@ import { fetchEthicsReports } from "@/api/modules";
 import { ListShell } from "@/components/ListShell";
 import { Chip } from "@/components/Chip";
 import {
+  DEADLINE_SITUATION_LABEL,
+  deadlineTone,
   formatDay,
+  formatInstant,
   REPORT_CATEGORY_LABEL,
   REPORT_SEVERITY_LABEL,
   REPORT_STATUS_LABEL,
@@ -42,6 +45,7 @@ export function EthicsPage() {
               <th>Categoria</th>
               <th>Gravidade</th>
               <th>Situação</th>
+              <th>Primeira providência</th>
               <th>Quem</th>
               <th>Estabelecimento</th>
               <th>Mensagens</th>
@@ -95,6 +99,14 @@ export function EthicsPage() {
                         Esperando triagem
                       </Chip>
                     )}
+                  </td>
+                  {/* Prazo da primeira providência: 1 dia útil (Alta) ou
+                      3 (Normal), contado do recebimento. [C1-2] */}
+                  <td>
+                    <Chip tone={deadlineTone(r.deadline_situation)}>
+                      {DEADLINE_SITUATION_LABEL[r.deadline_situation] ?? r.deadline_situation}
+                    </Chip>
+                    <div className="muted ethics-excerpt">vence {formatInstant(r.dueAt)}</div>
                   </td>
                   <td>{r.isAnonymous ? "Anônimo" : "Identificado"}</td>
                   <td>{r.establishment?.name ?? "—"}</td>
