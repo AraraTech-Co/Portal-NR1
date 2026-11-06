@@ -33,6 +33,16 @@ model User {
   emailVerifiedAt     DateTime?
   /// Senha definida pelo owner/admin: obrigatório trocar no próximo acesso.
   mustChangePassword  Boolean   @default(false)
+  /// Quando a conta foi ativada: a pessoa criou a própria senha no primeiro
+  /// acesso, ou uma senha foi definida por fluxo autorizado (troca, reset,
+  /// convite). Nulo = nunca ativada, ou conta antiga ainda não classificada.
+  /// [C1-7]
+  activatedAt         DateTime?
+  /// Pode ativar sozinha pela conferência de dados. Contas antigas nascem
+  /// com `false` e só mudam por classificação de Master, Dono ou RH. [C1-7]
+  firstAccessEligible Boolean   @default(false)
+  /// Até quando o primeiro acesso por conferência de dados vale. [C1-7]
+  firstAccessUntil    DateTime?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
@@ -69,6 +79,7 @@ model User {
   ethicsCited       EthicsReportCited[]   @relation("EthicsCited")
   ethicsCitedMarked EthicsReportCited[]   @relation("EthicsCitedMarker")
   ethicsSeverityChanges EthicsReportSeverityChange[] @relation("EthicsSeverityChanger")
+  activationTokens  ActivationToken[]
   reportMessages    EthicsReportMessage[] @relation("ReportMessageAuthor")
   employeeProfiles  EmployeeProfile[]
   ideasAuthored     Idea[]                @relation("IdeaAuthor")
@@ -2563,4 +2574,60 @@ model OnboardingProgress {
   user User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([stepId, userId])
+}
+
+// ============================================================
+// PRIMEIRO ACESSO E LIMITE DE TENTATIVAS [C1-7]
+// ============================================================
+
+/// Ficha de ativação emitida quando matrícula, CPF e nascimento conferem.
+/// Opaca (só o hash fica aqui), de uso único, vale ~10 minutos.
+model ActivationToken {
+  id             String    @id @default(uuid())
+  userId         String
+  /// A empresa da ficha que conferiu, para a trilha.
+  organizationId String
+  tokenHash      String    @unique
+  expiresAt      DateTime
+  usedAt         DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// Contagem de erros por chave (conta, identificador digitado ou IP) e o
+/// bloqueio temporário que ela dispara. A chave nunca traz o identificador
+/// em claro: é um pseudônimo (HMAC).
+model AuthLockout {
+  key         String    @id
+  failures    Int       @default(0)
+  windowStart DateTime  @default(now())
+  lockedUntil DateTime?
+  updatedAt   DateTime  @updatedAt
+}
+
+enum AuthAttemptKind {
+  LOGIN
+  FIRST_ACCESS
+}
+
+/// Cada tentativa de login e de primeiro acesso, para o painel e a
+/// auditoria. Sem CPF, nascimento, senha ou identificador em claro. Apagada
+/// depois de 90 dias.
+model AuthAttempt {
+  id      String          @id @default(uuid())
+  kind    AuthAttemptKind
+  /// Pseudônimo (HMAC) do que foi digitado.
+  subject String
+  /// A conta, quando o que foi digitado aponta para uma só.
+  userId  String?
+  ip      String?
+  success Boolean
+  at      DateTime        @default(now())
+
+  @@index([at])
+  @@index([userId, at])
 }

@@ -678,6 +678,8 @@ class AccountInviteController {
             name: request.name,
             passwordHash: request.passwordHash,
             mustChangePassword: false,
+            /* A pessoa escolheu a própria senha ao pedir entrada. [C1-7] */
+            activatedAt: new Date(),
           },
         });
 

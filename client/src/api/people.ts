@@ -47,7 +47,8 @@ export type ImportResult = {
   filled?: string[];
   message?: string;
   login?: string;
-  temporary_password?: string;
+  /** Conta nova aguardando o primeiro acesso: nenhuma senha sai daqui. [C1-7] */
+  awaiting_first_access?: boolean;
 };
 
 export type ImportReport = {

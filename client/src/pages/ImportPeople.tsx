@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import {
   importPeople,
   WORKER_BOND_LABEL,
@@ -10,7 +9,6 @@ import { fetchJobRoles, type JobRole } from "@/api/operation";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
 import { ORG_ROLE_LABEL } from "@/lib/labels";
-import { useAuth } from "@/auth/AuthContext";
 import "@/components/data-table.css";
 import "@/components/form.css";
 import "./import-people.css";
@@ -64,27 +62,11 @@ function baixarModelo() {
 }
 
 /**
- * Só as fichas vão ao papel: a marca no body diz à folha de estilo o que
- * esconder, e sai no fim da impressão. [B2-1-E]
- */
-function imprimirFichas() {
-  document.body.classList.add("imprimindo-fichas");
-  window.addEventListener(
-    "afterprint",
-    () => document.body.classList.remove("imprimindo-fichas"),
-    { once: true },
-  );
-  window.print();
-}
-
-/**
- * Cadastro em massa: cola a planilha, confere a prévia, cadastra. As senhas
- * de primeiro acesso aparecem uma vez — o portal não as guarda em texto. [S1-A]
+ * Cadastro em massa: cola a planilha, confere a prévia, cadastra. As contas
+ * novas aguardam o primeiro acesso por conferência de dados — nenhuma senha
+ * sai daqui. [S1-A] [C1-7]
  */
 export function ImportPeople() {
-  /* A ficha não dizia de que empresa é nem onde entrar. [B2-1-E] */
-  const { user } = useAuth();
-  const empresa = user?.organization.name ?? null;
   const [texto, setTexto] = useState("");
   /*
     A colagem sai: o cadastro passa a ser pelo envio do arquivo da planilha
@@ -266,55 +248,6 @@ export function ImportPeople() {
         )}
       </div>
 
-      {/*
-        As fichas: existem para o papel, e só aparecem na impressão. [B2-1-E]
-
-        Vão para fora da tela, direto no `body`: a impressão escondia o resto
-        com `visibility: hidden`, e o espaço dele continuava contando — duas
-        fichas saíam com 12 páginas, 11 em branco. Como filhas do `body`, o
-        resto sai do fluxo de verdade. [B3-1-D]
-      */}
-      {relatorio &&
-        createPortal(
-          <div className="import-slips">
-            {relatorio.results
-              .filter((r) => r.temporary_password)
-              .map((r) => (
-                <section key={`ficha-${r.line}`} className="import-slip">
-                  <h2>Primeiro acesso ao Portal NR-1</h2>
-                  {/* Quem recebe a ficha não sabia onde entrar. [B2-1-E] */}
-                  <p className="import-slip-onde">
-                    {empresa ?? "Portal NR-1"}
-                    <br />
-                    {window.location.origin}
-                  </p>
-                  <dl>
-                    <div>
-                      <dt>Nome</dt>
-                      <dd>{r.name}</dd>
-                    </div>
-                    <div>
-                      <dt>Entrar com</dt>
-                      <dd>{r.login}</dd>
-                    </div>
-                    <div>
-                      <dt>Senha provisória</dt>
-                      <dd>
-                        <code>{r.temporary_password}</code>
-                      </dd>
-                    </div>
-                  </dl>
-                  <p>
-                    Na primeira entrada o portal pede para trocar a senha.
-                    Depois disso, esta folha não serve para mais nada — rasgue
-                    e jogue fora.
-                  </p>
-                </section>
-              ))}
-          </div>,
-          document.body,
-        )}
-
       {mostrado && (
         <div className="import-report">
           <p className="muted">
@@ -322,35 +255,16 @@ export function ImportPeople() {
               ? `${relatorio.created} cadastrada(s), ${relatorio.completed} ficha(s) completada(s), ${relatorio.skipped} sem nada a mudar, ${relatorio.errors} com erro.`
               : `Prévia: ${previa!.created} entrariam, ${previa!.completed} teriam a ficha completada, ${previa!.skipped} ficariam como estão, ${previa!.errors} com erro. Nada foi gravado ainda.`}
           </p>
+          {/* Nenhuma senha sai da planilha: a pessoa cria a própria no
+              primeiro acesso, conferindo matrícula, CPF e nascimento. [C1-7] */}
           {relatorio && relatorio.created > 0 && (
-            <>
-              <p className="import-warning">
-                As senhas abaixo aparecem <strong>uma única vez</strong>. Entregue
-                a cada pessoa — na primeira entrada o portal obriga a trocar.
-              </p>
-              {/*
-                Copiar senha por senha para entregar a 30 pessoas era o
-                gargalo de um cadastro que leva um minuto. Sai uma ficha por
-                pessoa, para recortar e entregar. [B2-1-E]
-              */}
-              <div className="form-actions">
-                <Button type="button" variant="secondary" onClick={imprimirFichas}>
-                  Imprimir as fichas de primeiro acesso
-                </Button>
-              </div>
-              {/*
-                As senhas provisórias aparecem uma vez só: guardá-las para
-                reimprimir depois seria guardar senha em claro. Quem fechar a
-                tela antes de imprimir tem um caminho, e a tela passa a
-                dizê-lo. [B2-1-E]
-              */}
-              <p className="muted">
-                Imprima agora: as senhas provisórias aparecem uma vez e não
-                ficam guardadas. Se perder a folha, use{" "}
-                <strong>Redefinir senha</strong> em Pessoas e acessos — sai uma
-                senha provisória nova para entregar.
-              </p>
-            </>
+            <p className="import-warning">
+              As contas novas aguardam o primeiro acesso: cada pessoa abre o
+              portal, toca em <strong>Primeiro acesso</strong> e informa
+              matrícula, CPF e data de nascimento para criar a própria senha.
+              Nenhuma senha foi gerada. O prazo é de 30 dias; quem ficar sem
+              matrícula, CPF ou nascimento na ficha não consegue entrar sozinho.
+            </p>
           )}
           <div className="data-table-wrap">
             <table className="data-table">
@@ -360,7 +274,6 @@ export function ImportPeople() {
                   <th>Nome</th>
                   <th>Situação</th>
                   <th>Login</th>
-                  {relatorio && <th>Senha de primeiro acesso</th>}
                 </tr>
               </thead>
               <tbody>
@@ -385,15 +298,6 @@ export function ImportPeople() {
                       {r.message && <div className="muted">{r.message}</div>}
                     </td>
                     <td>{r.login ?? <span className="muted">—</span>}</td>
-                    {relatorio && (
-                      <td>
-                        {r.temporary_password ? (
-                          <code className="import-password">{r.temporary_password}</code>
-                        ) : (
-                          <span className="muted">—</span>
-                        )}
-                      </td>
-                    )}
                   </tr>
                 ))}
               </tbody>

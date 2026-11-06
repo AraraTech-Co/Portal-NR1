@@ -21,6 +21,7 @@ import { EmployeesPage } from "@/pages/EmployeesPage";
 import { EthicsPage } from "@/pages/EthicsPage";
 import { EthicsReportDetailPage } from "@/pages/EthicsReportDetailPage";
 import { EthicsReportPage } from "@/pages/EthicsReportPage";
+import { FirstAccessPage } from "@/pages/FirstAccessPage";
 import { AnnouncementPosterPage } from "@/pages/AnnouncementPosterPage";
 import { EthicsListPrintPage } from "@/pages/EthicsListPrintPage";
 import { EthicsReportPrintPage } from "@/pages/EthicsReportPrintPage";
@@ -97,6 +98,8 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      {/* Sem sessão: é como quem nunca entrou cria a senha. [C1-7] */}
+      <Route path="/primeiro-acesso" element={<FirstAccessPage />} />
       <Route path="/convite/:token" element={<ConvitePage />} />
       {/* O canal de denúncia fora do portal, sem login: é o que torna o
           anonimato verificável por quem denuncia. [S4-L] */}

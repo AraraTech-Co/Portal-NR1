@@ -1,3 +1,4 @@
+import bcrypt from "bcryptjs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import request from "supertest";
 import type { Express } from "express";
@@ -90,10 +91,18 @@ describe("o trabalhador entra pelo que ele sabe de cor [B2-1-F]", () => {
       },
     ]);
     expect(criar.status, JSON.stringify(criar.body)).toBe(201);
-    const linha = criar.body.results[0] as { status: string; login: string; temporary_password: string };
+    const linha = criar.body.results[0] as { status: string; login: string };
     expect(linha.status).toBe("created");
 
-    const senha = linha.temporary_password;
+    /*
+      A planilha não gera mais senha [C1-7]: a senha aqui é posta direto no
+      banco, como se a pessoa já tivesse feito o primeiro acesso.
+    */
+    const senha = ["senha", "do", "teste", SUFIXO].join("-");
+    await prisma.user.update({
+      where: { login: linha.login },
+      data: { passwordHash: await bcrypt.hash(senha, 4), activatedAt: new Date() },
+    });
 
     // Pelo login gerado, como sempre funcionou.
     expect((await entrar(linha.login, senha)).status).toBe(200);

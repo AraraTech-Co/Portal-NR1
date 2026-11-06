@@ -28,3 +28,21 @@ Test.prototype.serverAddress = function (app: unknown, path: string) {
   const emTodos = typeof escuta === "object" && escuta?.address === "::";
   return emTodos ? url.replace(/^(https?:\/\/)127\.0\.0\.1:/, "$1[::1]:") : url;
 };
+
+/*
+  Bloqueios de login são estado do banco [C1-7]: um arquivo que erra a
+  senha de propósito não pode travar a entrada dos seguintes, nem uma rodada
+  a da próxima. Cada arquivo começa sem bloqueio. Sem banco (testes de
+  unidade), não há o que limpar.
+*/
+import { beforeAll } from "vitest";
+
+beforeAll(async () => {
+  if (!process.env.DATABASE_URL) return;
+  try {
+    const { default: prisma } = await import("../src/model/prisma");
+    await prisma.authLockout.deleteMany({});
+  } catch {
+    /* banco fora do ar: os testes que precisam dele dizem isso sozinhos */
+  }
+});

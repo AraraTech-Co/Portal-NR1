@@ -16,6 +16,22 @@ import {
 import { effectivePermission } from "../helper/auth";
 import { modulesForRole } from "../helper/module-access";
 import type { AuthRequest } from "../types/auth";
+import { AuthAttemptKind } from "@prisma/client";
+import {
+  ACCOUNT_MAX_FAILURES,
+  IP_MAX_FAILURES,
+  IP_WINDOW_MS,
+  accountKey,
+  clearFailures,
+  clientIp,
+  identifierKey,
+  ipKey,
+  lockedUntil,
+  minutesLeft,
+  pseudonym,
+  recordAttempt,
+  registerFailure,
+} from "../helper/auth-attempts";
 
 /** Senhas provisórias da carga inicial — forçam troca no próximo acesso. */
 const PROVISIONAL_PASSWORDS = new Set(["123456"]);
@@ -67,6 +83,18 @@ function sessionUserFromAccess(
   };
 }
 
+/** "Bloqueado, e por quanto tempo" — a mesma resposta para qualquer conta. [C1-7] */
+function bloqueioDoLogin(ate: Date) {
+  const minutos = minutesLeft(ate);
+  return {
+    message: `Muitas tentativas erradas. O acesso está bloqueado por ${minutos} ${
+      minutos === 1 ? "minuto" : "minutos"
+    }. Tente de novo depois ou procure o RH.`,
+    code: "LOGIN_LOCKED",
+    retry_after_seconds: Math.ceil((ate.getTime() - Date.now()) / 1000),
+  };
+}
+
 class AuthController {
   /**
    * POST /api/auth — login.
@@ -92,6 +120,31 @@ class AuthController {
       a mesma para nenhum, um ou vários candidatos. [B2-1-F]
     */
     const candidatos = await users.custom.read.candidatesForLogin(login);
+
+    /*
+      Limite de tentativas. Quando o que foi digitado aponta para UMA conta,
+      a contagem é da conta — login, e-mail, CPF e matrícula dela contam
+      juntos. Quando não aponta para nenhuma ou aponta para várias (matrícula
+      repetida entre empresas), é do que foi digitado, para não travar a
+      conta de outra empresa nem revelar quem existe. [C1-7]
+    */
+    const ip = clientIp(req);
+    const umaSo = candidatos.length === 1 ? candidatos[0] : null;
+    const chaveDaConta = umaSo ? accountKey(umaSo.id) : identifierKey(login);
+    const chaveDoIp = ipKey(ip);
+    const tentativa = {
+      kind: AuthAttemptKind.LOGIN,
+      subject: pseudonym(login),
+      userId: umaSo?.id ?? null,
+      ip,
+    };
+    const bloqueada = await lockedUntil([chaveDaConta, chaveDoIp]);
+    if (bloqueada) {
+      await recordAttempt({ ...tentativa, success: false });
+      res.status(429).json(bloqueioDoLogin(bloqueada));
+      return;
+    }
+
     let user: (typeof candidatos)[number] | null = null;
     for (const candidato of candidatos) {
       if (!candidato.active) continue;
@@ -110,9 +163,23 @@ class AuthController {
       }
     }
     if (!user) {
+      const [bloqueouConta, bloqueouIp] = await Promise.all([
+        registerFailure(chaveDaConta, ACCOUNT_MAX_FAILURES, null),
+        registerFailure(chaveDoIp, IP_MAX_FAILURES, IP_WINDOW_MS),
+      ]);
+      await recordAttempt({ ...tentativa, success: false });
+      const bloqueou = bloqueouConta ?? bloqueouIp;
+      if (bloqueou) {
+        res.status(429).json(bloqueioDoLogin(bloqueou));
+        return;
+      }
       res.status(401).json({ message: "Credenciais inválidas." });
       return;
     }
+    /* Acertou: os erros seguidos desta conta zeram. */
+    await clearFailures(chaveDaConta);
+    await clearFailures(accountKey(user.id));
+    await recordAttempt({ ...tentativa, userId: user.id, success: true });
 
     // Senha provisória da carga: marca troca obrigatória antes de emitir sessão.
     let mustChange = user.mustChangePassword;
@@ -289,7 +356,13 @@ class AuthController {
     const passwordHash = await bcrypt.hash(new_password, 10);
     await prisma.user.update({
       where: { id: user.id },
-      data: { passwordHash, mustChangePassword: false },
+      data: {
+        passwordHash,
+        mustChangePassword: false,
+        /* Senha definida pela própria pessoa: a conta está ativada. [C1-7] */
+        ...(user.activatedAt ? {} : { activatedAt: new Date() }),
+        firstAccessUntil: null,
+      },
     });
 
     const access = await resolveAccountAccess(
