@@ -22,7 +22,9 @@ export type Notification = {
     | "SUMMON_OPENED"
     | "ETHICS_REPORT_OPENED"
     /* A validação deu ao risco outro nível que o da abertura da ação. [B3-2-A] */
-    | "ACTION_RISK_LEVEL_CHANGED";
+    | "ACTION_RISK_LEVEL_CHANGED"
+    /* A denúncia identificada foi encerrada: ver e dar ciência. [C1-5] */
+    | "ETHICS_REPORT_CLOSED";
   title: string;
   body: string | null;
   link: string | null;

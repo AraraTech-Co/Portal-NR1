@@ -156,6 +156,9 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   "payslip.batch": "Folha do mês publicada em lote",
   "membership.role_changed": "Papel de uma pessoa alterado",
   "user.password_reset": "Senha redefinida",
+  "user.first_access": "Conta ativada pelo primeiro acesso",
+  "user.first_access_reopened": "Primeiro acesso reaberto",
+  "user.legacy_classified": "Conta antiga classificada",
   "consulta.view": "Consulta abriu uma tela",
   /*
     Faltavam rótulo: o convite, a planilha e o que entrou depois. O Histórico
@@ -173,6 +176,10 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   "ethics_committee.set": "Comitê de ética alterado",
   "ethics_report.cited": "Pessoa citada numa denúncia",
   "ethics_report.triage": "Denúncia devolvida ao comitê depois da triagem",
+  "ethics_report.severity": "Gravidade de uma denúncia ajustada pelo comitê",
+  "ethics_report.acknowledge": "Quem denunciou deu ciência do encerramento",
+  "ethics_report.export_list": "Relatório de denúncias exportado em PDF",
+  "ethics_report.export": "Denúncia exportada em PDF",
   "training_session.attendance": "Presença em turma registrada",
   /*
     Escritos como ternário, escapavam da varredura dos rótulos até ela ser

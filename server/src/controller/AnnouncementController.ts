@@ -232,6 +232,8 @@ class AnnouncementController {
           establishments: {
             select: { establishment: { select: { id: true, name: true } } },
           },
+          /** O nome da empresa, para o cartaz impresso. [C1-8] */
+          organization: { select: { name: true } },
           _count: { select: { reads: true } },
         },
       });

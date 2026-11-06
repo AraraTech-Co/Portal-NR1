@@ -36,7 +36,10 @@ export function fetchAnnouncements(includeExpired = false) {
 /** Um aviso só. A lista é que traz a contagem de leitura. */
 export function fetchAnnouncement(id: string) {
   return request<{
-    announcement: Omit<AnnouncementListItem, "read_count" | "audience_count">;
+    announcement: Omit<AnnouncementListItem, "read_count" | "audience_count"> & {
+      /** O nome da empresa, para o cartaz impresso. [C1-8] */
+      organization?: { name: string };
+    };
   }>(
     `/api/announcements/${id}`,
   ).then((d) => d.announcement);

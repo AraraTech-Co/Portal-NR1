@@ -11,7 +11,9 @@ import {
   loginCandidateFromEmail,
   loginCandidateFromName,
 } from "../helper/login-name";
-import { temporaryPassword } from "../helper/temporary-password";
+import { randomBytes } from "crypto";
+import { FIRST_ACCESS_WINDOW_DAYS } from "../helper/auth-attempts";
+import { parseBirthDate } from "../helper/birth-date";
 import type { AuthRequest } from "../types/auth";
 
 function fail(res: Response, err: unknown) {
@@ -29,6 +31,8 @@ type Entrada = {
   email?: unknown;
   job_role_id?: unknown;
   admitted_at?: unknown;
+  /** Nascimento: um dos três dados do primeiro acesso. [C1-7] */
+  birth_date?: unknown;
   bond?: unknown;
   contractor_id?: unknown;
   org_role?: unknown;
@@ -43,8 +47,12 @@ type Resultado = {
   /** Por que a linha não entrou, na língua de quem vai consertar a planilha. */
   message?: string;
   login?: string;
-  /** Só na criação de verdade, e só uma vez: o RH entrega e o portal esquece. */
-  temporary_password?: string;
+  /**
+   * A conta nova nasce aguardando o primeiro acesso: nenhuma senha sai da
+   * planilha, e a pessoa cria a própria conferindo matrícula, CPF e
+   * nascimento. [C1-7]
+   */
+  awaiting_first_access?: boolean;
 };
 
 function texto(v: unknown): string | null {
@@ -89,12 +97,14 @@ class PeopleImportController {
       registration: string | null;
       jobRoleId: string | null;
       admittedAt: Date | null;
+      birthDate: Date | null;
     };
     daPlanilha: {
       taxId: string | null;
       matricula: string | null;
       jobRoleId: string | null;
       admittedAt: Date | null;
+      birthDate: Date | null;
     };
     simulacao: boolean;
   }): Promise<string[]> {
@@ -142,6 +152,11 @@ class PeopleImportController {
     if (!atual.admittedAt && daPlanilha.admittedAt) {
       dados.admittedAt = daPlanilha.admittedAt;
       mudou.push("admissão");
+    }
+    /* Como o CPF: completa o que está em branco, nunca sobrescreve. [C1-7] */
+    if (!atual.birthDate && daPlanilha.birthDate) {
+      dados.birthDate = daPlanilha.birthDate;
+      mudou.push("nascimento");
     }
 
     if (mudou.length > 0 && !simulacao) {
@@ -231,6 +246,7 @@ class PeopleImportController {
           const email = texto(linha.email)?.toLowerCase() ?? null;
           const jobRoleId = texto(linha.job_role_id);
           const admittedAt = dataDeCalendario(linha.admitted_at, "Data de admissão");
+          const birthDate = parseBirthDate(linha.birth_date);
 
           let taxId: string | null = null;
           const cpfBruto = texto(linha.tax_id);
@@ -288,6 +304,7 @@ class PeopleImportController {
             registration: true,
             jobRoleId: true,
             admittedAt: true,
+            birthDate: true,
             user: { select: { name: true, login: true } },
           } as const;
           const [porCpf, porMatricula, porEmail] = await Promise.all([
@@ -322,7 +339,7 @@ class PeopleImportController {
               orgId,
               profileId: jaExiste.id,
               atual: jaExiste,
-              daPlanilha: { taxId, matricula, jobRoleId, admittedAt },
+              daPlanilha: { taxId, matricula, jobRoleId, admittedAt, birthDate },
               simulacao,
             });
             registro.login = jaExiste.user.login;
@@ -366,7 +383,13 @@ class PeopleImportController {
             continue;
           }
 
-          const senha = temporaryPassword();
+          /*
+            Senha provisória em papel se perde e expõe. A conta nasce com uma
+            senha que ninguém conhece (descartada aqui mesmo) e aguardando o
+            primeiro acesso por 30 dias. [C1-7]
+          */
+          const senhaDescartada = randomBytes(32).toString("base64url");
+          const liberadoAte = new Date(Date.now() + FIRST_ACCESS_WINDOW_DAYS * 24 * 3600_000);
           const criado = await prisma.$transaction(async (tx) => {
             const login = await allocateUniqueLogin(base, tx);
             const user = await tx.user.create({
@@ -374,8 +397,11 @@ class PeopleImportController {
                 login,
                 email,
                 name: nome,
-                passwordHash: await bcrypt.hash(senha, 10),
-                mustChangePassword: true,
+                passwordHash: await bcrypt.hash(senhaDescartada, 10),
+                mustChangePassword: false,
+                activatedAt: null,
+                firstAccessEligible: true,
+                firstAccessUntil: liberadoAte,
               },
             });
             await tx.membership.create({
@@ -392,6 +418,7 @@ class PeopleImportController {
                 taxId,
                 jobRoleId,
                 admittedAt,
+                birthDate,
                 bond,
                 contractorId,
               },
@@ -410,7 +437,10 @@ class PeopleImportController {
 
           registro.status = "created";
           registro.login = criado.login;
-          registro.temporary_password = senha;
+          registro.awaiting_first_access = true;
+          registro.message = birthDate && taxId && matricula
+            ? "Aguardando primeiro acesso."
+            : "Aguardando primeiro acesso — faltam dados (matrícula, CPF ou nascimento) para a pessoa entrar sozinha.";
           resultados.push(registro);
         } catch (err) {
           if (

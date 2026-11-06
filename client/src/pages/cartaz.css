@@ -1,0 +1,115 @@
+/* O aviso impresso como cartaz A4: título grande, legível a alguns metros. [C1-8] */
+.cartaz {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--card);
+  color: var(--card-foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.cartaz > thead > tr > td,
+.cartaz > tbody > tr > td,
+.cartaz > tfoot > tr > td {
+  padding: 1.5rem 2rem;
+}
+
+.cartaz-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem 1.5rem;
+  border-bottom: 3px solid var(--foreground);
+  padding-bottom: 0.75rem;
+  font-size: 1rem;
+}
+
+.cartaz-kind {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+
+.cartaz-title {
+  font-family: var(--font-display);
+  font-size: clamp(2.25rem, 7vw, 3.75rem);
+  line-height: 1.05;
+  margin: 0 0 1.5rem;
+  overflow-wrap: anywhere;
+}
+
+.cartaz-body {
+  font-size: 1.35rem;
+  line-height: 1.5;
+}
+
+/* O texto do aviso no tamanho do cartaz, não no da tela. */
+.cartaz-body .markdown-body,
+.cartaz-body .markdown-body :is(p, li, blockquote, td, th) {
+  font-size: inherit;
+}
+
+.cartaz-body .markdown-body :is(h1, h2, h3) {
+  font-size: 1.3em;
+}
+
+/* O cartaz tem a própria folha, sem rodapé de outra tela. */
+.cartaz-print {
+  page: cartaz;
+}
+
+@media print {
+  @page cartaz {
+    size: A4;
+    margin: 16mm 14mm;
+  }
+}
+
+.cartaz-dates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 2rem;
+  margin: 1.5rem 0 0;
+  font-size: 1.25rem;
+  font-weight: 650;
+}
+
+.cartaz-foot {
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem 1.5rem;
+  font-size: 0.95rem;
+  color: var(--muted-foreground);
+}
+
+@media print {
+  .cartaz {
+    border: none;
+    background: #fff;
+    color: #000;
+  }
+  .cartaz > thead > tr > td,
+  .cartaz > tbody > tr > td,
+  .cartaz > tfoot > tr > td {
+    padding: 0 0 6mm;
+  }
+  /* O cabeçalho e o rodapé se repetem em cada página. */
+  .cartaz > thead {
+    display: table-header-group;
+  }
+  .cartaz > tfoot {
+    display: table-footer-group;
+  }
+  .cartaz-title {
+    font-size: 40pt;
+  }
+  .cartaz-body {
+    font-size: 16pt;
+  }
+  .cartaz-foot {
+    color: #333;
+  }
+}

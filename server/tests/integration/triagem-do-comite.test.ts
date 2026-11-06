@@ -21,6 +21,7 @@ import prisma from "../../src/model/prisma";
  * Exige a organização do `scripts/seed-teste-org.ts`.
  */
 const ORG_ID = "aaaaaaaa-0001-4000-8000-000000000001";
+const EST_ID = "aaaaaaaa-0001-4000-8000-000000000011";
 const SENHA = "teste1234";
 const SUFIXO = Date.now().toString(36);
 
@@ -46,7 +47,7 @@ async function relatar(opts: { envolveComite: boolean; texto: string }) {
     organization_id: ORG_ID,
     category: "HARASSMENT_MORAL",
     description: opts.texto,
-    is_anonymous: true,
+    is_anonymous: true, establishment_id: EST_ID,
     committee_involved: opts.envolveComite,
   });
   expect(res.status, JSON.stringify(res.body)).toBe(201);
@@ -59,6 +60,19 @@ const lista = async (token: string) => {
   expect(res.status, JSON.stringify(res.body)).toBe(200);
   return res.body.reports as Array<{ id: string; protocol: string }>;
 };
+
+/**
+ * Quantas denúncias em aberto a lista daquela pessoa tem. A lista é
+ * paginada [C1-6]: conta-se pelo total que o servidor devolve no filtro
+ * das abertas, não pelas linhas da primeira página.
+ */
+async function abertasNaLista(token: string): Promise<number> {
+  const res = await request(app)
+    .get("/api/ethics-reports?status=RECEIVED,IN_ANALYSIS")
+    .set(as(token));
+  expect(res.status, JSON.stringify(res.body)).toBe(200);
+  return res.body.total as number;
+}
 
 /** Quantas denúncias em aberto o Início daquela pessoa diz haver. */
 async function contagemDoInicio(token: string): Promise<number> {
@@ -187,13 +201,7 @@ describe("a denúncia contra alguém do comitê não passa pelo comitê [B3-3-H]
       .set(as(rh.token));
     expect(direto.status, "nem pelo endereço direto").toBe(404);
 
-    expect(await contagemDoInicio(rh.token)).toBe(
-      (await lista(rh.token)).filter((r) =>
-        ["RECEIVED", "IN_ANALYSIS"].includes(
-          (r as { status?: string }).status ?? "RECEIVED",
-        ),
-      ).length,
-    );
+    expect(await contagemDoInicio(rh.token)).toBe(await abertasNaLista(rh.token));
 
     /* Quem tria soube, e vê o caso. */
     const avisoDoDono = await prisma.notification.findFirst({
@@ -334,12 +342,7 @@ describe("o Início conta o que a pessoa pode abrir [CB-68]", () => {
     expect(depois, "o caso sai da conta de quem ele cita").toBe(antes - 1);
 
     /* E a conta é exatamente o que a lista dele mostra em aberto. */
-    const abertas = (
-      await lista(rh.token)
-    ).filter((r) =>
-      ["RECEIVED", "IN_ANALYSIS"].includes((r as { status: string }).status),
-    ).length;
-    expect(depois).toBe(abertas);
+    expect(depois).toBe(await abertasNaLista(rh.token));
 
     /* Para quem não foi citado, o caso continua contado. */
     const doMaster = (await lista(master.token)).some((r) => r.id === relato.id);

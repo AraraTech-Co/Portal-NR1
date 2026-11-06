@@ -29,6 +29,7 @@ import { CANAL_BASE, canalPath } from "../../../client/src/lib/canal";
  * Exige a organização do `scripts/seed-teste-org.ts`.
  */
 const ORG_ID = "aaaaaaaa-0001-4000-8000-000000000001";
+const EST_ID = "aaaaaaaa-0001-4000-8000-000000000011";
 const SUFIXO = Date.now().toString(36);
 
 const CLIENTE = join(__dirname, "..", "..", "..", "client", "src");
@@ -133,7 +134,7 @@ describe("o canal de denúncia na tela de entrada [CB-63]", () => {
         organization_id: ORG_ID,
         category: "HARASSMENT_MORAL",
         description: `Relato para acompanhar pela entrada do canal ${SUFIXO}.`,
-        is_anonymous: true,
+        is_anonymous: true, establishment_id: EST_ID, committee_involved: false,
       });
     expect(criado.status, JSON.stringify(criado.body)).toBe(201);
     relatos.push(criado.body.report.id);

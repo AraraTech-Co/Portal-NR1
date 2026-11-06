@@ -7,6 +7,8 @@ export type EmployeeRow = {
   taxId: string | null;
   phone: string | null;
   admittedAt: string | null;
+  /** Nascimento: visível só para quem vê o CPF. [C1-7] */
+  birthDate?: string | null;
   dismissedAt: string | null;
   dismissalReason: string | null;
   bond: string;
@@ -45,7 +47,8 @@ export type ImportResult = {
   filled?: string[];
   message?: string;
   login?: string;
-  temporary_password?: string;
+  /** Conta nova aguardando o primeiro acesso: nenhuma senha sai daqui. [C1-7] */
+  awaiting_first_access?: boolean;
 };
 
 export type ImportReport = {
@@ -72,6 +75,8 @@ export function updateEmployeeProfile(
     contractor_id?: string | null;
     registration?: string;
     tax_id?: string;
+    /** Só o RH altera, como o CPF. [C1-7] */
+    birth_date?: string | null;
     phone?: string;
     job_role_id?: string | null;
     admitted_at?: string | null;

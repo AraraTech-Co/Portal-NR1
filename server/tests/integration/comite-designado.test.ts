@@ -16,6 +16,7 @@ import prisma from "../../src/model/prisma";
  * Exige a organização do `scripts/seed-teste-org.ts`.
  */
 const ORG_ID = "aaaaaaaa-0001-4000-8000-000000000001";
+const EST_ID = "aaaaaaaa-0001-4000-8000-000000000011";
 const SENHA = "teste1234";
 
 const as = (token: string) => ({ Authorization: `Bearer ${token}` });
@@ -38,7 +39,7 @@ async function denunciar(descricao: string): Promise<string> {
     organization_id: ORG_ID,
     category: "HARASSMENT_MORAL",
     description: descricao,
-    is_anonymous: true,
+    is_anonymous: true, establishment_id: EST_ID, committee_involved: false,
   });
   expect(res.status, JSON.stringify(res.body)).toBe(201);
   relatos.push(res.body.report.id);

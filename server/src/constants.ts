@@ -40,6 +40,7 @@ import {
   ReferralStatus,
   ReportAuthorSide,
   ReportCategory,
+  ReportSeverity,
   ReportStatus,
   RequirementKind,
   SummonAttendanceStatus,
@@ -294,6 +295,29 @@ export const REPORT_STATUS_VALUES: readonly ReportStatus[] =
 export const REPORT_AUTHOR_SIDES = ReportAuthorSide;
 
 /**
+ * Gravidade da denúncia. Alta: assédio sexual e discriminação; Normal: as
+ * outras. Quem define é o servidor, pela categoria; o comitê pode ajustar,
+ * com justificativa. [C1-1]
+ */
+export const REPORT_SEVERITY_VALUES: readonly ReportSeverity[] =
+  Object.values(ReportSeverity);
+
+export const HIGH_SEVERITY_CATEGORIES: readonly ReportCategory[] = [
+  ReportCategory.HARASSMENT_SEXUAL,
+  ReportCategory.DISCRIMINATION,
+];
+
+export function severityForCategory(category: ReportCategory): ReportSeverity {
+  return HIGH_SEVERITY_CATEGORIES.includes(category)
+    ? ReportSeverity.HIGH
+    : ReportSeverity.NORMAL;
+}
+
+export function isReportSeverity(v: unknown): v is ReportSeverity {
+  return typeof v === "string" && (REPORT_SEVERITY_VALUES as readonly string[]).includes(v);
+}
+
+/**
  * Prefixo do protocolo público (ex.: CX-7232).
  * O código de acesso em claro só é devolvido uma vez na criação.
  */
@@ -304,6 +328,15 @@ export const ETHICS_ACCESS_CODE_LENGTH = 10;
 
 /** Custo bcrypt do hash do código de acesso. */
 export const ETHICS_ACCESS_CODE_BCRYPT_ROUNDS = 10;
+
+/** Tamanho máximo do comentário da ciência do encerramento. [C1-5] */
+export const ETHICS_ACK_COMMENT_MAX = 2000;
+
+/** Denúncias por página na lista do comitê. [C1-6] */
+export const ETHICS_LIST_PAGE_SIZE = 50;
+
+/** Teto de linhas do PDF da lista; acima disso, pede-se filtrar mais. [C1-6] */
+export const ETHICS_EXPORT_MAX_ROWS = 2000;
 
 // ─── RH / perfil do colaborador ──────────────────────────────────────────────
 

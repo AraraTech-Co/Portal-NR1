@@ -29,6 +29,10 @@ router.post("/api/ethics-reports/track", publicRoute, (req, res) =>
 router.post("/api/ethics-reports/messages", publicRoute, (req, res) =>
   ethics.addReporterMessage(req, res),
 );
+/** Ciência do encerramento, pelo protocolo e código. [C1-5] */
+router.post("/api/ethics-reports/acknowledge", publicRoute, (req, res) =>
+  ethics.acknowledge(req, res),
+);
 
 /*
   Quem é o comitê é decisão de acesso: fica com quem cuida de Conta e
@@ -52,8 +56,16 @@ router.get("/api/ethics-reports", ...committee, (req, res) =>
 router.get("/api/ethics-reports/pessoas", ...committee, (req, res) =>
   ethics.listPeople(req, res),
 );
+/** Os dados do PDF da lista, com o mesmo filtro da tela. [C1-6] */
+router.get("/api/ethics-reports/export", ...committee, (req, res) =>
+  ethics.exportList(req, res),
+);
 router.get("/api/ethics-reports/:id", ...committee, (req, res) =>
   ethics.get(req, res),
+);
+/** Os dados do PDF de uma denúncia. [C1-6] */
+router.get("/api/ethics-reports/:id/export", ...committee, (req, res) =>
+  ethics.exportOne(req, res),
 );
 router.patch("/api/ethics-reports/:id", ...committeeWrite, (req, res) =>
   ethics.updateStatus(req, res),
@@ -64,6 +76,10 @@ router.post("/api/ethics-reports/:id/messages", ...committeeWrite, (req, res) =>
 /** Marcar quem a denúncia envolve — e tirar essa pessoa do caso. [CB-27] */
 router.post("/api/ethics-reports/:id/citados", ...committeeWrite, (req, res) =>
   ethics.setCited(req, res),
+);
+/** Ajustar a gravidade, com justificativa. [C1-1] */
+router.post("/api/ethics-reports/:id/gravidade", ...committeeWrite, (req, res) =>
+  ethics.setSeverity(req, res),
 );
 /** Devolver ao comitê o caso que dizia envolver alguém dele. [B3-3-H] */
 router.post("/api/ethics-reports/:id/triagem", ...committeeWrite, (req, res) =>

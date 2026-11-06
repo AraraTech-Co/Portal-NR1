@@ -1,6 +1,7 @@
 import { Router } from "express";
 import authController from "../controller/AuthController";
 import { verify } from "../model/lib/Auth";
+import firstAccess from "../controller/FirstAccessController";
 
 const router = Router();
 
@@ -16,6 +17,20 @@ router.post("/api/auth/switch", verify("user"), (req, res) =>
 );
 router.delete("/api/auth", verify("user"), (req, res) =>
   authController.signout(req, res),
+);
+
+/**
+ * Primeiro acesso por conferência de dados: sem sessão, como o login. [C1-7]
+ */
+router.post("/api/auth/primeiro-acesso", (req, res) =>
+  firstAccess.verify(req, res).catch(() => {
+    res.status(500).json({ message: "Erro interno." });
+  }),
+);
+router.post("/api/auth/primeiro-acesso/senha", (req, res) =>
+  firstAccess.setPassword(req, res).catch(() => {
+    res.status(500).json({ message: "Erro interno." });
+  }),
 );
 
 /** Rota só MASTER — usada para validar a hierarquia master > owner. */

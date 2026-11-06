@@ -16,6 +16,7 @@ import prisma from "../../src/model/prisma";
  * Exige a organização do `scripts/seed-teste-org.ts`.
  */
 const ORG_ID = "aaaaaaaa-0001-4000-8000-000000000001";
+const EST_ID = "aaaaaaaa-0001-4000-8000-000000000011";
 const SENHA = "teste1234";
 const SUFIXO = Date.now().toString(36);
 
@@ -69,7 +70,7 @@ describe("denunciar sem login [S4-L]", () => {
         organization_id: ORG_ID,
         category: "HARASSMENT_MORAL",
         description: `Relato enviado de fora do portal ${SUFIXO}, sem login nenhum.`,
-        is_anonymous: true,
+        is_anonymous: true, establishment_id: EST_ID, committee_involved: false,
       });
     expect(res.status, JSON.stringify(res.body)).toBe(201);
     relatos.push(res.body.report.id);
@@ -93,7 +94,7 @@ describe("denunciar sem login [S4-L]", () => {
         organization_id: ORG_ID,
         category: "SAFETY_RISK",
         description: `Acompanhamento de fora ${SUFIXO}, sem login.`,
-        is_anonymous: true,
+        is_anonymous: true, establishment_id: EST_ID, committee_involved: false,
       });
     expect(criado.status).toBe(201);
     relatos.push(criado.body.report.id);
@@ -138,7 +139,7 @@ describe("a lista do comitê distingue uma denúncia da outra [B2-3-D]", () => {
         organization_id: ORG_ID,
         category: "SAFETY_RISK",
         description: `Texto que identifica este relato ${SUFIXO} e mais nenhum outro.`,
-        is_anonymous: true,
+        is_anonymous: true, establishment_id: EST_ID, committee_involved: false,
       });
     expect(criado.status).toBe(201);
     relatos.push(criado.body.report.id);

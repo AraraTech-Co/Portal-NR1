@@ -107,6 +107,30 @@ export const REPORT_STATUS_LABEL: Record<string, string> = {
   ARCHIVED: "Arquivado",
 };
 
+/** Gravidade da denúncia. [C1-1] */
+export const REPORT_SEVERITY_LABEL: Record<string, string> = {
+  HIGH: "Alta",
+  NORMAL: "Normal",
+};
+
+/** Situação do prazo da primeira providência — uma só por denúncia. [C1-2] */
+export const DEADLINE_SITUATION_LABEL: Record<string, string> = {
+  OVERDUE: "Atrasada",
+  DUE_TODAY: "Vence hoje",
+  ON_TIME: "No prazo",
+  MET_ON_TIME: "Atendida no prazo",
+  MET_LATE: "Atendida com atraso",
+  NOT_ASSESSED: "Não apurada (legado)",
+};
+
+export function deadlineTone(situation: string): "danger" | "warning" | "success" | "neutral" | "info" {
+  if (situation === "OVERDUE" || situation === "MET_LATE") return "danger";
+  if (situation === "DUE_TODAY") return "warning";
+  if (situation === "MET_ON_TIME") return "success";
+  if (situation === "ON_TIME") return "info";
+  return "neutral";
+}
+
 export const ANNOUNCEMENT_KIND_LABEL: Record<string, string> = {
   NOTICE: "Aviso",
   CAMPAIGN: "Campanha",
@@ -341,6 +365,32 @@ export function formatDayTime(value: string | Date | null | undefined): string {
   const hh = String(d.getHours()).padStart(2, "0");
   const mm = String(d.getMinutes()).padStart(2, "0");
   return `${formatDay(d)} às ${hh}:${mm}`;
+}
+
+/**
+ * Dia e hora de um instante, sempre no fuso de Brasília. Diferente de
+ * `formatDayTime`, não trata meia-noite UTC como "data sem hora": um prazo
+ * que vence às 21h de Brasília é meia-noite UTC e sairia com o dia
+ * seguinte. [C1-2]
+ */
+export function formatInstant(value: string | Date | null | undefined): string {
+  if (!value) return "—";
+  const d = typeof value === "string" ? new Date(value) : value;
+  if (Number.isNaN(d.getTime())) return "—";
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat("pt-BR", {
+      timeZone: "America/Sao_Paulo",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    })
+      .formatToParts(d)
+      .map((x) => [x.type, x.value]),
+  );
+  return `${p.day}/${p.month}/${p.year} às ${p.hour}:${p.minute}`;
 }
 
 /**

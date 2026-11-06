@@ -33,6 +33,16 @@ model User {
   emailVerifiedAt     DateTime?
   /// Senha definida pelo owner/admin: obrigatório trocar no próximo acesso.
   mustChangePassword  Boolean   @default(false)
+  /// Quando a conta foi ativada: a pessoa criou a própria senha no primeiro
+  /// acesso, ou uma senha foi definida por fluxo autorizado (troca, reset,
+  /// convite). Nulo = nunca ativada, ou conta antiga ainda não classificada.
+  /// [C1-7]
+  activatedAt         DateTime?
+  /// Pode ativar sozinha pela conferência de dados. Contas antigas nascem
+  /// com `false` e só mudam por classificação de Master, Dono ou RH. [C1-7]
+  firstAccessEligible Boolean   @default(false)
+  /// Até quando o primeiro acesso por conferência de dados vale. [C1-7]
+  firstAccessUntil    DateTime?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
@@ -68,6 +78,8 @@ model User {
   ergonomicComplaintsHandled ErgonomicComplaint[] @relation("ErgonomicComplaintHandler")
   ethicsCited       EthicsReportCited[]   @relation("EthicsCited")
   ethicsCitedMarked EthicsReportCited[]   @relation("EthicsCitedMarker")
+  ethicsSeverityChanges EthicsReportSeverityChange[] @relation("EthicsSeverityChanger")
+  activationTokens  ActivationToken[]
   reportMessages    EthicsReportMessage[] @relation("ReportMessageAuthor")
   employeeProfiles  EmployeeProfile[]
   ideasAuthored     Idea[]                @relation("IdeaAuthor")
@@ -1407,6 +1419,36 @@ enum ReportStatus {
   ARCHIVED
 }
 
+/// Gravidade da denúncia. O servidor a define pela categoria; o comitê pode
+/// ajustar, com justificativa. [C1-1]
+enum ReportSeverity {
+  HIGH
+  NORMAL
+}
+
+/// De onde veio a gravidade: da categoria, ou de um ajuste do comitê. [C1-1]
+enum ReportSeveritySource {
+  AUTO
+  COMMITTEE
+}
+
+/// Cada ajuste de gravidade feito pelo comitê: quem, quando, de → para e por
+/// quê. O comitê vê esta lista no detalhe do caso. [C1-1]
+model EthicsReportSeverityChange {
+  id           String         @id @default(uuid())
+  reportId     String
+  fromSeverity ReportSeverity
+  toSeverity   ReportSeverity
+  reason       String
+  byId         String
+  at           DateTime       @default(now())
+
+  report EthicsReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  by     User         @relation("EthicsSeverityChanger", fields: [byId], references: [id])
+
+  @@index([reportId, at])
+}
+
 /// Quem é o comitê de ética desta empresa.
 ///
 /// Antes, comitê era "todo mundo com leitura no módulo comite" — na prática,
@@ -1472,6 +1514,20 @@ model EthicsReport {
   /// caso ao comitê. [B3-3-H]
   triagedAt      DateTime?
   triagedById    String?
+  /// Alta para assédio sexual e discriminação; Normal para as outras. [C1-1]
+  severity       ReportSeverity       @default(NORMAL)
+  severitySource ReportSeveritySource @default(AUTO)
+  /// Vencimento da primeira providência: 1 dia útil (Alta) ou 3 (Normal),
+  /// sempre contado do recebimento. Nulo nas denúncias anteriores a esta
+  /// coluna — para elas o servidor calcula pelo `createdAt`. [C1-2]
+  dueAt          DateTime?
+  /// Quando a denúncia saiu de "Recebido": mudança de situação ou primeira
+  /// mensagem do comitê. [C1-2]
+  firstActionAt  DateTime?
+  /// Quem denunciou leu o encerramento (pelo protocolo e código). Ciência
+  /// não é concordância. Uma vez só; não grava identidade. [C1-5]
+  reporterAckAt      DateTime?
+  reporterAckComment String?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
@@ -1481,6 +1537,7 @@ model EthicsReport {
   triagedBy     User?                @relation("ReportTriage", fields: [triagedById], references: [id])
   messages      EthicsReportMessage[]
   cited         EthicsReportCited[]
+  severityChanges EthicsReportSeverityChange[]
 
   @@unique([organizationId, protocol])
   @@index([organizationId, status])
@@ -1540,6 +1597,9 @@ model EmployeeProfile {
   /// Empresa contratada a que a pessoa pertence, quando não é empregada.
   contractorId   String?
   admittedAt     DateTime?
+  /// Data de nascimento (sem hora). Visível só para quem vê o CPF; é um dos
+  /// três dados do primeiro acesso. [C1-7]
+  birthDate      DateTime?
   dismissedAt    DateTime?
   /// Por que a pessoa saiu. A fiscalização pergunta, e o RH precisa do
   /// registro — sem isto o desligamento é só uma data. [S5-H]
@@ -1717,6 +1777,9 @@ enum NotificationKind {
   ETHICS_REPORT_OPENED
   /// A validação deu ao risco outro nível que o da abertura da ação. [B3-2-A]
   ACTION_RISK_LEVEL_CHANGED
+  /// A denúncia identificada foi encerrada: quem relatou vê o resultado e
+  /// dá ciência. [C1-5]
+  ETHICS_REPORT_CLOSED
 }
 
 model Notification {
@@ -2511,4 +2574,60 @@ model OnboardingProgress {
   user User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([stepId, userId])
+}
+
+// ============================================================
+// PRIMEIRO ACESSO E LIMITE DE TENTATIVAS [C1-7]
+// ============================================================
+
+/// Ficha de ativação emitida quando matrícula, CPF e nascimento conferem.
+/// Opaca (só o hash fica aqui), de uso único, vale ~10 minutos.
+model ActivationToken {
+  id             String    @id @default(uuid())
+  userId         String
+  /// A empresa da ficha que conferiu, para a trilha.
+  organizationId String
+  tokenHash      String    @unique
+  expiresAt      DateTime
+  usedAt         DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// Contagem de erros por chave (conta, identificador digitado ou IP) e o
+/// bloqueio temporário que ela dispara. A chave nunca traz o identificador
+/// em claro: é um pseudônimo (HMAC).
+model AuthLockout {
+  key         String    @id
+  failures    Int       @default(0)
+  windowStart DateTime  @default(now())
+  lockedUntil DateTime?
+  updatedAt   DateTime  @updatedAt
+}
+
+enum AuthAttemptKind {
+  LOGIN
+  FIRST_ACCESS
+}
+
+/// Cada tentativa de login e de primeiro acesso, para o painel e a
+/// auditoria. Sem CPF, nascimento, senha ou identificador em claro. Apagada
+/// depois de 90 dias.
+model AuthAttempt {
+  id      String          @id @default(uuid())
+  kind    AuthAttemptKind
+  /// Pseudônimo (HMAC) do que foi digitado.
+  subject String
+  /// A conta, quando o que foi digitado aponta para uma só.
+  userId  String?
+  ip      String?
+  success Boolean
+  at      DateTime        @default(now())
+
+  @@index([at])
+  @@index([userId, at])
 }

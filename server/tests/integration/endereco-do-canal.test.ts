@@ -23,6 +23,7 @@ import { CANAL_BASE, canalPath, canalUrl } from "../../../client/src/lib/canal";
  * Exige a organização do `scripts/seed-teste-org.ts`.
  */
 const ORG_ID = "aaaaaaaa-0001-4000-8000-000000000001";
+const EST_ID = "aaaaaaaa-0001-4000-8000-000000000011";
 const CONTA_ID = "aaaaaaaa-0001-4000-8000-000000000002";
 const SUFIXO = Date.now().toString(36);
 const DOMINIO = "https://portal.exemplo.com.br";
@@ -94,7 +95,7 @@ describe("o endereço do canal de denúncia [CB-63]", () => {
         organization_id: empresa,
         category: "HARASSMENT_MORAL",
         description: `Relato enviado pelo endereço divulgado ${SUFIXO}.`,
-        is_anonymous: true,
+        is_anonymous: true, establishment_id: EST_ID, committee_involved: false,
       });
     expect(res.status, JSON.stringify(res.body)).toBe(201);
     relatos.push(res.body.report.id);
