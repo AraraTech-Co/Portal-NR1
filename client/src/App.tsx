@@ -22,6 +22,7 @@ import { EthicsPage } from "@/pages/EthicsPage";
 import { EthicsReportDetailPage } from "@/pages/EthicsReportDetailPage";
 import { EthicsReportPage } from "@/pages/EthicsReportPage";
 import { FirstAccessPage } from "@/pages/FirstAccessPage";
+import { ActivationPanelPage } from "@/pages/ActivationPanelPage";
 import { AnnouncementPosterPage } from "@/pages/AnnouncementPosterPage";
 import { EthicsListPrintPage } from "@/pages/EthicsListPrintPage";
 import { EthicsReportPrintPage } from "@/pages/EthicsReportPrintPage";
@@ -162,6 +163,7 @@ function AppRoutes() {
               <Route path="gamificacao" element={<GamificationPage />} />
               <Route path="convocacoes" element={<SummonsPage />} />
               <Route path="conta" element={<AccountPage />} />
+              <Route path="ativacao" element={<ActivationPanelPage />} />
               <Route path="configuracoes" element={<SettingsPage />} />
             </Route>
           </Route>

@@ -23,6 +23,7 @@ const TITLES: Record<string, string> = {
   gamificacao: "Gamificação",
   convocacoes: "Convocações",
   conta: "Conta e usuários",
+  ativacao: "Ativação de contas",
   configuracoes: "Configurações",
 };
 

@@ -157,6 +157,8 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   "membership.role_changed": "Papel de uma pessoa alterado",
   "user.password_reset": "Senha redefinida",
   "user.first_access": "Conta ativada pelo primeiro acesso",
+  "user.first_access_reopened": "Primeiro acesso reaberto",
+  "user.legacy_classified": "Conta antiga classificada",
   "consulta.view": "Consulta abriu uma tela",
   /*
     Faltavam rótulo: o convite, a planilha e o que entrou depois. O Histórico

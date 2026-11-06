@@ -75,6 +75,8 @@ export const NAV_GROUPS: NavGroup[] = [
     title: "Administração",
     items: [
       { href: "/conta", label: "Conta e usuários", moduleId: "conta" },
+      /* Quem já entrou e quem aguarda o primeiro acesso. [C1-7] */
+      { href: "/ativacao", label: "Ativação de contas", moduleId: "ativacao" },
       { href: "/configuracoes", label: "Configurações", moduleId: "configuracoes" },
     ],
   },
