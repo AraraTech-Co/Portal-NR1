@@ -67,6 +67,8 @@ export function trackEthicsReport(input: {
       status: string;
       resolutionNote: string | null;
       resolvedAt: string | null;
+      /** Quando quem denunciou deu ciência do encerramento. [C1-5] */
+      reporterAckAt: string | null;
       messages: Array<{
         id: string;
         side: string;
@@ -88,6 +90,21 @@ export function sendReporterMessage(input: { protocol: string; access_code: stri
   );
 }
 
+/**
+ * Quem denunciou dá ciência do encerramento, pelo protocolo e código.
+ * Ciência não é concordância; vale uma vez só. [C1-5]
+ */
+export function acknowledgeEthicsReport(input: {
+  protocol: string;
+  access_code: string;
+  comment?: string;
+}) {
+  return request<{ reporterAckAt: string }>("/api/ethics-reports/acknowledge", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
 export type EthicsMessage = {
   id: string;
   side: "REPORTER" | "COMMITTEE";
@@ -105,6 +122,9 @@ export type EthicsReportDetail = {
   status: string;
   resolutionNote: string | null;
   resolvedAt: string | null;
+  /** Ciência de quem denunciou no encerramento. [C1-5] */
+  reporterAckAt: string | null;
+  reporterAckComment: string | null;
   createdAt: string;
   establishment: { id: string; name: string } | null;
   /** O caso que passou pela triagem, e quando voltou ao comitê. [B3-3-H] */

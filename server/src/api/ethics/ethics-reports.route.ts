@@ -29,6 +29,10 @@ router.post("/api/ethics-reports/track", publicRoute, (req, res) =>
 router.post("/api/ethics-reports/messages", publicRoute, (req, res) =>
   ethics.addReporterMessage(req, res),
 );
+/** Ciência do encerramento, pelo protocolo e código. [C1-5] */
+router.post("/api/ethics-reports/acknowledge", publicRoute, (req, res) =>
+  ethics.acknowledge(req, res),
+);
 
 /*
   Quem é o comitê é decisão de acesso: fica com quem cuida de Conta e

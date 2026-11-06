@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
+  acknowledgeEthicsReport,
   createEthicsReport,
   fetchEthicsMeta,
   sendReporterMessage,
@@ -10,7 +11,7 @@ import { EthicsThread } from "@/components/EthicsThread";
 import { useAuth } from "@/auth/AuthContext";
 import { Button } from "@/components/Button";
 import { PageHeader } from "@/components/PageHeader";
-import { REPORT_CATEGORY_LABEL, REPORT_STATUS_LABEL } from "@/lib/labels";
+import { formatInstant, REPORT_CATEGORY_LABEL, REPORT_STATUS_LABEL } from "@/lib/labels";
 import "@/components/form.css";
 import "./denuncia.css";
 
@@ -77,8 +78,13 @@ export function EthicsReportPage({
     description: string;
     isAnonymous: boolean;
     resolutionNote: string | null;
+    reporterAckAt: string | null;
     messages: Array<{ id: string; side: string; body: string; createdAt: string }>;
   } | null>(null);
+  /** Ciência do encerramento: comentário opcional. [C1-5] */
+  const [ackComment, setAckComment] = useState("");
+  const [acking, setAcking] = useState(false);
+  const [ackError, setAckError] = useState<string | null>(null);
   const [answer, setAnswer] = useState("");
   const [answering, setAnswering] = useState(false);
   const [answerError, setAnswerError] = useState<string | null>(null);
@@ -189,6 +195,27 @@ export function EthicsReportPage({
       setAnswerError(err instanceof Error ? err.message : "Falha ao enviar");
     } finally {
       setAnswering(false);
+    }
+  }
+
+  /** "Li o encerramento" — uma vez só; ciência não é concordância. [C1-5] */
+  async function onAcknowledge(e: FormEvent) {
+    e.preventDefault();
+    setAcking(true);
+    setAckError(null);
+    try {
+      await acknowledgeEthicsReport({
+        protocol: trackProtocol,
+        access_code: trackCode,
+        ...(ackComment.trim() ? { comment: ackComment.trim() } : {}),
+      });
+      setAckComment("");
+      const data = await trackEthicsReport({ protocol: trackProtocol, access_code: trackCode });
+      setTracked(data.report);
+    } catch (err) {
+      setAckError(err instanceof Error ? err.message : "Falha ao registrar a ciência");
+    } finally {
+      setAcking(false);
     }
   }
 
@@ -562,10 +589,45 @@ export function EthicsReportPage({
               )}
               <EthicsThread messages={tracked.messages} viewer="REPORTER" />
               {tracked.status === "RESOLVED" || tracked.status === "ARCHIVED" ? (
-                <p className="muted" style={{ margin: 0 }}>
-                  <strong>Relato encerrado.</strong>
-                  {tracked.resolutionNote ? ` ${tracked.resolutionNote}` : ""}
-                </p>
+                <>
+                  <p className="muted" style={{ margin: 0 }}>
+                    <strong>Relato encerrado.</strong>
+                    {tracked.resolutionNote ? ` ${tracked.resolutionNote}` : ""}
+                  </p>
+                  {/* Ciência do encerramento, uma vez só. Ciência não é
+                      concordância: o texto diz "li". [C1-5] */}
+                  {tracked.reporterAckAt ? (
+                    <p className="form-hint" role="status" style={{ margin: 0 }}>
+                      Ciência registrada em {formatInstant(tracked.reporterAckAt)}.
+                    </p>
+                  ) : (
+                    <form className="form-grid" onSubmit={onAcknowledge}>
+                      <p className="muted" style={{ margin: 0 }}>
+                        Confirme que leu o encerramento. Isso não significa
+                        concordar com ele: só registra que você leu.
+                      </p>
+                      <label className="form-field">
+                        Comentário (opcional)
+                        <textarea
+                          value={ackComment}
+                          onChange={(e) => setAckComment(e.target.value)}
+                          maxLength={2000}
+                          placeholder={
+                            tracked.isAnonymous
+                              ? "Se quiser, comente. Evite escrever algo que identifique você."
+                              : "Se quiser, comente o encerramento."
+                          }
+                        />
+                      </label>
+                      {ackError && <p className="form-error">{ackError}</p>}
+                      <div className="form-actions">
+                        <Button type="submit" disabled={acking}>
+                          {acking ? "Registrando…" : "Li o encerramento"}
+                        </Button>
+                      </div>
+                    </form>
+                  )}
+                </>
               ) : (
                 <form className="form-grid" onSubmit={onAnswer}>
                   <label className="form-field">

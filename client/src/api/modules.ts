@@ -309,6 +309,8 @@ export const fetchEthicsReports = () =>
       dueAt: string;
       firstActionAt: string | null;
       deadline_situation: string;
+      /** Ciência de quem denunciou no encerramento. [C1-5] */
+      reporterAckAt: string | null;
     }>;
   }>("/api/ethics-reports").then((d) => d.reports);
 

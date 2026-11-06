@@ -25,6 +25,7 @@ import {
   ETHICS_ACCESS_CODE_BCRYPT_ROUNDS,
   ETHICS_ACCESS_CODE_LENGTH,
   ETHICS_PROTOCOL_PREFIX,
+  ETHICS_ACK_COMMENT_MAX,
   REPORT_AUTHOR_SIDES,
   REPORT_CATEGORY_VALUES,
   REPORT_STATUSES,
@@ -78,6 +79,7 @@ function publicReportView(report: {
   status: string;
   resolutionNote: string | null;
   resolvedAt: Date | null;
+  reporterAckAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   messages?: Array<{
@@ -96,6 +98,8 @@ function publicReportView(report: {
     status: report.status,
     resolutionNote: report.resolutionNote,
     resolvedAt: report.resolvedAt,
+    /** Quando quem denunciou deu ciência do encerramento. [C1-5] */
+    reporterAckAt: report.reporterAckAt,
     createdAt: report.createdAt,
     updatedAt: report.updatedAt,
     messages: report.messages?.map((m) => ({
@@ -478,6 +482,79 @@ class EthicsController {
     }
   }
 
+  /**
+   * Quem denunciou dá ciência do encerramento, pelo protocolo e código.
+   *
+   * Vale para a anônima e não grava identidade nenhuma [ADR-16]. Uma vez
+   * só; comentário opcional. Ciência não é concordância. [C1-5]
+   */
+  async acknowledge(req: Request, res: Response) {
+    try {
+      const { protocol, access_code, organization_id, comment } = req.body as {
+        protocol?: string;
+        access_code?: string;
+        organization_id?: string;
+        comment?: unknown;
+      };
+      if (!protocol?.trim() || !access_code?.trim()) {
+        res.status(400).json({ message: "Informe protocol e access_code." });
+        return;
+      }
+      if (comment !== undefined && comment !== null && typeof comment !== "string") {
+        res.status(400).json({ message: "O comentário precisa ser texto.", field: "comment" });
+        return;
+      }
+      const comentario = typeof comment === "string" ? comment.trim() : "";
+      if (comentario.length > ETHICS_ACK_COMMENT_MAX) {
+        res.status(400).json({
+          message: `O comentário pode ter até ${ETHICS_ACK_COMMENT_MAX} caracteres.`,
+          field: "comment",
+        });
+        return;
+      }
+
+      const report = await findByProtocolAndCode(organization_id, protocol, access_code);
+      if (!report) {
+        res.status(404).json({ message: "Protocolo ou código inválido." });
+        return;
+      }
+      if (
+        report.status !== REPORT_STATUSES.RESOLVED &&
+        report.status !== REPORT_STATUSES.ARCHIVED
+      ) {
+        res.status(409).json({
+          message: "A denúncia ainda não foi encerrada: não há encerramento para dar ciência.",
+        });
+        return;
+      }
+
+      /* `reporterAckAt: null` no filtro: duas ciências ao mesmo tempo, uma vale. */
+      const agora = new Date();
+      const gravou = await prisma.ethicsReport.updateMany({
+        where: { id: report.id, reporterAckAt: null },
+        data: { reporterAckAt: agora, reporterAckComment: comentario || null },
+      });
+      if (gravou.count === 0) {
+        res.status(409).json({ message: "A ciência deste encerramento já foi registrada." });
+        return;
+      }
+
+      /* Sem autor: a trilha registra o fato, não quem o fez. [ADR-16] */
+      await writeAudit({
+        organizationId: report.organizationId,
+        actorId: null,
+        action: "ethics_report.acknowledge",
+        entityType: "EthicsReport",
+        entityId: report.id,
+        after: { comment: Boolean(comentario) },
+      });
+
+      res.json({ reporterAckAt: agora });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
   // —— Comitê ——
 
   async list(req: Request, res: Response) {
@@ -553,6 +630,8 @@ class EthicsController {
           severity: r.severity,
           severitySource: r.severitySource,
           ...prazoNaResposta(r),
+          /** Ciência de quem denunciou no encerramento. [C1-5] */
+          reporterAckAt: r.reporterAckAt,
           createdAt: r.createdAt,
           updatedAt: r.updatedAt,
           _count: r._count,
@@ -1105,6 +1184,28 @@ class EthicsController {
       if (!report) {
         res.status(500).json({ message: "Falha ao atualizar relato." });
         return;
+      }
+
+      /*
+        Encerrada agora a denúncia identificada: quem relatou é avisado para
+        ver o resultado e dar ciência. A anônima não tem a quem avisar.
+        [C1-5] [ADR-16]
+      */
+      const encerrou =
+        (status === REPORT_STATUSES.RESOLVED || status === REPORT_STATUSES.ARCHIVED) &&
+        current.status !== REPORT_STATUSES.RESOLVED &&
+        current.status !== REPORT_STATUSES.ARCHIVED;
+      if (encerrou && !current.isAnonymous && current.reporterUserId) {
+        await notify({
+          organizationId: orgId,
+          userId: current.reporterUserId,
+          kind: NotificationKind.ETHICS_REPORT_CLOSED,
+          title: "Sua denúncia foi encerrada",
+          body: "Veja o resultado e dê ciência pelo acompanhamento, com o protocolo e o código.",
+          link: "/denuncia",
+          entityType: "EthicsReport",
+          entityId: current.id,
+        });
       }
 
       const { accessCodeHash: _h, ...safe } = report;

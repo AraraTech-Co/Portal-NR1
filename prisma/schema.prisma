@@ -1513,6 +1513,10 @@ model EthicsReport {
   /// Quando a denúncia saiu de "Recebido": mudança de situação ou primeira
   /// mensagem do comitê. [C1-2]
   firstActionAt  DateTime?
+  /// Quem denunciou leu o encerramento (pelo protocolo e código). Ciência
+  /// não é concordância. Uma vez só; não grava identidade. [C1-5]
+  reporterAckAt      DateTime?
+  reporterAckComment String?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
@@ -1759,6 +1763,9 @@ enum NotificationKind {
   ETHICS_REPORT_OPENED
   /// A validação deu ao risco outro nível que o da abertura da ação. [B3-2-A]
   ACTION_RISK_LEVEL_CHANGED
+  /// A denúncia identificada foi encerrada: quem relatou vê o resultado e
+  /// dá ciência. [C1-5]
+  ETHICS_REPORT_CLOSED
 }
 
 model Notification {

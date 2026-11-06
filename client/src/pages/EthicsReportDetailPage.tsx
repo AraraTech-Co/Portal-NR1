@@ -211,6 +211,27 @@ export function EthicsReportDetailPage() {
             <strong>Encerramento:</strong> {report.resolutionNote}
           </p>
         )}
+        {/* Se quem denunciou leu o encerramento — ciência, não concordância. [C1-5] */}
+        {closed && (
+          <p className="muted" style={{ maxWidth: "70ch" }}>
+            {report.reporterAckAt ? (
+              <>
+                <strong>Ciência do denunciante</strong> em {formatInstant(report.reporterAckAt)}
+                {report.reporterAckComment ? (
+                  <>
+                    , comentário: <span style={{ whiteSpace: "pre-wrap" }}>{report.reporterAckComment}</span>
+                  </>
+                ) : (
+                  ", sem comentário."
+                )}
+              </>
+            ) : (
+              <>
+                <strong>Sem ciência</strong> do denunciante até agora.
+              </>
+            )}
+          </p>
+        )}
       </section>
 
       {/*

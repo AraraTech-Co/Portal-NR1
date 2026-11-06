@@ -329,6 +329,9 @@ export const ETHICS_ACCESS_CODE_LENGTH = 10;
 /** Custo bcrypt do hash do código de acesso. */
 export const ETHICS_ACCESS_CODE_BCRYPT_ROUNDS = 10;
 
+/** Tamanho máximo do comentário da ciência do encerramento. [C1-5] */
+export const ETHICS_ACK_COMMENT_MAX = 2000;
+
 // ─── RH / perfil do colaborador ──────────────────────────────────────────────
 
 /**
