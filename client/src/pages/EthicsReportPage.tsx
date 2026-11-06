@@ -45,15 +45,19 @@ export function EthicsReportPage({
   const [units, setUnits] = useState<Array<{ id: string; name: string }> | null>(null);
   const [establishmentId, setEstablishmentId] = useState("");
   const [description, setDescription] = useState("");
-  // Fora do portal não há nome a vincular: a denúncia é sempre anônima.
-  const [isAnonymous, setIsAnonymous] = useState(true);
+  /*
+    "Quer se identificar?" começa sem resposta: vinha marcado "anônimo", e
+    quem não mexia mandava o que não escolheu. Fora do portal a pergunta
+    não existe — o canal público é sempre anônimo. [C1-4] [S4-L]
+  */
+  const [isAnonymous, setIsAnonymous] = useState<boolean | null>(null);
   /*
     "Alguém do comitê de ética está envolvido?" A pergunta não mostra nomes:
     divulgar quem é o comitê é decisão da empresa, e quem relata não precisa
     saber para se proteger. Quando a resposta é sim, o caso vai ao dono ou ao
     master e não passa pelo comitê. [B3-3-H]
   */
-  const [envolveComite, setEnvolveComite] = useState(false);
+  const [envolveComite, setEnvolveComite] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{
@@ -83,8 +87,8 @@ export function EthicsReportPage({
     fetchEthicsMeta(organizationId)
       .then((meta) => {
         const ids = meta.categories.map((c) => c.id);
+        // A categoria começa vazia: quem relata escolhe. [C1-4]
         setCategories(ids);
-        if (ids[0]) setCategory(ids[0]);
         setUnits(meta.establishments ?? []);
         if (meta.establishments?.length === 1) setEstablishmentId(meta.establishments[0].id);
       })
@@ -98,7 +102,24 @@ export function EthicsReportPage({
     e.preventDefault();
     setError(null);
 
-    if (!isAnonymous) {
+    /* Todas as perguntas têm resposta antes do envio. [C1-4] */
+    const faltou = !category
+      ? "Escolha a categoria."
+      : !establishmentId
+        ? "Escolha a unidade."
+        : description.trim().length < 20
+          ? "Descreva o que aconteceu (pelo menos 20 caracteres)."
+          : !publico && isAnonymous === null
+            ? "Responda se quer se identificar."
+            : envolveComite === null
+              ? "Responda se alguém do comitê de ética está envolvido."
+              : null;
+    if (faltou) {
+      setError(faltou);
+      return;
+    }
+
+    if (!publico && isAnonymous === false) {
       const ok = window.confirm(
         `Atenção: a denúncia será vinculada ao seu nome (${user?.name ?? "seu usuário"}).\n\n` +
           "O comitê de ética poderá identificar você como autor deste relato.\n\n" +
@@ -113,20 +134,21 @@ export function EthicsReportPage({
         category,
         description,
         establishment_id: establishmentId,
-        is_anonymous: publico ? true : isAnonymous,
-        committee_involved: envolveComite,
+        is_anonymous: publico ? true : isAnonymous === true,
+        committee_involved: envolveComite === true,
         ...(organizationId ? { organization_id: organizationId } : {}),
       });
       setResult({
         protocol: data.report.protocol,
         access_code: data.access_code,
-        is_anonymous: isAnonymous,
+        is_anonymous: publico ? true : isAnonymous === true,
       });
       setCopiedKeys(false);
       setCopyError(null);
       setDescription("");
-      setIsAnonymous(true);
-      setEnvolveComite(false);
+      setCategory("");
+      setIsAnonymous(null);
+      setEnvolveComite(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao enviar");
     } finally {
@@ -220,7 +242,7 @@ export function EthicsReportPage({
             ? "Com o protocolo e o código você acompanha um relato deste portal, sem entrar e sem dizer de qual empresa é."
             : publico
               ? "Canal confidencial e anônimo. O portal não guarda quem enviou."
-              : "Canal confidencial. Por padrão o relato é anônimo."
+              : "Canal confidencial. Você escolhe se quer se identificar."
         }
         actions={
           /* Sem a empresa, "Nova denúncia" não teria para onde ir. [CB-63] */
@@ -344,6 +366,7 @@ export function EthicsReportPage({
                 onChange={(e) => setCategory(e.target.value)}
                 required
               >
+                <option value="">Selecione…</option>
                 {categories.map((id) => (
                   <option key={id} value={id}>
                     {REPORT_CATEGORY_LABEL[id] ?? id}
@@ -395,18 +418,32 @@ export function EthicsReportPage({
               </p>
             ) : (
               <>
-                <label className="form-field" style={{ flexDirection: "row", alignItems: "center", gap: "0.55rem" }}>
-                  <input
-                    type="checkbox"
-                    checked={isAnonymous}
-                    onChange={(e) => setIsAnonymous(e.target.checked)}
-                  />
-                  <span>Enviar de forma anônima (recomendado)</span>
-                </label>
-                {!isAnonymous && (
+                <fieldset className="form-field ethics-question">
+                  <legend>Quer se identificar?</legend>
+                  <label>
+                    <input
+                      type="radio"
+                      name="identificar"
+                      checked={isAnonymous === true}
+                      onChange={() => setIsAnonymous(true)}
+                      required
+                    />
+                    <span>Não, enviar de forma anônima (recomendado)</span>
+                  </label>
+                  <label>
+                    <input
+                      type="radio"
+                      name="identificar"
+                      checked={isAnonymous === false}
+                      onChange={() => setIsAnonymous(false)}
+                    />
+                    <span>Sim, vincular a denúncia ao meu nome</span>
+                  </label>
+                </fieldset>
+                {isAnonymous === false && (
                   <p className="form-hint" role="note">
-                    Se desmarcar o anonimato, a denúncia será vinculada ao seu
-                    nome ({user?.name}). Uma confirmação será pedida antes do
+                    Identificada, a denúncia fica vinculada ao seu nome
+                    ({user?.name}). Uma confirmação será pedida antes do
                     envio.
                   </p>
                 )}
@@ -417,24 +454,33 @@ export function EthicsReportPage({
               a essa pessoa junto com todo o comitê, e só saía da vista dela
               depois que outra pessoa a marcasse como envolvida. [B3-3-H]
             */}
-            <label
-              className="form-field"
-              style={{ flexDirection: "row", alignItems: "flex-start", gap: "0.55rem" }}
-            >
-              <input
-                type="checkbox"
-                checked={envolveComite}
-                onChange={(e) => setEnvolveComite(e.target.checked)}
-              />
-              <span>
-                Alguém do comitê de ética está envolvido neste fato
-                <span className="form-hint" style={{ display: "block" }}>
-                  Se marcar, esta denúncia não vai ao comitê: vai a quem é
-                  dono da conta, que confere quem ela envolve antes de
-                  qualquer outra pessoa ver.
-                </span>
+            <fieldset className="form-field ethics-question">
+              <legend>Alguém do comitê de ética está envolvido neste fato?</legend>
+              <label>
+                <input
+                  type="radio"
+                  name="envolve-comite"
+                  checked={envolveComite === false}
+                  onChange={() => setEnvolveComite(false)}
+                  required
+                />
+                <span>Não</span>
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="envolve-comite"
+                  checked={envolveComite === true}
+                  onChange={() => setEnvolveComite(true)}
+                />
+                <span>Sim</span>
+              </label>
+              <span className="form-hint">
+                Se sim, esta denúncia não vai ao comitê: vai a quem é dono da
+                conta, que confere quem ela envolve antes de qualquer outra
+                pessoa ver.
               </span>
-            </label>
+            </fieldset>
             {error && <p className="form-error">{error}</p>}
             <div className="form-actions">
               <Button type="submit" disabled={saving}>

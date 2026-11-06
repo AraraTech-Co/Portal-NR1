@@ -204,15 +204,42 @@ class EthicsController {
         return;
       }
 
-      if (!category || !description?.trim()) {
-        res.status(400).json({
-          message: "Informe category e description.",
-        });
+      /*
+        Todos os campos são obrigatórios, e a resposta diz qual faltou. A
+        categoria vinha pré-escolhida na tela e as perguntas vinham com
+        resposta marcada: quem não mexia mandava o que não escolheu. [C1-4]
+      */
+      if (!category) {
+        res.status(400).json({ message: "Escolha a categoria.", field: "category" });
         return;
       }
       if (!isReportCategory(category)) {
         res.status(400).json({
-          message: `category inválida. Use: ${REPORT_CATEGORY_VALUES.join(", ")}.`,
+          message: `Categoria inválida. Use: ${REPORT_CATEGORY_VALUES.join(", ")}.`,
+          field: "category",
+        });
+        return;
+      }
+      if (typeof description !== "string" || !description.trim()) {
+        res.status(400).json({ message: "Descreva o que aconteceu.", field: "description" });
+        return;
+      }
+      if (typeof committee_involved !== "boolean") {
+        res.status(400).json({
+          message: "Responda se alguém do comitê de ética está envolvido.",
+          field: "committee_involved",
+        });
+        return;
+      }
+      /*
+        Dentro do portal a pessoa escolhe se identificar ou não, e precisa
+        responder. No canal público não há sessão: a denúncia é sempre
+        anônima e a pergunta nem aparece. [S4-L]
+      */
+      if (authReq.actor && typeof is_anonymous !== "boolean") {
+        res.status(400).json({
+          message: "Responda se quer se identificar.",
+          field: "is_anonymous",
         });
         return;
       }
@@ -284,7 +311,7 @@ class EthicsController {
         accessCodeHash,
         status: REPORT_STATUSES.RECEIVED,
         establishmentId: est.id,
-        committeeInvolved: committee_involved === true,
+        committeeInvolved: committee_involved,
         /* Quem define a gravidade é o servidor, pela categoria. [C1-1] */
         severity,
         severitySource: "AUTO",
