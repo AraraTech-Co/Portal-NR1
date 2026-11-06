@@ -1,5 +1,5 @@
 import { FormEvent, Fragment, useCallback, useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   createAnnouncement,
   fetchAnnouncementReaders,
@@ -511,6 +511,14 @@ export function AnnouncementsPage() {
                                     >
                                       Retirar do mural
                                     </Button>
+                                    {/* O aviso no quadro da loja, em A4. [C1-8] */}
+                                    <Link
+                                      className="btn btn-secondary"
+                                      to={`/mural/${encodeURIComponent(r.id)}/cartaz`}
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      Imprimir cartaz
+                                    </Link>
                                   </>
                                 )}
                                 {canPublish && (
