@@ -2,6 +2,15 @@ import { AccountRole, HazardCategory, HazardOrigin, HazardStatus, PrismaClient, 
 import bcrypt from "bcryptjs";
 import { defaultMethodologyVersion } from "./matriz-padrao";
 import { senhaInicial } from "./senha-inicial";
+import { exigirBancoLocal } from "./banco-local";
+
+/*
+  Antes de qualquer conexão: sem SEED_ADMIN_PASSWORD, o seed grava a senha
+  conhecida dos testes no `master` e no `admin`, então só roda em banco local.
+*/
+if (!process.env.SEED_ADMIN_PASSWORD?.trim()) {
+  exigirBancoLocal(undefined, "Seed sem SEED_ADMIN_PASSWORD");
+}
 
 const prisma = new PrismaClient();
 

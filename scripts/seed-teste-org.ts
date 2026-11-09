@@ -38,7 +38,7 @@ import {
 } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { orgRoleToAccountRole } from "../server/src/helper/auth";
-import { exigirBancoLocal } from "./banco-local";
+import { exigirBancoLocal } from "../prisma/banco-local";
 
 /* Antes de qualquer conexão: o seed de teste só grava em banco local. */
 exigirBancoLocal();
