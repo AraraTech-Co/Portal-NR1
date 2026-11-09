@@ -3,7 +3,7 @@ import { AuthProvider, useAuth } from "@/auth/AuthContext";
 import { AppShell } from "@/layout/AppShell";
 import { NAV_GROUPS } from "@/layout/nav";
 import { CANAL_BASE } from "@/lib/canal";
-import { canReadModule } from "@/lib/module-access";
+import { canOpenModule } from "@/lib/module-access";
 import { AccountPage } from "@/pages/AccountPage";
 import { ActionsPage } from "@/pages/ActionsPage";
 import { AepPage } from "@/pages/AepPage";
@@ -89,7 +89,7 @@ function RequireModuleAccess() {
   const { pathname } = useLocation();
   const segment = pathname.replace(/^\//, "").split("/")[0] ?? "";
   const moduleId = PATH_TO_MODULE[segment];
-  if (moduleId && !canReadModule(user?.modules, moduleId)) {
+  if (moduleId && !canOpenModule(user, moduleId)) {
     return <Navigate to="/" replace />;
   }
   return <Outlet />;

@@ -15,6 +15,7 @@ import { formatDay, PAYSLIP_KIND_LABEL } from "@/lib/labels";
 import "@/components/data-table.css";
 import "@/components/form.css";
 import { LoadingState } from "@/components/LoadingState";
+import { useModuleAccess } from "@/lib/module-access";
 
 const MONTHS = [
   "Janeiro",
@@ -34,6 +35,8 @@ const MONTHS = [
 export function PayslipDetailPage() {
   const { id = "" } = useParams();
   const { user } = useAuth();
+  /* Perguntar segue a matriz; quem só consulta o próprio vê e baixa. [C2-1] */
+  const { canRead: podePerguntar } = useModuleAccess("holerites");
   const [payslip, setPayslip] = useState<PayslipDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -136,7 +139,8 @@ export function PayslipDetailPage() {
            precisam saber. [CB-28] */
         <p className="form-hint">
           <strong>Publicado fora do padrão de conferência</strong> por{" "}
-          {payslip.overriddenBy?.name ?? "quem publicou"}: {payslip.overrideReason}
+          {payslip.overriddenBy?.name ?? "quem publicou"}:{" "}
+          {payslip.overrideReason}
         </p>
       )}
 
@@ -198,23 +202,25 @@ export function PayslipDetailPage() {
           </div>
         ))}
 
-        <form className="form-grid" onSubmit={onAsk}>
-          <label className="form-field">
-            Perguntar sobre este holerite
-            <textarea
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              disabled={busy}
-              required
-            />
-          </label>
-          {formError && <p className="form-error">{formError}</p>}
-          <div className="form-actions">
-            <Button type="submit" disabled={busy}>
-              {busy ? "Enviando…" : "Enviar dúvida"}
-            </Button>
-          </div>
-        </form>
+        {podePerguntar && (
+          <form className="form-grid" onSubmit={onAsk}>
+            <label className="form-field">
+              Perguntar sobre este holerite
+              <textarea
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                disabled={busy}
+                required
+              />
+            </label>
+            {formError && <p className="form-error">{formError}</p>}
+            <div className="form-actions">
+              <Button type="submit" disabled={busy}>
+                {busy ? "Enviando…" : "Enviar dúvida"}
+              </Button>
+            </div>
+          </form>
+        )}
       </section>
     </div>
   );

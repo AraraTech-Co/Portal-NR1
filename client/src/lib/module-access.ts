@@ -16,6 +16,17 @@ export function canReadModule(
   return level === "read" || level === "write";
 }
 
+/**
+ * A tela do módulo abre: pela matriz, ou pela consulta própria (ver só o que
+ * é seu). Menu e rota usam isto; escrever continua pela matriz. [C2-1]
+ */
+export function canOpenModule(
+  user: { modules?: Record<string, ModuleAccessLevel>; own_modules?: string[] } | null | undefined,
+  moduleId: string,
+): boolean {
+  return canReadModule(user?.modules, moduleId) || (user?.own_modules ?? []).includes(moduleId);
+}
+
 export function canWriteModule(
   modules: Record<string, ModuleAccessLevel> | undefined,
   moduleId: string,

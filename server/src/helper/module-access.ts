@@ -152,6 +152,40 @@ export function canSeeAllInModule(roleKey: string, moduleId: ModuleId): boolean 
   return (SEES_ALL_READ_ONLY[role] ?? []).includes(moduleId);
 }
 
+/**
+ * Consulta própria: todo funcionário ativo vê os próprios holerites, férias
+ * e atestados, qualquer que seja o papel — inclusive gerente, supervisor e
+ * SST, que a matriz deixa sem o módulo. O "sem acesso" da matriz é sobre o
+ * registro DOS OUTROS. [C2-1]
+ *
+ * É só consulta (ver e baixar o que é seu). Não dá escrita, não dá o
+ * registro de colega e não vale para o fiscal, que não tem ficha na empresa.
+ * Pedir férias, enviar atestado ou perguntar sobre o holerite continuam
+ * seguindo a matriz.
+ */
+export const OWN_CONSULTATION_MODULES: readonly ModuleId[] = ["holerites", "ferias", "atestados"];
+
+/**
+ * Pode consultar o próprio registro no módulo. `hasActiveProfile` é a ficha
+ * ativa nesta empresa (sem desligamento), conferida por quem chama.
+ */
+export function canConsultOwn(
+  roleKey: string,
+  moduleId: ModuleId,
+  hasActiveProfile: boolean,
+): boolean {
+  if (canReadModule(roleKey, moduleId)) return true;
+  if (!hasActiveProfile || isReadOnlyRole(roleKey)) return false;
+  return OWN_CONSULTATION_MODULES.includes(moduleId);
+}
+
+/** Módulos que o papel só alcança pela consulta própria — para o menu. [C2-1] */
+export function ownConsultationOnly(roleKey: string, hasActiveProfile: boolean): ModuleId[] {
+  return OWN_CONSULTATION_MODULES.filter(
+    (m) => !canReadModule(roleKey, m) && canConsultOwn(roleKey, m, hasActiveProfile),
+  );
+}
+
 /** Mapa módulo → read|write (omite none) para a sessão do client. */
 export function modulesForRole(
   roleKey: string,
