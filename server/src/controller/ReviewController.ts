@@ -4,6 +4,7 @@ import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { canManageModule } from "../helper/module-access";
 import { SURVEY_STATUSES } from "../constants";
 import type { AuthRequest } from "../types/auth";
+import { managesPerson, scopeOfRequest } from "../helper/unit-scope";
 
 function fail(res: Response, err: unknown) {
   const e = err as { status?: number; message?: string };
@@ -76,6 +77,21 @@ class ReviewController {
           message: "Informe reviewer_user_id e reviewee_user_id.",
         });
         return;
+      }
+      /*
+        Avaliador e avaliado são desta empresa e estão ao alcance de quem
+        distribui; fora disso, a mesma resposta de pessoa inexistente. [C2-13]
+      */
+      const escopo = await scopeOfRequest(req as AuthRequest);
+      for (const pessoa of [reviewer_user_id, reviewee_user_id]) {
+        const vinculo = await prisma.membership.findFirst({
+          where: { userId: pessoa, organizationId: orgId },
+          select: { id: true },
+        });
+        if (!vinculo || !(await managesPerson(escopo, pessoa))) {
+          res.status(400).json({ message: "Pessoa não encontrada nesta empresa." });
+          return;
+        }
       }
       const assignment = await prisma.reviewAssignment.create({
         data: {

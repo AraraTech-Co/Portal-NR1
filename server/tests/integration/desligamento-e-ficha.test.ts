@@ -241,7 +241,8 @@ describe("a ficha da pessoa [S6-C]", () => {
     const doColega = await request(app)
       .get(`/api/employee-profiles/${p.profileId}/ficha`)
       .set(as(colaborador.token));
-    expect(doColega.status).toBe(403);
+    // Fora do alcance responde como ficha inexistente. [C2-13]
+    expect(doColega.status).toBe(404);
   });
 
   it("o fiscal vê a ficha sem CPF nem telefone", async () => {

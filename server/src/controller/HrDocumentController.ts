@@ -3,6 +3,13 @@ import prisma from "../model/prisma";
 import { HrDocument } from "../model/schema/HrDocument/HrDocument";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
+import {
+  currentUnitOf,
+  managesPerson,
+  managesPersonRecord,
+  profileScope,
+  scopeOfRequest,
+} from "../helper/unit-scope";
 import { canManageModule, isReadOnlyRole } from "../helper/module-access";
 import {
   assertSize,
@@ -45,6 +52,7 @@ class HrDocumentController {
       const orgId = actorOrgId(auth);
       const userId = actorUserId(auth);
       const kind = req.query.kind as string | undefined;
+      const escopo = await scopeOfRequest(auth);
 
       const rows = await prisma.hrDocument.findMany({
         where: {
@@ -56,7 +64,16 @@ class HrDocumentController {
               ? {
                   OR: [{ targetUserId: null }, { targetUserId: userId }],
                 }
-              : {}),
+              : escopo.wholeOrg
+                ? {}
+                : /* Pessoal de terceiro: só das unidades geridas. [C2-13] */
+                  {
+                    OR: [
+                      { targetUserId: null },
+                      { targetUserId: userId },
+                      { establishmentId: { in: escopo.managed } },
+                    ],
+                  }),
         },
         orderBy: { createdAt: "desc" },
         include: {
@@ -87,6 +104,7 @@ class HrDocumentController {
       const auth = req as AuthRequest;
       const orgId = actorOrgId(auth);
       const userId = actorUserId(auth);
+      const escopo = await scopeOfRequest(auth);
       const doc = await prisma.hrDocument.findFirst({
         where: { id: req.params.id, organizationId: orgId },
         include: {
@@ -94,6 +112,14 @@ class HrDocumentController {
           target: { select: { id: true, name: true } },
           acks: isRh(auth) || isAuditor(auth)
             ? {
+                /* A ciência de quem está fora das unidades geridas não aparece. [C2-13] */
+                ...(escopo.wholeOrg
+                  ? {}
+                  : {
+                      where: {
+                        user: { employeeProfiles: { some: { organizationId: orgId, ...profileScope(escopo) } } },
+                      },
+                    }),
                 include: {
                   user: { select: { id: true, name: true } },
                 },
@@ -105,12 +131,12 @@ class HrDocumentController {
         res.status(404).json({ message: "Documento não encontrado." });
         return;
       }
-      if (
-        !isRh(auth) &&
-        doc.targetUserId &&
-        (isAuditor(auth) || doc.targetUserId !== userId)
-      ) {
-        res.status(403).json({ message: "Sem permissão." });
+      const deOutraPessoa = doc.targetUserId !== null && doc.targetUserId !== userId;
+      const alcanca =
+        !deOutraPessoa || (isRh(auth) && !isAuditor(auth) && managesPersonRecord(escopo, doc));
+      /* Documento pessoal fora do alcance responde como inexistente. [C2-13] */
+      if (!alcanca) {
+        res.status(404).json({ message: "Documento não encontrado." });
         return;
       }
 
@@ -183,7 +209,8 @@ class HrDocumentController {
         const m = await prisma.membership.findFirst({
           where: { userId: target_user_id, organizationId: orgId },
         });
-        if (!m) {
+        /* Fora da gestão de quem publica responde como destinatário inexistente. [C2-13] */
+        if (!m || !(await managesPerson(await scopeOfRequest(auth), target_user_id))) {
           res.status(400).json({ message: "Destinatário inválido." });
           return;
         }
@@ -211,6 +238,8 @@ class HrDocumentController {
         sizeBytes: data.length,
         requiresAck: Boolean(requires_ack),
         targetUserId: target_user_id ?? null,
+        /* Pessoal: a unidade do destinatário quando nasce. Geral: sem unidade. [C2-13] */
+        establishmentId: target_user_id ? await currentUnitOf(orgId, target_user_id) : null,
         publishedById: userId,
       });
 

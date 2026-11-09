@@ -23,6 +23,16 @@ import {
 } from "../constants";
 import { sendPrivateFile } from "../helper/send-private-file";
 import type { AuthRequest } from "../types/auth";
+import { currentUnitOf, managesPerson, scopeOfRequest } from "../helper/unit-scope";
+
+/** A pessoa é desta empresa e está ao alcance de quem registra. [C2-13] */
+async function pessoaAlcancavel(auth: AuthRequest, orgId: string, userId: string): Promise<boolean> {
+  const vinculo = await prisma.membership.findFirst({
+    where: { userId, organizationId: orgId },
+    select: { id: true },
+  });
+  return vinculo !== null && (await managesPerson(await scopeOfRequest(auth), userId));
+}
 
 function fail(res: Response, err: unknown) {
   const e = err as { status?: number; message?: string };
@@ -176,6 +186,21 @@ class ComplianceController {
         res.status(400).json({ message: "Informe name." });
         return;
       }
+      /* Pessoa de outra empresa (ou fora do alcance): inexistente. [C2-13] */
+      if (targetUserId !== actorId && !(await pessoaAlcancavel(auth, orgId, targetUserId))) {
+        res.status(400).json({ message: "Pessoa não encontrada nesta empresa." });
+        return;
+      }
+      /* Exigência de outra empresa: inexistente. */
+      if (body.requirement_id) {
+        const exigencia = await prisma.jobRoleRequirement.count({
+          where: { id: String(body.requirement_id), organizationId: orgId },
+        });
+        if (!exigencia) {
+          res.status(400).json({ message: "Exigência não encontrada." });
+          return;
+        }
+      }
 
       let storagePath: string | null = null;
       let fileName: string | null = null;
@@ -198,6 +223,8 @@ class ComplianceController {
         data: {
           organizationId: orgId,
           userId: targetUserId,
+          /* A unidade da pessoa quando o certificado chega. [C2-13] */
+          establishmentId: await currentUnitOf(orgId, targetUserId),
           requirementId: (body.requirement_id as string) || null,
           name: String(body.name).trim(),
           storagePath,
@@ -332,6 +359,11 @@ class ComplianceController {
         res.status(400).json({ message: "Informe user_id." });
         return;
       }
+      /* Pessoa de outra empresa (ou fora do alcance): inexistente. [C2-13] */
+      if (!(await pessoaAlcancavel(auth, orgId, String(user_id)))) {
+        res.status(400).json({ message: "Pessoa não encontrada nesta empresa." });
+        return;
+      }
       const resolvedKind =
         kind && isExamKind(String(kind)) ? String(kind) : EXAM_KIND_DEFAULT;
       if (kind && !isExamKind(String(kind))) {
@@ -362,6 +394,8 @@ class ComplianceController {
         data: {
           organizationId: orgId,
           userId: String(user_id),
+          /* A unidade da pessoa quando o exame é registrado. [C2-13] */
+          establishmentId: await currentUnitOf(orgId, String(user_id)),
           kind: resolvedKind as never,
           performedAt: performed_at
             ? new Date(String(performed_at))

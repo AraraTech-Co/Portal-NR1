@@ -4,6 +4,7 @@ import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { canManageModule } from "../helper/module-access";
 import { writeAudit } from "../helper/audit";
 import type { AuthRequest } from "../types/auth";
+import { currentUnitOf, managesPerson, personRecordScope, scopeOfRequest } from "../helper/unit-scope";
 
 function fail(res: Response, err: unknown) {
   const e = err as { status?: number; message?: string };
@@ -29,10 +30,12 @@ class TimeEntryController {
       const auth = req as AuthRequest;
       const orgId = actorOrgId(auth);
       const userId = actorUserId(auth);
+      const escopo = await scopeOfRequest(auth);
       const rows = await prisma.timeEntry.findMany({
         where: {
           organizationId: orgId,
-          ...(!isRh(auth) ? { userId } : {}),
+          /* Quem cuida do banco de horas vê o das unidades sob sua gestão. [C2-13] */
+          ...(!isRh(auth) ? { userId } : personRecordScope(escopo)),
           ...(req.query.user_id && isRh(auth)
             ? { userId: String(req.query.user_id) }
             : {}),
@@ -103,7 +106,8 @@ class TimeEntryController {
         where: { organizationId: orgId, userId: targetUserId },
         select: { id: true },
       });
-      if (!alvo) {
+      /* Fora da gestão de quem lança responde como pessoa inexistente. [C2-13] */
+      if (!alvo || !(await managesPerson(await scopeOfRequest(auth), targetUserId))) {
         res.status(400).json({ message: "Pessoa não encontrada nesta empresa." });
         return;
       }
@@ -112,6 +116,8 @@ class TimeEntryController {
         data: {
           organizationId: orgId,
           userId: targetUserId,
+          /* A unidade da pessoa no lançamento. [C2-13] */
+          establishmentId: await currentUnitOf(orgId, targetUserId),
           day: dayDate,
           in1: blank(in1 as string),
           out1: blank(out1 as string),

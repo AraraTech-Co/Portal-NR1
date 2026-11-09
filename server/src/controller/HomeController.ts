@@ -21,6 +21,7 @@ import {
 } from "../helper/ethics-access";
 import { ethicsDeadline } from "../helper/ethics-deadline";
 import type { AuthRequest } from "../types/auth";
+import { managedUnitFilter, scopeOfRequest } from "../helper/unit-scope";
 
 function fail(res: Response, err: unknown) {
   const e = err as { status?: number; message?: string };
@@ -107,6 +108,9 @@ class HomeController {
       const pode = (moduleId: string) => canReadModule(actor.permission, moduleId);
       const cuida = (moduleId: string) => canManageModule(actor.permission, moduleId);
       const veTodos = (moduleId: string) => canSeeAllInModule(actor.permission, moduleId);
+      /* Contagens de registro de terceiro: só das unidades geridas. [C2-13] */
+      const escopo = await scopeOfRequest(auth);
+      const daGestao = managedUnitFilter(escopo);
 
       // ---------- o que é meu ----------
       const meu: Card[] = [];
@@ -209,7 +213,7 @@ class HomeController {
 
       if (cuida("atestados")) {
         const pendentes = await prisma.medicalCertificate.count({
-          where: { organizationId: orgId, status: "PENDING", userId: { not: userId } },
+          where: { organizationId: orgId, status: "PENDING", userId: { not: userId }, ...daGestao },
         });
         if (pendentes > 0) {
           mesa.push({
@@ -224,7 +228,7 @@ class HomeController {
 
       if (cuida("ferias")) {
         const pendentes = await prisma.leaveRequest.count({
-          where: { organizationId: orgId, status: "REQUESTED" },
+          where: { organizationId: orgId, status: "REQUESTED", ...daGestao },
         });
         if (pendentes > 0) {
           mesa.push({

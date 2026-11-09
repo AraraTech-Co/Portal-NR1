@@ -15,6 +15,31 @@ import {
   isReadOnlyRole,
 } from "../helper/module-access";
 import type { AuthRequest } from "../types/auth";
+import { profileScope, scopeOfRequest, type UnitScope } from "../helper/unit-scope";
+
+/**
+ * A ficha de outra pessoa está ao alcance de quem vê o quadro: a empresa
+ * inteira para a central; para gerente, supervisor e ADM loja, só as fichas
+ * cuja unidade de trabalho atual é gerida. Fora disso responde como
+ * inexistente. [C2-13]
+ */
+async function fichaNoEscopo(escopo: UnitScope, orgId: string, profileId: string): Promise<boolean> {
+  if (escopo.wholeOrg) return true;
+  const n = await prisma.employeeProfile.count({
+    where: { id: profileId, organizationId: orgId, ...profileScope(escopo) },
+  });
+  return n > 0;
+}
+
+/** A função escolhida fica numa unidade gerida (para o recortado). [C2-13] */
+async function funcaoNoEscopo(escopo: UnitScope, orgId: string, jobRoleId: string): Promise<boolean> {
+  if (escopo.wholeOrg) return true;
+  if (!escopo.managed.length) return false;
+  const n = await prisma.jobRole.count({
+    where: { id: jobRoleId, organizationId: orgId, sector: { establishmentId: { in: escopo.managed } } },
+  });
+  return n > 0;
+}
 
 /**
  * CPF da ficha: vazio é aceito (fica pendente); preenchido, tem de ser CPF de
@@ -179,11 +204,14 @@ class EmployeeProfileController {
         return;
       }
 
+      const escopo = await scopeOfRequest(auth);
       const rows = await prisma.employeeProfile.findMany({
         where: {
           organizationId: orgId,
           ...(includeDismissed ? {} : { dismissedAt: null }),
           ...(jobRoleId ? { jobRoleId } : {}),
+          /* Gerente, supervisor e ADM loja: as fichas das unidades geridas. [C2-13] */
+          ...profileScope(escopo),
         },
         orderBy: { createdAt: "desc" },
         include: {
@@ -209,12 +237,12 @@ class EmployeeProfileController {
           jobRole: { select: { id: true, name: true, sectorId: true } },
         },
       });
-      if (!profile) {
+      const alcanca =
+        profile &&
+        (profile.userId === actorUserId(auth) ||
+          (seesAll(auth) && (await fichaNoEscopo(await scopeOfRequest(auth), orgId, profile.id))));
+      if (!profile || !alcanca) {
         res.status(404).json({ message: "Perfil não encontrado." });
-        return;
-      }
-      if (!seesAll(auth) && profile.userId !== actorUserId(auth)) {
-        res.status(403).json({ message: "Sem permissão para ver este perfil." });
         return;
       }
       res.json({ profile: forViewer(auth, profile) });
@@ -255,13 +283,12 @@ class EmployeeProfileController {
           },
         },
       });
-      if (!profile) {
+      const propria = profile?.userId === userId;
+      const alcanca =
+        profile &&
+        (propria || (seesAll(auth) && (await fichaNoEscopo(await scopeOfRequest(auth), orgId, profile.id))));
+      if (!profile || !alcanca) {
         res.status(404).json({ message: "Ficha não encontrada." });
-        return;
-      }
-      const propria = profile.userId === userId;
-      if (!propria && !seesAll(auth)) {
-        res.status(403).json({ message: "Sem permissão para ver esta ficha." });
         return;
       }
 
@@ -507,13 +534,22 @@ class EmployeeProfileController {
         return;
       }
 
+      /*
+        Gerente e ADM loja só cadastram numa função das unidades geridas: sem
+        função, a ficha ficaria fora do alcance de quem a criou. [C2-13]
+      */
+      const escopoCriacao = await scopeOfRequest(auth);
+      if (!escopoCriacao.wholeOrg && !job_role_id) {
+        res.status(400).json({ message: "Escolha a função, numa unidade sob sua responsabilidade." });
+        return;
+      }
       if (job_role_id) {
         const role = await new JobRole().read.one({
           id: job_role_id,
           organizationId: orgId,
           archivedAt: null,
         });
-        if (!role) {
+        if (!role || !(await funcaoNoEscopo(escopoCriacao, orgId, job_role_id))) {
           res.status(400).json({ message: "Função (job_role) inválida." });
           return;
         }
@@ -555,14 +591,21 @@ class EmployeeProfileController {
         id: req.params.id,
         organizationId: orgId,
       });
-      if (!current) {
+      const body = req.body as Record<string, unknown>;
+      const rh = isRh(auth);
+      const isOwner = current?.userId === actorUserId(auth);
+      const escopo = await scopeOfRequest(auth);
+      /*
+        Fora do alcance responde como inexistente; visível mas sem poder de
+        editar (o supervisor vê a equipe), recusa. [C2-13]
+      */
+      const visivel =
+        current &&
+        (isOwner || ((rh || seesAll(auth)) && (await fichaNoEscopo(escopo, orgId, current.id))));
+      if (!current || !visivel) {
         res.status(404).json({ message: "Perfil não encontrado." });
         return;
       }
-
-      const body = req.body as Record<string, unknown>;
-      const rh = isRh(auth);
-      const isOwner = current.userId === actorUserId(auth);
 
       // Sem RH: só telefone próprio.
       if (!rh) {
@@ -582,13 +625,21 @@ class EmployeeProfileController {
         return;
       }
 
+      /*
+        Gerente e ADM loja não levam a pessoa para fora das unidades geridas:
+        a nova função fica numa delas, e tirar a função não é com eles. [C2-13]
+      */
+      if (!escopo.wholeOrg && body.job_role_id !== undefined && !body.job_role_id) {
+        res.status(400).json({ message: "Função (job_role) inválida." });
+        return;
+      }
       if (body.job_role_id) {
         const role = await new JobRole().read.one({
           id: body.job_role_id as string,
           organizationId: orgId,
           archivedAt: null,
         });
-        if (!role) {
+        if (!role || !(await funcaoNoEscopo(escopo, orgId, body.job_role_id as string))) {
           res.status(400).json({ message: "Função (job_role) inválida." });
           return;
         }

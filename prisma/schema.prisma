@@ -132,6 +132,7 @@ model User {
   trainingAttendances      TrainingAttendance[] @relation("AttendanceWorker")
   serviceOrdersIssued ServiceOrder[]     @relation("ServiceOrderIssuer")
   serviceOrderAcks    ServiceOrderAck[]  @relation("ServiceOrderAckWorker")
+  managedEstablishmentsAssigned ManagedEstablishment[] @relation("ManagedEstablishmentAuthor")
 }
 
 /// MASTER = papel na *empresa* (Organization): acima de OWNER, controla todas as contas.
@@ -227,6 +228,7 @@ model Organization {
   serviceOrders   ServiceOrder[]
   serviceOrderAcks ServiceOrderAck[]
   trainingSessions TrainingSession[]
+  managedEstablishments ManagedEstablishment[]
 }
 
 /// Vínculo pessoa <-> organização. Modelado N:N desde já (consultor multi-org),
@@ -258,6 +260,8 @@ model Membership {
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   suspendedBy  User?        @relation("MembershipSuspender", fields: [suspendedById], references: [id])
+  /// Unidades sob responsabilidade deste vínculo (gerente, supervisor, ADM loja). [C2-13]
+  managedEstablishments ManagedEstablishment[]
 
   @@unique([userId, organizationId])
   @@index([organizationId, role])
@@ -427,6 +431,16 @@ model Establishment {
   ethicsReports  EthicsReport[]
   announcements  AnnouncementEstablishment[]
   ergonomicComplaints ErgonomicComplaint[]
+  /// Quem responde por esta unidade (gerente, supervisor, ADM loja). [C2-13]
+  managers            ManagedEstablishment[]
+  /// Registros individuais gravados com a unidade da pessoa na criação. [C2-13]
+  payslips            Payslip[]
+  leaveRequests       LeaveRequest[]
+  timeEntries         TimeEntry[]
+  medicalCertificates MedicalCertificate[]
+  hrDocuments         HrDocument[]
+  workerCertificates  WorkerCertificate[]
+  occupationalExams   OccupationalExam[]
 
   @@index([organizationId, archivedAt])
 }
@@ -1842,15 +1856,22 @@ model HrDocument {
   requiresAck    Boolean        @default(false)
   /// Nulo = documento geral, para toda a organização.
   targetUserId   String?
+  /// Unidade de trabalho da pessoa quando o registro nasceu. Nula nos
+  /// anteriores: esses ficam com a gestão central até a classificação, sem
+  /// seguir a ficha atual (transferir a pessoa não leva o histórico). [C2-13]
+  establishmentId String?
   publishedById  String
   createdAt      DateTime       @default(now())
 
   organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  establishment Establishment? @relation(fields: [establishmentId], references: [id], onDelete: SetNull)
   target       User?           @relation("HrDocumentTarget", fields: [targetUserId], references: [id])
   publishedBy  User            @relation("HrDocumentAuthor", fields: [publishedById], references: [id])
   acks         HrDocumentAck[]
 
   @@index([organizationId, createdAt])
+
+  @@index([organizationId, establishmentId])
 }
 
 model HrDocumentAck {
@@ -1881,6 +1902,10 @@ model Payslip {
   id             String   @id @default(uuid())
   organizationId String
   userId         String
+  /// Unidade de trabalho da pessoa quando o registro nasceu. Nula nos
+  /// anteriores: esses ficam com a gestão central até a classificação, sem
+  /// seguir a ficha atual (transferir a pessoa não leva o histórico). [C2-13]
+  establishmentId String?
   referenceMonth Int
   referenceYear  Int
   /// Os publicados antes do tipo existir eram todos da folha mensal. [B4-G]
@@ -1897,6 +1922,7 @@ model Payslip {
   overriddenById String?
 
   organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  establishment Establishment? @relation(fields: [establishmentId], references: [id], onDelete: SetNull)
   user         User              @relation("PayslipOwner", fields: [userId], references: [id], onDelete: Cascade)
   publishedBy  User              @relation("PayslipPublisher", fields: [publishedById], references: [id])
   overriddenBy User?             @relation("PayslipOverride", fields: [overriddenById], references: [id])
@@ -1905,6 +1931,8 @@ model Payslip {
 
   @@unique([organizationId, userId, referenceYear, referenceMonth, kind])
   @@index([organizationId, referenceYear, referenceMonth])
+
+  @@index([organizationId, establishmentId])
 }
 
 /// A versão que o trabalhador viu antes da correção.
@@ -1962,6 +1990,10 @@ model MedicalCertificate {
   id             String            @id @default(uuid())
   organizationId String
   userId         String
+  /// Unidade de trabalho da pessoa quando o registro nasceu. Nula nos
+  /// anteriores: esses ficam com a gestão central até a classificação, sem
+  /// seguir a ficha atual (transferir a pessoa não leva o histórico). [C2-13]
+  establishmentId String?
   /// CID é dado de saúde: opcional, e a lista da UI existe para não exigir
   /// que a pessoa saiba o código.
   cid            String?
@@ -1983,10 +2015,13 @@ model MedicalCertificate {
   createdAt      DateTime          @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  establishment Establishment? @relation(fields: [establishmentId], references: [id], onDelete: SetNull)
   user         User         @relation("CertificateOwner", fields: [userId], references: [id], onDelete: Cascade)
   reviewedBy   User?        @relation("CertificateReviewer", fields: [reviewedById], references: [id])
 
   @@index([organizationId, status])
+
+  @@index([organizationId, establishmentId])
 }
 
 // ---------- Férias e licenças ----------
@@ -2008,6 +2043,10 @@ model LeaveRequest {
   id             String      @id @default(uuid())
   organizationId String
   userId         String
+  /// Unidade de trabalho da pessoa quando o registro nasceu. Nula nos
+  /// anteriores: esses ficam com a gestão central até a classificação, sem
+  /// seguir a ficha atual (transferir a pessoa não leva o histórico). [C2-13]
+  establishmentId String?
   kind           LeaveKind   @default(VACATION)
   startDate      DateTime
   endDate        DateTime
@@ -2020,10 +2059,13 @@ model LeaveRequest {
   createdAt      DateTime    @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  establishment Establishment? @relation(fields: [establishmentId], references: [id], onDelete: SetNull)
   user         User         @relation("LeaveOwner", fields: [userId], references: [id], onDelete: Cascade)
   decidedBy    User?        @relation("LeaveDecider", fields: [decidedById], references: [id])
 
   @@index([organizationId, status])
+
+  @@index([organizationId, establishmentId])
 }
 
 // ---------- Convocações ----------
@@ -2250,6 +2292,10 @@ model WorkerCertificate {
   id             String            @id @default(uuid())
   organizationId String
   userId         String
+  /// Unidade de trabalho da pessoa quando o registro nasceu. Nula nos
+  /// anteriores: esses ficam com a gestão central até a classificação, sem
+  /// seguir a ficha atual (transferir a pessoa não leva o histórico). [C2-13]
+  establishmentId String?
   requirementId  String?
   name           String
   storagePath    String?
@@ -2262,11 +2308,14 @@ model WorkerCertificate {
   createdAt      DateTime          @default(now())
 
   organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  establishment Establishment? @relation(fields: [establishmentId], references: [id], onDelete: SetNull)
   user         User                @relation("WorkerCertificateOwner", fields: [userId], references: [id], onDelete: Cascade)
   requirement  JobRoleRequirement? @relation(fields: [requirementId], references: [id])
   reviewedBy   User?               @relation("WorkerCertificateReviewer", fields: [reviewedById], references: [id])
 
   @@index([organizationId, status])
+
+  @@index([organizationId, establishmentId])
 }
 
 enum ExamKind {
@@ -2282,6 +2331,10 @@ model OccupationalExam {
   id             String   @id @default(uuid())
   organizationId String
   userId         String
+  /// Unidade de trabalho da pessoa quando o registro nasceu. Nula nos
+  /// anteriores: esses ficam com a gestão central até a classificação, sem
+  /// seguir a ficha atual (transferir a pessoa não leva o histórico). [C2-13]
+  establishmentId String?
   kind           ExamKind @default(PERIODIC)
   performedAt    DateTime?
   dueAt          DateTime?
@@ -2292,9 +2345,12 @@ model OccupationalExam {
   updatedAt      DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  establishment Establishment? @relation(fields: [establishmentId], references: [id], onDelete: SetNull)
   user         User         @relation("ExamOwner", fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, dueAt])
+
+  @@index([organizationId, establishmentId])
 }
 
 // ---------- Clima organizacional ----------
@@ -2422,6 +2478,10 @@ model TimeEntry {
   id             String   @id @default(uuid())
   organizationId String
   userId         String
+  /// Unidade de trabalho da pessoa quando o registro nasceu. Nula nos
+  /// anteriores: esses ficam com a gestão central até a classificação, sem
+  /// seguir a ficha atual (transferir a pessoa não leva o histórico). [C2-13]
+  establishmentId String?
   day            DateTime
   in1            String?
   out1           String?
@@ -2436,6 +2496,7 @@ model TimeEntry {
   createdAt      DateTime @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  establishment Establishment? @relation(fields: [establishmentId], references: [id], onDelete: SetNull)
   user         User         @relation("TimeEntryOwner", fields: [userId], references: [id], onDelete: Cascade)
   createdBy    User?        @relation("TimeEntryAuthor", fields: [createdById], references: [id])
 
@@ -2447,6 +2508,8 @@ model TimeEntry {
     [CB-66]
   */
   @@index([userId, day])
+
+  @@index([organizationId, establishmentId])
 }
 
 // ---------- Gamificação ----------
@@ -2630,4 +2693,25 @@ model AuthAttempt {
 
   @@index([at])
   @@index([userId, at])
+}
+
+/// Unidade sob a responsabilidade de um gerente, supervisor ou ADM loja.
+/// Atribuída expressamente por Master, Dono ou RH; nunca deduzida da função,
+/// da cidade ou do nome. Sem nenhuma, o gestor não vê registros de terceiros
+/// que dependem de unidade. [C2-13]
+model ManagedEstablishment {
+  id              String   @id @default(uuid())
+  organizationId  String
+  membershipId    String
+  establishmentId String
+  createdById     String
+  createdAt       DateTime @default(now())
+
+  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  membership    Membership    @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  establishment Establishment @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+  createdBy     User          @relation("ManagedEstablishmentAuthor", fields: [createdById], references: [id])
+
+  @@unique([membershipId, establishmentId])
+  @@index([organizationId, establishmentId])
 }

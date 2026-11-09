@@ -5,6 +5,13 @@ import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
 import { canManageModule } from "../helper/module-access";
 import { notify } from "../helper/notify";
+import {
+  currentUnitOf,
+  managesPersonRecord,
+  NOT_FOUND_BODY,
+  personRecordScope,
+  scopeOfRequest,
+} from "../helper/unit-scope";
 import { NotificationKind } from "@prisma/client";
 import { LEAVE_KIND_LABEL } from "../helper/rotulos";
 import {
@@ -85,11 +92,13 @@ class LeaveController {
       const orgId = actorOrgId(auth);
       const userId = actorUserId(auth);
       const status = req.query.status as string | undefined;
+      const escopo = await scopeOfRequest(auth);
 
       const rows = await prisma.leaveRequest.findMany({
         where: {
           organizationId: orgId,
-          ...(!isRh(auth) ? { userId } : {}),
+          /* Quem decide vê os pedidos das unidades sob sua gestão. [C2-13] */
+          ...(!isRh(auth) ? { userId } : personRecordScope(escopo)),
           ...(status && isLeaveStatus(status) ? { status } : {}),
         },
         orderBy: { createdAt: "desc" },
@@ -158,6 +167,8 @@ class LeaveController {
       const leave = await new LeaveRequest().create.new({
         organizationId: orgId,
         userId,
+        /* A unidade da pessoa quando o pedido nasce; decidir não muda. [C2-13] */
+        establishmentId: await currentUnitOf(orgId, userId),
         kind: resolvedKind,
         startDate,
         endDate,
@@ -199,8 +210,9 @@ class LeaveController {
         id: req.params.id,
         organizationId: orgId,
       });
-      if (!current) {
-        res.status(404).json({ message: "Solicitação não encontrada." });
+      /* Fora das unidades geridas responde como inexistente. [C2-13] */
+      if (!current || !managesPersonRecord(await scopeOfRequest(auth), current)) {
+        res.status(404).json(NOT_FOUND_BODY);
         return;
       }
       if (current.status !== LEAVE_STATUSES.REQUESTED) {
@@ -283,12 +295,12 @@ class LeaveController {
         id: req.params.id,
         organizationId: orgId,
       });
-      if (!current) {
-        res.status(404).json({ message: "Solicitação não encontrada." });
-        return;
-      }
-      if (current.userId !== userId && !isRh(auth)) {
-        res.status(403).json({ message: "Sem permissão." });
+      const alcanca =
+        current &&
+        (current.userId === userId ||
+          (isRh(auth) && managesPersonRecord(await scopeOfRequest(auth), current)));
+      if (!current || !alcanca) {
+        res.status(404).json(NOT_FOUND_BODY);
         return;
       }
       if (current.status !== LEAVE_STATUSES.REQUESTED) {

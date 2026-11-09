@@ -5,6 +5,12 @@ import { MedicalCertificate } from "../model/schema/MedicalCertificate/MedicalCe
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
 import { notify } from "../helper/notify";
+import {
+  currentUnitOf,
+  managesPersonRecord,
+  personRecordScope,
+  scopeOfRequest,
+} from "../helper/unit-scope";
 import { canManageModule } from "../helper/module-access";
 import {
   assertSize,
@@ -51,10 +57,12 @@ class MedicalCertificateController {
       const userId = actorUserId(auth);
       const status = req.query.status as string | undefined;
 
+      const escopo = await scopeOfRequest(auth);
       const rows = await prisma.medicalCertificate.findMany({
         where: {
           organizationId: orgId,
-          ...(!isRh(auth) ? { userId } : {}),
+          /* Quem analisa vê os das unidades sob sua gestão. [C2-13] */
+          ...(!isRh(auth) ? { userId } : personRecordScope(escopo)),
           ...(status && isCertificateStatus(status) ? { status } : {}),
         },
         orderBy: { createdAt: "desc" },
@@ -131,6 +139,8 @@ class MedicalCertificateController {
       const certificate = await new MedicalCertificate().create.new({
         organizationId: orgId,
         userId,
+        /* A unidade da pessoa quando o atestado chega; analisar não muda. [C2-13] */
+        establishmentId: await currentUnitOf(orgId, userId),
         startDate: new Date(start_date),
         days: dias,
         hours: horas,
@@ -174,7 +184,8 @@ class MedicalCertificateController {
         id: req.params.id,
         organizationId: orgId,
       });
-      if (!current) {
+      /* Fora das unidades geridas responde como inexistente. [C2-13] */
+      if (!current || !managesPersonRecord(await scopeOfRequest(auth), current)) {
         res.status(404).json({ message: "Atestado não encontrado." });
         return;
       }
@@ -272,10 +283,14 @@ class MedicalCertificateController {
       const orgId = actorOrgId(auth);
       const certificate = await prisma.medicalCertificate.findFirst({
         where: { id: req.params.id, organizationId: orgId },
-        select: { userId: true, storagePath: true, fileName: true },
+        select: { userId: true, storagePath: true, fileName: true, establishmentId: true },
       });
       // Quem não pode ver recebe o mesmo 404 de quem não existe.
-      if (!certificate || (!isRh(auth) && certificate.userId !== actorUserId(auth))) {
+      const alcanca =
+        certificate &&
+        (certificate.userId === actorUserId(auth) ||
+          (isRh(auth) && managesPersonRecord(await scopeOfRequest(auth), certificate)));
+      if (!certificate || !alcanca) {
         res.status(404).json({ message: "Atestado não encontrado." });
         return;
       }

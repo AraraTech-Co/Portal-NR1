@@ -16,6 +16,7 @@ import {
 import { effectivePermission } from "../helper/auth";
 import { modulesForRole, ownConsultationOnly } from "../helper/module-access";
 import { hasActiveProfile } from "../helper/active-profile";
+import { unitScopeOf } from "../helper/unit-scope";
 import type { AuthRequest } from "../types/auth";
 import { AuthAttemptKind } from "@prisma/client";
 import {
@@ -51,6 +52,15 @@ async function consultaPropria(
   return ownConsultationOnly(permission, await hasActiveProfile(organizationId, userId));
 }
 
+/**
+ * Recorte por unidade da sessão: as unidades geridas e se falta atribuir
+ * alguma (o aviso para regularizar o vínculo). [C2-13]
+ */
+async function recorteDaSessao(permission: string, organizationId: string, userId: string) {
+  const escopo = await unitScopeOf({ permission, organizationId, userId });
+  return { managed_units: escopo.managed, needs_units: escopo.needsUnits };
+}
+
 async function publicUser(actor: NonNullable<AuthRequest["actor"]>) {
   return {
     id: actor.userId,
@@ -63,6 +73,7 @@ async function publicUser(actor: NonNullable<AuthRequest["actor"]>) {
     must_change_password: actor.mustChangePassword,
     modules: modulesForRole(actor.permission),
     own_modules: await consultaPropria(actor.permission, actor.organizationId, actor.userId),
+    ...(await recorteDaSessao(actor.permission, actor.organizationId, actor.userId)),
     organization: {
       id: actor.organizationId,
       name: actor.organizationName,
@@ -89,6 +100,7 @@ async function sessionUserFromAccess(
     must_change_password: access.user.mustChangePassword,
     modules: modulesForRole(permission),
     own_modules: await consultaPropria(permission, access.organizationId, access.user.id),
+    ...(await recorteDaSessao(permission, access.organizationId, access.user.id)),
     organization: {
       id: access.organizationId,
       name: access.organizationName,

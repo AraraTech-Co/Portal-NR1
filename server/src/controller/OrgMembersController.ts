@@ -1,7 +1,8 @@
 import { Role } from "@prisma/client";
 import { Request, Response } from "express";
 import prisma from "../model/prisma";
-import { actorOrgId } from "../helper/org-scope";
+import { actorOrgId, actorUserId } from "../helper/org-scope";
+import { profileScope, scopeOfRequest } from "../helper/unit-scope";
 import type { AuthRequest } from "../types/auth";
 
 function fail(res: Response, err: unknown) {
@@ -19,10 +20,24 @@ class OrgMembersController {
         trabalha aqui. O fiscal só consulta e não assina nada; o desligado
         não responde por mais nada. [CB-49] [CB-23]
       */
+      /*
+        Gerente, supervisor e ADM loja escolhem entre as pessoas das unidades
+        geridas (e a si mesmos); o colaborador, só a si. [C2-13]
+      */
+      const escopo = await scopeOfRequest(req as AuthRequest);
+      const alcance = escopo.wholeOrg
+        ? {}
+        : {
+            OR: [
+              { userId: actorUserId(req as AuthRequest) },
+              { user: { employeeProfiles: { some: { organizationId: orgId, ...profileScope(escopo) } } } },
+            ],
+          };
       const rows = await prisma.membership.findMany({
         where: {
           organizationId: orgId,
           role: { not: Role.FISCAL },
+          ...alcance,
           user: {
             active: true,
             employeeProfiles: {

@@ -20,6 +20,16 @@ import {
   writeEvidenceFile,
 } from "../helper/uploads";
 import type { AuthRequest } from "../types/auth";
+import {
+  currentUnitOf,
+  managesPerson,
+  managesPersonRecord,
+  NOT_FOUND_BODY,
+  personRecordScope,
+  profileScope,
+  scopeOfRequest,
+  type UnitScope,
+} from "../helper/unit-scope";
 
 function fail(res: Response, err: unknown) {
   if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
@@ -116,6 +126,8 @@ async function gravarHolerite(input: {
     payslip = await new Payslip().create.new({
       organizationId: input.orgId,
       userId: input.userId,
+      /* A unidade da pessoa quando o holerite nasce; substituir não muda. [C2-13] */
+      establishmentId: await currentUnitOf(input.orgId, input.userId),
       referenceMonth: input.referenceMonth,
       referenceYear: input.referenceYear,
       kind: input.kind,
@@ -229,6 +241,7 @@ const MOTIVO_DO_PROBLEMA: Record<string, string> = {
  * para o que não se conseguiu ler. [S5-G] [B3-3-A]
  */
 async function lerLote(
+  escopo: UnitScope,
   orgId: string,
   data: Buffer,
   referenceMonth: number,
@@ -251,6 +264,8 @@ async function lerLote(
       organizationId: orgId,
       registration: { not: null },
       user: { memberships: { some: { organizationId: orgId } } },
+      /* Só casa página com quem está sob a gestão de quem publica. [C2-13] */
+      ...profileScope(escopo),
     },
     select: {
       userId: true,
@@ -403,10 +418,17 @@ class PayslipController {
         return;
       }
       const orgId = actorOrgId(auth);
+      const escopo = await scopeOfRequest(auth);
       const rows = await prisma.membership.findMany({
         where: {
           organizationId: orgId,
-          user: { active: true },
+          user: {
+            active: true,
+            /* Só quem está sob a gestão de quem publica. [C2-13] */
+            ...(escopo.wholeOrg
+              ? {}
+              : { employeeProfiles: { some: { organizationId: orgId, ...profileScope(escopo) } } }),
+          },
         },
         include: {
           user: { select: { id: true, name: true, login: true } },
@@ -427,11 +449,13 @@ class PayslipController {
       const orgId = actorOrgId(auth);
       const userId = actorUserId(auth);
       const year = req.query.year ? Number(req.query.year) : undefined;
+      const escopo = await scopeOfRequest(auth);
 
       const rows = await prisma.payslip.findMany({
         where: {
           organizationId: orgId,
-          ...(!isRh(auth) ? { userId } : {}),
+          /* Quem administra vê a equipe das unidades sob sua gestão. [C2-13] */
+          ...(!isRh(auth) ? { userId } : personRecordScope(escopo)),
           ...(req.query.user_id && isRh(auth)
             ? { userId: String(req.query.user_id) }
             : {}),
@@ -559,10 +583,11 @@ class PayslipController {
         return;
       }
       const orgId = actorOrgId(auth);
+      const escopo = await scopeOfRequest(auth);
       const rows = await prisma.payslipQuestion.findMany({
         where: {
           answer: null,
-          payslip: { organizationId: orgId },
+          payslip: { organizationId: orgId, ...personRecordScope(escopo) },
         },
         orderBy: { createdAt: "asc" },
         include: {
@@ -655,7 +680,8 @@ class PayslipController {
       const membership = await prisma.membership.findFirst({
         where: { userId: user_id, organizationId: orgId },
       });
-      if (!membership) {
+      /* Fora da gestão de quem publica responde como pessoa inexistente. [C2-13] */
+      if (!membership || !(await managesPerson(await scopeOfRequest(auth), user_id))) {
         res.status(400).json({ message: "Colaborador inválido." });
         return;
       }
@@ -775,6 +801,7 @@ class PayslipController {
       const pedido = pedidoDoLote(req, res);
       if (!pedido) return;
       const lote = await lerLote(
+        await scopeOfRequest(req as AuthRequest),
         orgId,
         pedido.data,
         pedido.referenceMonth,
@@ -805,6 +832,7 @@ class PayslipController {
       const pedido = pedidoDoLote(req, res);
       if (!pedido) return;
       const lote = await lerLote(
+        await scopeOfRequest(auth),
         orgId,
         pedido.data,
         pedido.referenceMonth,
@@ -967,8 +995,11 @@ class PayslipController {
           payslip: { organizationId: orgId },
         },
       });
-      if (!question) {
-        res.status(404).json({ message: "Pergunta não encontrada." });
+      const holerite = question
+        ? await prisma.payslip.findUnique({ where: { id: question.payslipId }, select: { establishmentId: true } })
+        : null;
+      if (!question || !holerite || !managesPersonRecord(await scopeOfRequest(auth), holerite)) {
+        res.status(404).json(NOT_FOUND_BODY);
         return;
       }
       const { answer } = req.body as { answer?: string };
