@@ -22,6 +22,7 @@ import {
   collectiveReadScope,
   collectiveView,
   managesCollective,
+  seesCollective,
   scopeOfRequest,
   type UnitScope,
 } from "../helper/unit-scope";
@@ -131,7 +132,8 @@ class ParticipationController {
       if (
         !evidence ||
         !(
-          managesCollective(escopo, evidence.participation?.establishmentId ?? null) ||
+          /* O arquivo segue a leitura do registro (gerida ou de trabalho). [C2-13] */
+          seesCollective(escopo, evidence.participation?.establishmentId ?? null) ||
           evidence.uploadedById === escopo.userId
         )
       ) {

@@ -523,17 +523,21 @@ describe("gerir Rio Claro e trabalhar em Barueri: em Barueri, só o que o colabo
       (id) => request(app).post(`/api/emergency-procedures/${id}/drills`).set(as(t)).send({ performed_at: "2026-11-01" }),
       r.emergencia,
     );
-    await igualAInexistente((id) => request(app).get(`/api/evidences/${id}/file`).set(as(t)), r.evidenciaAcao);
-    await igualAInexistente(
-      (id) => request(app).get(`/api/participations/${r.participacao}/evidences/${id}/file`).set(as(t)),
-      r.evidenciaParticipacao,
+    /*
+      Ler o coletivo da unidade de trabalho inclui o arquivo, como o
+      colaborador já tinha (S3-L: quem lê o plano vê a prova); o recorte não
+      retira leitura legítima. [C2-13]
+    */
+    ok(await request(app).get(`/api/evidences/${r.evidenciaAcao}/file`).set(as(t)), 200);
+    ok(
+      await request(app).get(`/api/participations/${r.participacao}/evidences/${r.evidenciaParticipacao}/file`).set(as(t)),
+      200,
     );
-    await igualAInexistente(
-      (id) =>
-        request(app)
-          .get(`/api/emergency-procedures/${r.emergencia}/drills/${r.simulado}/evidences/${id}/file`)
-          .set(as(t)),
-      r.ataSimulado,
+    ok(
+      await request(app)
+        .get(`/api/emergency-procedures/${r.emergencia}/drills/${r.simulado}/evidences/${r.ataSimulado}/file`)
+        .set(as(t)),
+      200,
     );
     await igualAInexistente((id) => request(app).post(`/api/actions/${id}/complete`).set(as(t)), r.acao);
     await igualAInexistente(
@@ -574,7 +578,7 @@ describe("colaborador: o coletivo da sua unidade e o próprio [C2-13]", () => {
     await igualAInexistente((id) => request(app).get(`/api/occurrences/${id}`).set(as(colabRC.token)), ocorrenciaSemUnidade);
   });
 
-  it("baixa a prova da própria ação; a do colega da mesma loja, não", async () => {
+  it("baixa a prova das ações da sua loja (leitura do plano, S3-L); a de outra loja, não", async () => {
     ok(await request(app).get(`/api/evidences/${regRC.evidenciaAcao}/file`).set(as(colabRC.token)), 200);
     const prova = ok(
       await request(app).post("/api/evidences").set(as(colabB.token)).send({
@@ -584,9 +588,10 @@ describe("colaborador: o coletivo da sua unidade e o próprio [C2-13]", () => {
         content_base64: PDF,
       }),
     ).evidence.id;
-    // admB trabalha em Barueri como o colabB, e é gestor: baixa. O supervisor de RC que trabalha lá: não.
+    // Quem gere Barueri e quem trabalha lá veem a prova da ação de Barueri; o colaborador de Rio Claro, não.
     ok(await request(app).get(`/api/evidences/${prova}/file`).set(as(admB.token)), 200);
-    await igualAInexistente((id) => request(app).get(`/api/evidences/${id}/file`).set(as(supRCemB.token)), prova);
+    ok(await request(app).get(`/api/evidences/${prova}/file`).set(as(supRCemB.token)), 200);
+    await igualAInexistente((id) => request(app).get(`/api/evidences/${id}/file`).set(as(colabRC.token)), prova);
   });
 });
 

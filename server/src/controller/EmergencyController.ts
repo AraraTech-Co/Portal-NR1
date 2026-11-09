@@ -22,6 +22,7 @@ import {
   collectiveReadScope,
   collectiveView,
   managesCollective,
+  seesCollective,
   peopleInScope,
   scopeOfRequest,
   type UnitScope,
@@ -574,7 +575,8 @@ class EmergencyController {
       if (
         !evidence ||
         !(
-          managesCollective(escopo, evidence.drill?.procedure.establishmentId ?? null) ||
+          /* O arquivo segue a leitura do simulado (gerida ou de trabalho). [C2-13] */
+          seesCollective(escopo, evidence.drill?.procedure.establishmentId ?? null) ||
           evidence.uploadedById === escopo.userId
         )
       ) {

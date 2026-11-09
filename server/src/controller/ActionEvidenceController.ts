@@ -142,16 +142,17 @@ class ActionEvidenceController {
         },
       });
       /*
-        O arquivo é de quem gere a unidade da ação, de quem a executa e de quem
-        o enviou. Fora disso — inclusive o de terceiro na unidade em que a
-        pessoa só trabalha — responde igual a inexistente. [C2-13]
+        O arquivo segue a leitura da ação: quem vê a ação no plano vê a prova
+        (S3-L), dentro do recorte — unidade gerida, a de trabalho, ou a ação
+        que a pessoa executa — e quem enviou. Fora disso responde igual a
+        inexistente. [C2-13]
       */
       const escopo = await scopeOfRequest(req as AuthRequest);
       const acao = evidence?.action ?? null;
       if (
         !evidence ||
         !acao ||
-        !(geridaPor(escopo, acao) || executesAction(escopo, acao) || evidence.uploadedById === escopo.userId)
+        !(seesAction(escopo, acao) || evidence.uploadedById === escopo.userId)
       ) {
         res.status(404).json({ message: "Evidência não encontrada." });
         return;
