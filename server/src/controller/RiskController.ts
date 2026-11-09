@@ -24,6 +24,12 @@ import {
 } from "../helper/action-deadline";
 import { nivelDoRisco } from "../helper/nivel-do-risco";
 import type { AuthRequest } from "../types/auth";
+import {
+  actionReadScope,
+  collectiveView,
+  peopleInScope,
+  scopeOfRequest,
+} from "../helper/unit-scope";
 
 function fail(res: Response, err: unknown) {
   const e = err as { status?: number; message?: string };
@@ -848,6 +854,11 @@ class RiskController {
         where.risk = { hazard: { activity: { establishmentId } } };
       }
       /*
+        Unidades geridas e a de trabalho, mais as ações que a pessoa executa;
+        ação sem unidade (manual), só a central e quem executa. [C2-13]
+      */
+      where.AND = [actionReadScope(await scopeOfRequest(req as AuthRequest))];
+      /*
         "Quem faz não valida" é uma das travas do portal e não aparecia em
         tela nenhuma: o nome de quem validou estava gravado e nunca era
         lido. [B2-4-D]
@@ -945,21 +956,34 @@ class RiskController {
         });
         return;
       }
-      const responsavel = await prisma.membership.findFirst({
-        where: { userId: assignee_id, organizationId: orgId, suspendedAt: null },
-        select: { accessExpiresAt: true, user: { select: { active: true } } },
-      });
-      if (!responsavel || !responsavel.user.active) {
+      /*
+        Para quem tem recorte, o responsável sai das unidades geridas (ou é a
+        própria pessoa) — a mesma lista do seletor; fora dela, igual a quem não
+        é da empresa. [C2-13]
+      */
+      const escopo = await scopeOfRequest(req as AuthRequest);
+      if (!(await peopleInScope(escopo, [assignee_id]))) {
         res.status(400).json({ message: "Responsável não é da organização." });
         return;
       }
-      if (risk_id) {
-        const risk = await new Risk().read.one({
-          id: risk_id,
-          organizationId: orgId,
-          archivedAt: null,
+      /*
+        A ação de quem tem recorte nasce numa unidade gerida, pelo risco.
+        Ação sem risco não tem unidade e fica com a central. [C2-13]
+      */
+      if (!escopo.wholeOrg && !risk_id) {
+        res.status(400).json({
+          message: "Escolha o risco da unidade a que a ação se refere.",
+          code: "ACTION_NEEDS_UNIT",
         });
-        if (!risk) {
+        return;
+      }
+      if (risk_id) {
+        const risk = await prisma.risk.findFirst({
+          where: { id: risk_id, organizationId: orgId, archivedAt: null },
+          select: { id: true, hazard: { select: { activity: { select: { establishmentId: true } } } } },
+        });
+        const visao = risk ? collectiveView(escopo, risk.hazard.activity.establishmentId) : "none";
+        if (!risk || (visao !== "whole" && visao !== "manager")) {
           res.status(400).json({ message: "Risco inválido." });
           return;
         }

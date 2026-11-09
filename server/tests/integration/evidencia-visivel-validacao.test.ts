@@ -118,11 +118,20 @@ describe("quem valida vê a prova [S3-L]", () => {
     expect(ok.body.action.status).toBe("VALIDATED");
   });
 
-  it("quem só lê o plano também vê a prova (é leitura do plano)", async () => {
+  /*
+    Com o recorte por unidade, o arquivo da prova é de quem gere a unidade
+    da ação, de quem a executa e de quem o enviou; esta ação não tem unidade
+    (é da central) e não é do colaborador: responde como inexistente. [C2-13]
+  */
+  it("quem só lê o plano não baixa a prova de ação fora do seu escopo [C2-13]", async () => {
     const res = await request(app)
       .get(`/api/evidences/${evidenceId}/file`)
       .set(as(colaborador.token));
-    expect(res.status).toBe(200);
+    const inexistente = await request(app)
+      .get("/api/evidences/00000000-0000-4000-8000-00000000eeee/file")
+      .set(as(colaborador.token));
+    expect(res.status).toBe(404);
+    expect(res.text).toBe(inexistente.text);
   });
 });
 

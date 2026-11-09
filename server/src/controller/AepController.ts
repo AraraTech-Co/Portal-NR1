@@ -27,6 +27,13 @@ import {
   HAZARD_CATEGORIES,
 } from "../constants";
 import type { AuthRequest } from "../types/auth";
+import {
+  collectiveReadScope,
+  managesCollective,
+  scopeOfRequest,
+  seesCollective,
+  type UnitScope,
+} from "../helper/unit-scope";
 
 function fail(res: Response, err: unknown) {
   const e = err as { status?: number; message?: string };
@@ -62,6 +69,22 @@ function originFromMethod(method: AepMethod) {
 function ownsOrManages(req: AuthRequest, conductedById: string | null): boolean {
   if (req.actor && canManageModule(req.actor.permission, "aep")) return true;
   return conductedById === actorUserId(req);
+}
+
+const NAO_ENCONTRADA = "Avaliação não encontrada.";
+
+/**
+ * Mexe na avaliação: como gestor da unidade dela (ou sem recorte), ou quem a
+ * conduz. A de terceiro na unidade em que só trabalha, ou fora do escopo,
+ * responde igual a inexistente. [C2-13]
+ */
+function mexeNaAvaliacao(
+  req: AuthRequest,
+  escopo: UnitScope,
+  aep: { establishmentId: string; conductedById: string },
+): boolean {
+  if (aep.conductedById === escopo.userId) return true;
+  return managesCollective(escopo, aep.establishmentId) && ownsOrManages(req, aep.conductedById);
 }
 
 async function resolveScope(
@@ -128,6 +151,8 @@ class AepController {
       const orgId = actorOrgId(req as AuthRequest);
       const status = req.query.status as string | undefined;
       const establishmentId = req.query.establishment_id as string | undefined;
+      /* Unidades geridas e a de trabalho, e as que a pessoa conduz. [C2-13] */
+      const escopo = await scopeOfRequest(req as AuthRequest);
       const rows = await prisma.aep.findMany({
         where: {
           organizationId: orgId,
@@ -135,6 +160,7 @@ class AepController {
             ? { status }
             : {}),
           ...(establishmentId ? { establishmentId } : {}),
+          AND: [collectiveReadScope(escopo, "conductedById")],
         },
         orderBy: [{ status: "asc" }, { conductedAt: "desc" }],
         include: {
@@ -175,8 +201,9 @@ class AepController {
           evidences: { orderBy: { uploadedAt: "desc" } },
         },
       });
-      if (!aep) {
-        res.status(404).json({ message: "Avaliação não encontrada." });
+      const escopo = await scopeOfRequest(req as AuthRequest);
+      if (!aep || !seesCollective(escopo, aep.establishmentId, aep.conductedById)) {
+        res.status(404).json({ message: NAO_ENCONTRADA });
         return;
       }
       res.json({ aep });
@@ -201,6 +228,12 @@ class AepController {
         return;
       }
 
+      /* Só na unidade gerida; outra responde igual a inexistente. [C2-13] */
+      const escopo = await scopeOfRequest(req as AuthRequest);
+      if (!managesCollective(escopo, establishmentId)) {
+        res.status(404).json({ message: "Estabelecimento não encontrado." });
+        return;
+      }
       const scope = await resolveScope(orgId, establishmentId, {
         sector_id: body.sector_id as string | undefined,
         activity_id: body.activity_id as string | undefined,
@@ -246,12 +279,17 @@ class AepController {
         id: req.params.id,
         organizationId: orgId,
       });
-      if (!current) {
-        res.status(404).json({ message: "Avaliação não encontrada." });
+      const escopo = await scopeOfRequest(req as AuthRequest);
+      if (!current || !seesCollective(escopo, current.establishmentId, current.conductedById)) {
+        res.status(404).json({ message: NAO_ENCONTRADA });
         return;
       }
-      if (!ownsOrManages(req as AuthRequest, current.conductedById)) {
-        res.status(403).json({ message: "Só quem conduz a avaliação pode editá-la." });
+      if (!mexeNaAvaliacao(req as AuthRequest, escopo, current)) {
+        if (managesCollective(escopo, current.establishmentId)) {
+          res.status(403).json({ message: "Só quem conduz a avaliação pode editá-la." });
+        } else {
+          res.status(404).json({ message: NAO_ENCONTRADA });
+        }
         return;
       }
       if (current.status !== AEP_STATUSES.DRAFT) {
@@ -325,12 +363,14 @@ class AepController {
         aet_reason?: string;
       };
 
+      /* Conclui quem gere a unidade da avaliação, ou quem a conduz. [C2-13] */
+      const escopo = await scopeOfRequest(req as AuthRequest);
       const result = await prisma.$transaction(async (tx) => {
         const aep = await tx.aep.findFirst({
           where: { id: req.params.id, organizationId: orgId },
         });
-        if (!aep) {
-          throw Object.assign(new Error("Avaliação não encontrada."), {
+        if (!aep || !mexeNaAvaliacao(req as AuthRequest, escopo, aep)) {
+          throw Object.assign(new Error(NAO_ENCONTRADA), {
             status: 404,
           });
         }
@@ -399,8 +439,9 @@ class AepController {
         id: req.params.id,
         organizationId: orgId,
       });
-      if (!aep) {
-        res.status(404).json({ message: "Avaliação não encontrada." });
+      const escopo = await scopeOfRequest(req as AuthRequest);
+      if (!aep || !mexeNaAvaliacao(req as AuthRequest, escopo, aep)) {
+        res.status(404).json({ message: NAO_ENCONTRADA });
         return;
       }
       if (aep.status !== AEP_STATUSES.DRAFT) {
@@ -425,9 +466,11 @@ class AepController {
         });
         return;
       }
+      /* O fator vai para atividade da mesma unidade da avaliação. [C2-13] */
       const activity = await new Activity().read.one({
         id: targetActivityId,
         organizationId: orgId,
+        establishmentId: aep.establishmentId,
         archivedAt: null,
       });
       if (!activity) {
@@ -480,12 +523,17 @@ class AepController {
         id: req.params.id,
         organizationId: orgId,
       });
-      if (!aep) {
-        res.status(404).json({ message: "Avaliação não encontrada." });
+      const escopo = await scopeOfRequest(req as AuthRequest);
+      if (!aep || !seesCollective(escopo, aep.establishmentId, aep.conductedById)) {
+        res.status(404).json({ message: NAO_ENCONTRADA });
         return;
       }
-      if (!ownsOrManages(req as AuthRequest, aep.conductedById)) {
-        res.status(403).json({ message: "Só quem conduz a avaliação anexa evidência." });
+      if (!mexeNaAvaliacao(req as AuthRequest, escopo, aep)) {
+        if (managesCollective(escopo, aep.establishmentId)) {
+          res.status(403).json({ message: "Só quem conduz a avaliação anexa evidência." });
+        } else {
+          res.status(404).json({ message: NAO_ENCONTRADA });
+        }
         return;
       }
       if (aep.status !== AEP_STATUSES.DRAFT) {

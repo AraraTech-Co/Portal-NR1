@@ -1,7 +1,8 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import request from "supertest";
 import type { Express } from "express";
 import { createApp } from "../../src/app";
+import prisma from "../../src/model/prisma";
 
 /**
  * Cada unidade com o que é dela.
@@ -26,6 +27,11 @@ const as = (token: string) => ({ Authorization: `Bearer ${token}` });
 let app: Express;
 let sst: { token: string; user: { id: string } };
 let supervisor: { token: string; user: { id: string } };
+/**
+ * O supervisor registra ocorrência na unidade que gere: cada unidade criada
+ * aqui é atribuída a ele, e o vínculo sai no fim. [C2-13]
+ */
+const vinculos: string[] = [];
 
 /** Uma unidade com atividade, perigo e risco próprios. */
 async function unidadeComRisco(nome: string) {
@@ -62,6 +68,22 @@ async function unidadeComRisco(nome: string) {
       .set(as(sst.token))
       .send({ hazard_id: perigo.id, description: `Corte na mão ${nome} ${SUFIXO}` })
   ).body.risk;
+  const vinculo = await prisma.membership.findFirstOrThrow({
+    where: { userId: supervisor.user.id, organizationId: est.organizationId },
+    select: { id: true },
+  });
+  vinculos.push(
+    (
+      await prisma.managedEstablishment.create({
+        data: {
+          organizationId: est.organizationId,
+          membershipId: vinculo.id,
+          establishmentId: est.id,
+          createdById: sst.user.id,
+        },
+      })
+    ).id,
+  );
   return { establishmentId: est.id as string, riskId: risco.id as string, name: est.name as string };
 }
 
@@ -69,6 +91,10 @@ beforeAll(async () => {
   app = createApp();
   sst = await entrar(app, "teste.sst");
   supervisor = await entrar(app, "teste.supervisor");
+});
+
+afterAll(async () => {
+  await prisma.managedEstablishment.deleteMany({ where: { id: { in: vinculos } } });
 });
 
 describe("a ocorrência fica na sua unidade [S3-D] [S2-F]", () => {

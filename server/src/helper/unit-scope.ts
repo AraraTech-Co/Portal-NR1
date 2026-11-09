@@ -193,6 +193,131 @@ export function managedUnitFilter(scope: UnitScope): Record<string, unknown> {
   return { establishmentId: { in: scope.managed } };
 }
 
+/**
+ * Age como gestor sobre o registro coletivo desta unidade: sem recorte, ou
+ * unidade gerida. A unidade de trabalho NÃO entra: ali a pessoa tem o que o
+ * colaborador teria.
+ */
+export function managesCollective(scope: UnitScope, establishmentId: string | null): boolean {
+  const visao = collectiveView(scope, establishmentId);
+  return visao === "whole" || visao === "manager";
+}
+
+/** Vê o registro coletivo: no escopo (gerida ou de trabalho), ou é o próprio. */
+export function seesCollective(
+  scope: UnitScope,
+  establishmentId: string | null,
+  ownerId?: string | null,
+): boolean {
+  if (ownerId && ownerId === scope.userId) return true;
+  return collectiveView(scope, establishmentId) !== "none";
+}
+
+/**
+ * Unidade da ação do plano: a do risco (perigo → atividade); sem risco, a da
+ * ocorrência; sem as duas, a da mudança. Sem nenhuma, é da central.
+ */
+export const ACTION_UNIT_SELECT = {
+  riskId: true,
+  assigneeId: true,
+  createdById: true,
+  risk: { select: { hazard: { select: { activity: { select: { establishmentId: true } } } } } },
+  occurrence: { select: { establishmentId: true } },
+  changeEvent: { select: { establishmentId: true } },
+} as const;
+
+type ActionUnitRow = {
+  risk: { hazard: { activity: { establishmentId: string } } } | null;
+  occurrence: { establishmentId: string | null } | null;
+  changeEvent: { establishmentId: string | null } | null;
+};
+
+export function actionUnitOf(action: ActionUnitRow): string | null {
+  if (action.risk) return action.risk.hazard.activity.establishmentId;
+  if (action.occurrence?.establishmentId) return action.occurrence.establishmentId;
+  return action.changeEvent?.establishmentId ?? null;
+}
+
+/** Filtro Prisma das ações destas unidades, na mesma precedência de `actionUnitOf`. */
+export function actionInUnits(unidades: string[]): Record<string, unknown> {
+  const em = { in: unidades };
+  return {
+    OR: [
+      { risk: { hazard: { activity: { establishmentId: em } } } },
+      { riskId: null, occurrence: { establishmentId: em } },
+      {
+        riskId: null,
+        OR: [{ occurrenceId: null }, { occurrence: { establishmentId: null } }],
+        changeEvent: { establishmentId: em },
+      },
+    ],
+  };
+}
+
+/** Quem executa a ação: o responsável; sem ele, quem abriu. Vê e executa a sua sempre. */
+export function executesAction(scope: UnitScope, action: { assigneeId: string | null; createdById: string }): boolean {
+  return (action.assigneeId || action.createdById) === scope.userId;
+}
+
+/** Leitura do plano de ação: o escopo coletivo e as ações que a pessoa executa. */
+export function actionReadScope(scope: UnitScope): Record<string, unknown> {
+  if (scope.wholeOrg) return {};
+  const unidades = [...scope.managed, ...(scope.work ? [scope.work] : [])];
+  return {
+    OR: [
+      { assigneeId: scope.userId },
+      { assigneeId: null, createdById: scope.userId },
+      ...(unidades.length ? [actionInUnits(unidades)] : []),
+    ],
+  };
+}
+
+/** Ações em que o ator age como gestor (contagens de gestão do Início). */
+export function actionManagerScope(scope: UnitScope): Record<string, unknown> {
+  if (scope.wholeOrg) return {};
+  return actionInUnits(scope.managed);
+}
+
+/** O ator vê a ação: no escopo coletivo, ou é quem a executa. */
+export function seesAction(scope: UnitScope, action: ActionUnitRow & { assigneeId: string | null; createdById: string }): boolean {
+  return executesAction(scope, action) || collectiveView(scope, actionUnitOf(action)) !== "none";
+}
+
+/**
+ * Pessoas que o ator pode indicar (responsável por ação ou por plano de
+ * emergência): membros ativos da empresa; para quem tem recorte, ele mesmo e
+ * quem trabalha nas unidades geridas — o mesmo alcance de `/api/org-members`.
+ * Verdadeiro só se TODAS estiverem no alcance.
+ */
+export async function peopleInScope(scope: UnitScope, userIds: string[]): Promise<boolean> {
+  const ids = [...new Set(userIds)];
+  if (ids.length === 0) return true;
+  const alcance = scope.wholeOrg
+    ? {}
+    : {
+        OR: [
+          { userId: scope.userId },
+          {
+            user: {
+              employeeProfiles: {
+                some: { organizationId: scope.organizationId, dismissedAt: null, ...profileScope(scope) },
+              },
+            },
+          },
+        ],
+      };
+  const encontrados = await prisma.membership.count({
+    where: {
+      organizationId: scope.organizationId,
+      userId: { in: ids },
+      suspendedAt: null,
+      user: { active: true },
+      ...alcance,
+    },
+  });
+  return encontrados === ids.length;
+}
+
 
 /** O recorte de quem fez a requisição (já autenticada). */
 export async function scopeOfRequest(req: { actor?: Pick<Actor, "userId" | "organizationId" | "permission"> }): Promise<UnitScope> {

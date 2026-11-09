@@ -17,6 +17,9 @@ import prisma from "../../src/model/prisma";
  * Exige a organização do `scripts/seed-teste-org.ts`.
  */
 const ORG_ID = "aaaaaaaa-0001-4000-8000-000000000001";
+/** Unidade do seed: o gerente abre ação na unidade que gere. [C2-13] */
+const EST_ID = "aaaaaaaa-0001-4000-8000-000000000011";
+const vinculos: string[] = [];
 const SENHA = "teste1234";
 const SUFIXO = Date.now().toString(36);
 const PRAZO = "2027-02-20";
@@ -95,13 +98,27 @@ beforeAll(async () => {
   gerente = await entrar("teste.gerente");
 
   const r = await prisma.risk.findFirstOrThrow({
-    where: { organizationId: ORG_ID, archivedAt: null },
+    where: { organizationId: ORG_ID, archivedAt: null, hazard: { activity: { establishmentId: EST_ID } } },
     select: { id: true },
   });
   risco = r.id;
+  const vinculo = await prisma.membership.findFirstOrThrow({
+    where: { userId: gerente.user.id, organizationId: ORG_ID },
+    select: { id: true },
+  });
+  if (!(await prisma.managedEstablishment.findFirst({ where: { membershipId: vinculo.id, establishmentId: EST_ID } }))) {
+    vinculos.push(
+      (
+        await prisma.managedEstablishment.create({
+          data: { organizationId: ORG_ID, membershipId: vinculo.id, establishmentId: EST_ID, createdById: sst.user.id },
+        })
+      ).id,
+    );
+  }
 });
 
 afterAll(async () => {
+  await prisma.managedEstablishment.deleteMany({ where: { id: { in: vinculos } } });
   await prisma.auditEvent.deleteMany({ where: { entityId: { in: acoes } } });
   await prisma.notification.deleteMany({
     where: { entityType: "Action", entityId: { in: acoes } },

@@ -182,7 +182,14 @@ describe("ocorrências", () => {
       .patch(`/api/occurrences/${doSst}`)
       .set(as(colaborador.token))
       .send({ description: "Alterado por outra pessoa" });
-    expect(mexe.status).toBe(403);
+    /*
+      A de outra pessoa da mesma unidade, o colaborador vê mas não altera: a
+      recusa é a mesma de registro inexistente, como para o gestor que só
+      trabalha na unidade. [C2-13]
+    */
+    expect(mexe.status).toBe(404);
+    const depois = await prisma.occurrence.findUniqueOrThrow({ where: { id: doSst } });
+    expect(depois.description).toBe("Registro do técnico");
   });
 
   it("analisar e abrir ação é de quem administra", async () => {

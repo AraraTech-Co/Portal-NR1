@@ -18,6 +18,14 @@ import {
 } from "../constants";
 import { sendPrivateFile } from "../helper/send-private-file";
 import type { AuthRequest } from "../types/auth";
+import {
+  collectiveReadScope,
+  collectiveView,
+  managesCollective,
+  peopleInScope,
+  scopeOfRequest,
+  type UnitScope,
+} from "../helper/unit-scope";
 
 function fail(res: Response, err: unknown) {
   const e = err as { status?: number; message?: string; code?: string };
@@ -39,7 +47,16 @@ function httpError(status: number, message: string, code?: string): Error {
   o nome de quem foi desligado continuava no plano sem aviso. O texto fica
   para quem é de fora (brigada terceirizada, bombeiros). [B3-4-B]
 */
-async function responsaveisValidos(orgId: string, bruto: unknown): Promise<string[] | undefined> {
+/*
+  Quem tem recorte indica gente das unidades geridas (ou a si) — o mesmo
+  alcance do seletor de pessoas; quem já estava ligado ao plano pode
+  continuar. Fora disso, a mesma recusa de quem não é da empresa. [C2-13]
+*/
+async function responsaveisValidos(
+  escopo: UnitScope,
+  bruto: unknown,
+  jaLigados: string[] = [],
+): Promise<string[] | undefined> {
   if (bruto === undefined) return undefined;
   if (!Array.isArray(bruto) || bruto.some((x) => typeof x !== "string")) {
     throw httpError(400, "responsible_user_ids deve ser uma lista de pessoas.");
@@ -48,14 +65,15 @@ async function responsaveisValidos(orgId: string, bruto: unknown): Promise<strin
   if (ids.length === 0) return [];
   const ativos = await prisma.membership.findMany({
     where: {
-      organizationId: orgId,
+      organizationId: escopo.organizationId,
       userId: { in: ids },
       suspendedAt: null,
       user: { active: true },
     },
     select: { userId: true },
   });
-  if (ativos.length !== ids.length) {
+  const novos = ids.filter((id) => !jaLigados.includes(id));
+  if (ativos.length !== ids.length || !(await peopleInScope(escopo, novos))) {
     throw httpError(
       400,
       "Responsável tem de ser pessoa da empresa com acesso ativo. Quem foi desligado ou está sem acesso não entra no plano.",
@@ -96,17 +114,35 @@ async function situacaoDosResponsaveis(orgId: string, userIds: string[]) {
   return mapa;
 }
 
+const NAO_ENCONTRADO = "Procedimento não encontrado.";
+
+/** O procedimento (ativo, se pedido) em que o ator age como gestor; senão null. [C2-13] */
+async function procedimentoDoGestor(req: Request, id: string, soAtivo: boolean) {
+  const orgId = actorOrgId(req as AuthRequest);
+  const procedure = await new EmergencyProcedure().read.one({
+    id,
+    organizationId: orgId,
+    ...(soAtivo ? { archivedAt: null } : {}),
+  });
+  const escopo = await scopeOfRequest(req as AuthRequest);
+  if (!procedure || !managesCollective(escopo, procedure.establishmentId)) return null;
+  return procedure;
+}
+
 class EmergencyController {
   async listProcedures(req: Request, res: Response) {
     try {
       const orgId = actorOrgId(req as AuthRequest);
       const establishmentId = req.query.establishment_id as string | undefined;
       const includeArchived = req.query.include_archived === "true";
+      /* Unidades geridas e a de trabalho. [C2-13] */
+      const escopo = await scopeOfRequest(req as AuthRequest);
       const rows = await prisma.emergencyProcedure.findMany({
         where: {
           organizationId: orgId,
           ...(establishmentId ? { establishmentId } : {}),
           ...(includeArchived ? {} : { archivedAt: null }),
+          AND: [collectiveReadScope(escopo)],
         },
         orderBy: { updatedAt: "desc" },
         include: {
@@ -174,8 +210,9 @@ class EmergencyController {
           },
         },
       });
-      if (!procedure) {
-        res.status(404).json({ message: "Procedimento não encontrado." });
+      const escopo = await scopeOfRequest(req as AuthRequest);
+      if (!procedure || collectiveView(escopo, procedure.establishmentId) === "none") {
+        res.status(404).json({ message: NAO_ENCONTRADO });
         return;
       }
       const { responsiblePeople, ...resto } = procedure;
@@ -237,7 +274,8 @@ class EmergencyController {
       const firstAidMeans = blank(first_aid_means);
       const responsiblesText = blank(responsibles);
       const evacuationPlan = blank(evacuation_plan);
-      const pessoas = (await responsaveisValidos(orgId, responsible_user_ids)) ?? [];
+      const escopo = await scopeOfRequest(req as AuthRequest);
+      const pessoas = (await responsaveisValidos(escopo, responsible_user_ids)) ?? [];
       if (!firstAidMeans || (!responsiblesText && pessoas.length === 0) || !evacuationPlan) {
         res.status(400).json({
           message:
@@ -251,7 +289,8 @@ class EmergencyController {
         organizationId: orgId,
         archivedAt: null,
       });
-      if (!establishment) {
+      /* Só na unidade gerida; outra responde igual a inexistente. [C2-13] */
+      if (!establishment || !managesCollective(escopo, establishment.id)) {
         res.status(404).json({ message: "Estabelecimento não encontrado." });
         return;
       }
@@ -304,12 +343,9 @@ class EmergencyController {
     try {
       const orgId = actorOrgId(req as AuthRequest);
       const userId = actorUserId(req as AuthRequest);
-      const current = await new EmergencyProcedure().read.one({
-        id: req.params.id,
-        organizationId: orgId,
-      });
+      const current = await procedimentoDoGestor(req, req.params.id, false);
       if (!current) {
-        res.status(404).json({ message: "Procedimento não encontrado." });
+        res.status(404).json({ message: NAO_ENCONTRADO });
         return;
       }
       if (current.archivedAt) {
@@ -331,17 +367,20 @@ class EmergencyController {
         return;
       }
 
-      const pessoas = await responsaveisValidos(orgId, body.responsible_user_ids);
+      const ligados = (
+        await prisma.emergencyProcedureResponsible.findMany({
+          where: { procedureId: current.id },
+          select: { userId: true },
+        })
+      ).map((r) => r.userId);
+      const pessoas = await responsaveisValidos(
+        await scopeOfRequest(req as AuthRequest),
+        body.responsible_user_ids,
+        ligados,
+      );
       const textoDepois =
         body.responsibles !== undefined ? blank(body.responsibles as string) : current.responsibles;
-      const pessoasDepois =
-        pessoas ??
-        (
-          await prisma.emergencyProcedureResponsible.findMany({
-            where: { procedureId: current.id },
-            select: { userId: true },
-          })
-        ).map((r) => r.userId);
+      const pessoasDepois = pessoas ?? ligados;
       if (!textoDepois && pessoasDepois.length === 0) {
         res.status(400).json({
           message: "O plano precisa de ao menos um responsável: uma pessoa da empresa ou, para quem é de fora, o texto.",
@@ -401,13 +440,9 @@ class EmergencyController {
     try {
       const orgId = actorOrgId(req as AuthRequest);
       const userId = actorUserId(req as AuthRequest);
-      const current = await new EmergencyProcedure().read.one({
-        id: req.params.id,
-        organizationId: orgId,
-        archivedAt: null,
-      });
+      const current = await procedimentoDoGestor(req, req.params.id, true);
       if (!current) {
-        res.status(404).json({ message: "Procedimento não encontrado." });
+        res.status(404).json({ message: NAO_ENCONTRADO });
         return;
       }
 
@@ -435,13 +470,9 @@ class EmergencyController {
     try {
       const orgId = actorOrgId(req as AuthRequest);
       const userId = actorUserId(req as AuthRequest);
-      const procedure = await new EmergencyProcedure().read.one({
-        id: req.params.id,
-        organizationId: orgId,
-        archivedAt: null,
-      });
+      const procedure = await procedimentoDoGestor(req, req.params.id, true);
       if (!procedure) {
-        res.status(404).json({ message: "Procedimento não encontrado." });
+        res.status(404).json({ message: NAO_ENCONTRADO });
         return;
       }
 
@@ -497,7 +528,8 @@ class EmergencyController {
           },
         },
       });
-      if (!drill) {
+      const escopo = await scopeOfRequest(req as AuthRequest);
+      if (!drill || collectiveView(escopo, drill.procedure.establishmentId) === "none") {
         res.status(404).json({ message: "Exercício não encontrado." });
         return;
       }
@@ -525,9 +557,27 @@ class EmergencyController {
           drillId: req.params.drillId,
           drill: { procedureId: req.params.id },
         },
-        select: { storagePath: true, fileName: true, mimeType: true },
+        select: {
+          storagePath: true,
+          fileName: true,
+          mimeType: true,
+          uploadedById: true,
+          drill: { select: { procedure: { select: { establishmentId: true } } } },
+        },
       });
-      if (!evidence) {
+      /*
+        A ata é de quem gere a unidade (ou sem recorte) e de quem a enviou; a
+        de terceiro na unidade em que a pessoa só trabalha, e a de fora do
+        escopo, respondem igual a inexistente. [C2-13]
+      */
+      const escopo = await scopeOfRequest(req as AuthRequest);
+      if (
+        !evidence ||
+        !(
+          managesCollective(escopo, evidence.drill?.procedure.establishmentId ?? null) ||
+          evidence.uploadedById === escopo.userId
+        )
+      ) {
         res.status(404).json({ message: "Evidência não encontrada." });
         return;
       }
@@ -547,8 +597,11 @@ class EmergencyController {
           procedureId: req.params.id,
           procedure: { organizationId: orgId },
         },
+        include: { procedure: { select: { establishmentId: true } } },
       });
-      if (!drill) {
+      /* Anexar a ata é de quem gere a unidade (ou sem recorte). [C2-13] */
+      const escopo = await scopeOfRequest(req as AuthRequest);
+      if (!drill || !managesCollective(escopo, drill.procedure.establishmentId)) {
         res.status(404).json({ message: "Exercício não encontrado." });
         return;
       }

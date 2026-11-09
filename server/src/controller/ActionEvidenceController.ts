@@ -22,6 +22,15 @@ import {
 } from "../helper/uploads";
 import { sendPrivateFile } from "../helper/send-private-file";
 import type { AuthRequest } from "../types/auth";
+import {
+  ACTION_UNIT_SELECT,
+  actionUnitOf,
+  executesAction,
+  managesCollective,
+  scopeOfRequest,
+  seesAction,
+  type UnitScope,
+} from "../helper/unit-scope";
 
 function fail(res: Response, err: unknown) {
   const e = err as { status?: number; message?: string };
@@ -46,13 +55,41 @@ function canManagePlan(req: AuthRequest) {
   return Boolean(req.actor && canWriteModule(req.actor.permission, "acoes"));
 }
 
+/** A ação com o que decide a unidade dela, ou null. [C2-13] */
+async function acaoComUnidade(organizationId: string, id: string) {
+  return prisma.action.findFirst({
+    where: { id, organizationId },
+    select: { id: true, status: true, ...ACTION_UNIT_SELECT },
+  });
+}
+
+/** Gestor da ação: unidade gerida ou sem recorte (a de trabalho não conta). [C2-13] */
+function geridaPor(escopo: UnitScope, acao: Parameters<typeof actionUnitOf>[0]): boolean {
+  return managesCollective(escopo, actionUnitOf(acao));
+}
+
 class ActionEvidenceController {
   async listEvidences(req: Request, res: Response) {
     try {
       const orgId = actorOrgId(req as AuthRequest);
       const actionId = req.query.action_id as string | undefined;
+      /*
+        A lista é a das provas de UMA ação, que passa pela mesma conferência
+        de quem a vê no plano; ação fora do escopo responde igual a
+        inexistente. [C2-13]
+      */
+      if (!actionId) {
+        res.status(400).json({ message: "Informe action_id." });
+        return;
+      }
+      const escopo = await scopeOfRequest(req as AuthRequest);
+      const acao = await acaoComUnidade(orgId, actionId);
+      if (!acao || !seesAction(escopo, acao)) {
+        res.status(404).json({ message: "Ação não encontrada." });
+        return;
+      }
       const rows = await prisma.evidence.findMany({
-        where: { organizationId: orgId, ...(actionId ? { actionId } : {}) },
+        where: { organizationId: orgId, actionId },
         orderBy: { uploadedAt: "desc" },
         // storagePath é interno e nunca sai do servidor; o arquivo vem por
         // GET /api/evidences/:id/file.
@@ -95,9 +132,27 @@ class ActionEvidenceController {
           organizationId: orgId,
           actionId: { not: null },
         },
-        select: { storagePath: true, fileName: true, mimeType: true, sizeBytes: true },
+        select: {
+          storagePath: true,
+          fileName: true,
+          mimeType: true,
+          sizeBytes: true,
+          uploadedById: true,
+          action: { select: ACTION_UNIT_SELECT },
+        },
       });
-      if (!evidence) {
+      /*
+        O arquivo é de quem gere a unidade da ação, de quem a executa e de quem
+        o enviou. Fora disso — inclusive o de terceiro na unidade em que a
+        pessoa só trabalha — responde igual a inexistente. [C2-13]
+      */
+      const escopo = await scopeOfRequest(req as AuthRequest);
+      const acao = evidence?.action ?? null;
+      if (
+        !evidence ||
+        !acao ||
+        !(geridaPor(escopo, acao) || executesAction(escopo, acao) || evidence.uploadedById === escopo.userId)
+      ) {
         res.status(404).json({ message: "Evidência não encontrada." });
         return;
       }
@@ -144,7 +199,10 @@ class ActionEvidenceController {
         id: action_id,
         organizationId: orgId,
       });
-      if (!action) {
+      /* Quem executa anexa à sua; quem não executa, só como gestor da unidade. [C2-13] */
+      const escopo = await scopeOfRequest(req as AuthRequest);
+      const unidade = action ? await acaoComUnidade(orgId, action.id) : null;
+      if (!action || !unidade || (!isExecutor(req as AuthRequest, action) && !geridaPor(escopo, unidade))) {
         res.status(400).json({ message: "Ação inválida." });
         return;
       }
@@ -240,10 +298,22 @@ class ActionEvidenceController {
 
       const action = await prisma.action.findFirst({
         where: { id: req.params.id, organizationId: orgId },
-        select: { id: true, status: true, effectivenessCriteria: true },
+        select: { id: true, status: true, effectivenessCriteria: true, ...ACTION_UNIT_SELECT },
       });
-      if (!action) {
+      /* O critério é de quem cuida do plano na unidade da ação. [C2-13] */
+      const escopo = await scopeOfRequest(auth);
+      if (!action || !seesAction(escopo, action)) {
         res.status(404).json({ message: "Ação não encontrada." });
+        return;
+      }
+      if (!geridaPor(escopo, action)) {
+        if (executesAction(escopo, action)) {
+          res.status(403).json({
+            message: "Completar o critério é de quem cuida do plano de ação desta unidade.",
+          });
+        } else {
+          res.status(404).json({ message: "Ação não encontrada." });
+        }
         return;
       }
       if (action.status === ActionStatus.CANCELLED) {
@@ -346,7 +416,13 @@ class ActionEvidenceController {
       const userId = actorUserId(req as AuthRequest);
       const id = req.params.id;
       const action = await new Action().read.one({ id, organizationId: orgId });
-      if (!action) {
+      /*
+        Quem não executa recebe a recusa só onde gere a unidade; na de
+        trabalho e fora do escopo, a resposta é a de inexistente. [C2-13]
+      */
+      const escopo = await scopeOfRequest(req as AuthRequest);
+      const unidade = action ? await acaoComUnidade(orgId, action.id) : null;
+      if (!action || !unidade || (!isExecutor(req as AuthRequest, action) && !geridaPor(escopo, unidade))) {
         res.status(404).json({ message: "Ação não encontrada." });
         return;
       }
@@ -468,11 +544,18 @@ class ActionEvidenceController {
         return;
       }
 
+      const escopo = await scopeOfRequest(req as AuthRequest);
       const result = await prisma.$transaction(async (tx) => {
         const action = await tx.action.findFirst({
           where: { id, organizationId: orgId },
+          include: {
+            risk: { select: { hazard: { select: { activity: { select: { establishmentId: true } } } } } },
+            occurrence: { select: { establishmentId: true } },
+            changeEvent: { select: { establishmentId: true } },
+          },
         });
-        if (!action) {
+        /* Quem valida, valida na unidade que gere (hoje, só papéis sem recorte). [C2-13] */
+        if (!action || !geridaPor(escopo, action)) {
           throw Object.assign(new Error("Ação não encontrada."), { status: 404 });
         }
         if (action.status !== ActionStatus.WAITING_VALIDATION) {

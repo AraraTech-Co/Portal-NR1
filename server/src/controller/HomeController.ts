@@ -21,7 +21,12 @@ import {
 } from "../helper/ethics-access";
 import { ethicsDeadline } from "../helper/ethics-deadline";
 import type { AuthRequest } from "../types/auth";
-import { managedUnitFilter, scopeOfRequest } from "../helper/unit-scope";
+import {
+  actionManagerScope,
+  collectiveReadScope,
+  managedUnitFilter,
+  scopeOfRequest,
+} from "../helper/unit-scope";
 
 function fail(res: Response, err: unknown) {
   const e = err as { status?: number; message?: string };
@@ -243,14 +248,16 @@ class HomeController {
 
       if (cuida("acoes")) {
         const [validar, atrasadas] = await Promise.all([
+          /* Só as ações das unidades geridas. [C2-13] */
           prisma.action.count({
-            where: { organizationId: orgId, status: "WAITING_VALIDATION" },
+            where: { organizationId: orgId, status: "WAITING_VALIDATION", AND: [actionManagerScope(escopo)] },
           }),
           prisma.action.count({
             where: {
               organizationId: orgId,
               status: { in: [...EM_ABERTO] },
               dueDate: { lt: agora },
+              AND: [actionManagerScope(escopo)],
             },
           }),
         ]);
@@ -276,7 +283,7 @@ class HomeController {
 
       if (cuida("ocorrencias")) {
         const semAnalise = await prisma.occurrence.count({
-          where: { organizationId: orgId, analyzedAt: null },
+          where: { organizationId: orgId, analyzedAt: null, ...daGestao },
         });
         if (semAnalise > 0) {
           mesa.push({
@@ -684,8 +691,9 @@ class HomeController {
         janela, e o que nunca teve simulado. [S6-B]
       */
       if (pode("emergencias")) {
+        /* Os procedimentos que a pessoa vê em Emergências. [C2-13] */
         const procedimentos = await prisma.emergencyProcedure.findMany({
-          where: { organizationId: orgId, archivedAt: null },
+          where: { organizationId: orgId, archivedAt: null, AND: [collectiveReadScope(escopo)] },
           select: {
             drillFrequencyMonths: true,
             drills: { orderBy: { performedAt: "desc" }, take: 1, select: { performedAt: true } },
