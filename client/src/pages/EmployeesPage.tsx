@@ -85,7 +85,14 @@ export function EmployeesPage() {
               */
               isReadOnlyPermission(user?.permission)
               ? "Quem trabalha na empresa: nome, matrícula, função e admissão. Sem CPF, contato nem motivo de desligamento."
-              : "Sua ficha na empresa."
+              : /*
+                  Quem vê a lista sem administrar (o supervisor) recebe o
+                  texto de lista; "sua ficha" fica para quem só vê a
+                  própria. Decide pelo que a tela mostra de fato. [C2-8]
+                */
+                rows.some((r) => r.userId !== user?.id)
+                ? "Quem trabalha com você. Abra a ficha para ver função, treinamentos e ordem de serviço."
+                : "Sua ficha na empresa."
         }
       />
 
