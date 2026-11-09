@@ -188,8 +188,9 @@ describe("gerente, supervisor e SST consultam o que é seu [C2-1]", () => {
       ["supervisor", supervisor],
       ["sst", sst],
     ] as const) {
-      expect((await request(app).get(`/api/payslips/${colega.payslipId}`).set(as(p.token))).status, nome).toBe(403);
-      expect((await request(app).get(`/api/payslips/${colega.payslipId}/file`).set(as(p.token))).status, nome).toBe(403);
+      // Holerite de outra pessoa responde como inexistente. [C2-13]
+      expect((await request(app).get(`/api/payslips/${colega.payslipId}`).set(as(p.token))).status, nome).toBe(404);
+      expect((await request(app).get(`/api/payslips/${colega.payslipId}/file`).set(as(p.token))).status, nome).toBe(404);
       const atestado = await request(app).get(`/api/medical-certificates/${colega.certId}/file`).set(as(p.token));
       expect(atestado.status, nome).toBe(404);
       expect(atestado.text, nome).not.toContain("atestado de colega");

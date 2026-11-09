@@ -816,3 +816,52 @@ describe("ação sem risco aberta por gestor (achado do simulado) [C2-13]", () =
     expect((await listas(admB.token)).acoes, "outra loja").not.toContain(acao);
   });
 });
+
+describe("unidade da ação: risco antes da ocorrência [C2-13] [S3-D]", () => {
+  it("trocar só a unidade de uma ocorrência com risco de outra unidade é recusado", async () => {
+    const oc = ok(
+      await request(app).post("/api/occurrences").set(as(sst.token)).send({
+        type: "DANGEROUS_EVENT",
+        description: `Com risco de Rio Claro ${SUFIXO}`,
+        occurred_at: "2026-11-02T10:00:00.000Z",
+        establishment_id: rioClaro.id,
+        risk_id: rioClaro.riskId,
+      }),
+    ).occurrence.id as string;
+    const res = await request(app).patch(`/api/occurrences/${oc}`).set(as(sst.token)).send({ establishment_id: barueri.id });
+    expect(res.status, JSON.stringify(res.body)).toBe(400);
+    const guardada = await prisma.occurrence.findUniqueOrThrow({ where: { id: oc } });
+    expect(guardada.establishmentId).toBe(rioClaro.id);
+    // Trocando junto um risco da unidade nova, passa (canário).
+    const junto = await request(app)
+      .patch(`/api/occurrences/${oc}`)
+      .set(as(sst.token))
+      .send({ establishment_id: barueri.id, risk_id: barueri.riskId });
+    expect(junto.status, JSON.stringify(junto.body)).toBe(200);
+  });
+
+  it("ação com risco de Rio Claro e ocorrência de Barueri é de Rio Claro, na lista e no detalhe", async () => {
+    const ocB = ok(
+      await request(app).post("/api/occurrences").set(as(sst.token)).send({
+        type: "DANGEROUS_EVENT",
+        description: `Ocorrência de Barueri ${SUFIXO}`,
+        occurred_at: "2026-11-02T11:00:00.000Z",
+        establishment_id: barueri.id,
+      }),
+    ).occurrence.id as string;
+    // Montada direto no banco: risco de uma unidade, ocorrência de outra.
+    const acao = await prisma.action.create({
+      data: {
+        organizationId: ORG_ID,
+        title: `Risco RC, ocorrência B ${SUFIXO}`,
+        createdById: sst.user.id,
+        riskId: rioClaro.riskId,
+        occurrenceId: ocB,
+      },
+    });
+    expect((await listas(gerRC.token)).acoes, "gestor de Rio Claro vê na lista").toContain(acao.id);
+    expect((await listas(admB.token)).acoes, "gestor de Barueri não vê na lista").not.toContain(acao.id);
+    ok(await request(app).get(`/api/evidences?action_id=${acao.id}`).set(as(gerRC.token)), 200);
+    await igualAInexistente((id) => request(app).get(`/api/evidences?action_id=${id}`).set(as(admB.token)), acao.id);
+  });
+});

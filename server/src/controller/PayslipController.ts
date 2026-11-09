@@ -518,14 +518,9 @@ class PayslipController {
           overriddenBy: { select: { id: true, name: true } },
         },
       });
-      if (!payslip) {
+      /* Holerite de outra pessoa responde igual a inexistente. [C2-13] */
+      if (!payslip || payslip.userId !== userId) {
         res.status(404).json({ message: "Holerite não encontrado." });
-        return;
-      }
-      if (payslip.userId !== userId) {
-        res.status(403).json({
-          message: "Só o titular pode abrir o holerite.",
-        });
         return;
       }
       /*
@@ -547,14 +542,9 @@ class PayslipController {
       const payslip = await prisma.payslip.findFirst({
         where: { id: req.params.id, organizationId: orgId },
       });
-      if (!payslip) {
+      /* Holerite de outra pessoa responde igual a inexistente. [C2-13] */
+      if (!payslip || payslip.userId !== userId) {
         res.status(404).json({ message: "Holerite não encontrado." });
-        return;
-      }
-      if (payslip.userId !== userId) {
-        res.status(403).json({
-          message: "Só o titular pode baixar o holerite.",
-        });
         return;
       }
       const abs = resolveStoragePath(payslip.storagePath);
@@ -923,12 +913,9 @@ class PayslipController {
         where: { id: req.params.versionId, payslip: { organizationId: orgId } },
         include: { payslip: { select: { userId: true } } },
       });
-      if (!versao) {
+      /* Versão de holerite de outra pessoa responde igual a inexistente. [C2-13] */
+      if (!versao || versao.payslip.userId !== userId) {
         res.status(404).json({ message: "Versão não encontrada." });
-        return;
-      }
-      if (versao.payslip.userId !== userId) {
-        res.status(403).json({ message: "Só o titular pode baixar o holerite." });
         return;
       }
       const abs = resolveStoragePath(versao.storagePath);
@@ -951,14 +938,9 @@ class PayslipController {
         id: req.params.id,
         organizationId: orgId,
       });
-      if (!payslip) {
+      /* Holerite de outra pessoa responde igual a inexistente. [C2-13] */
+      if (!payslip || payslip.userId !== userId) {
         res.status(404).json({ message: "Holerite não encontrado." });
-        return;
-      }
-      if (payslip.userId !== userId) {
-        res.status(403).json({
-          message: "Só o titular do holerite pode perguntar.",
-        });
         return;
       }
       const { body } = req.body as { body?: string };

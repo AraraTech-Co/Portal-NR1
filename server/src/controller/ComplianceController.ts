@@ -23,7 +23,13 @@ import {
 } from "../constants";
 import { sendPrivateFile } from "../helper/send-private-file";
 import type { AuthRequest } from "../types/auth";
-import { currentUnitOf, managesPerson, scopeOfRequest } from "../helper/unit-scope";
+import {
+  currentUnitOf,
+  managesPerson,
+  managesPersonRecord,
+  personRecordScope,
+  scopeOfRequest,
+} from "../helper/unit-scope";
 
 /** A pessoa é desta empresa e está ao alcance de quem registra. [C2-13] */
 async function pessoaAlcancavel(auth: AuthRequest, orgId: string, userId: string): Promise<boolean> {
@@ -157,7 +163,7 @@ class ComplianceController {
       const rows = await prisma.workerCertificate.findMany({
         where: {
           organizationId: orgId,
-          ...(!seesAll(auth) ? { userId } : {}),
+          ...(!seesAll(auth) ? { userId } : personRecordScope(await scopeOfRequest(auth))),
           ...(req.query.user_id && seesAll(auth)
             ? { userId: String(req.query.user_id) }
             : {}),
@@ -255,9 +261,14 @@ class ComplianceController {
       const orgId = actorOrgId(auth);
       const certificate = await prisma.workerCertificate.findFirst({
         where: { id: req.params.id, organizationId: orgId },
-        select: { userId: true, storagePath: true, fileName: true },
+        select: { userId: true, storagePath: true, fileName: true, establishmentId: true },
       });
-      if (!certificate || (!seesAll(auth) && certificate.userId !== actorUserId(auth))) {
+      /* Quem vê o de terceiros, só das unidades sob sua gestão. [C2-13] */
+      const alcanca =
+        certificate &&
+        (certificate.userId === actorUserId(auth) ||
+          (seesAll(auth) && managesPersonRecord(await scopeOfRequest(auth), certificate)));
+      if (!certificate || !alcanca) {
         res.status(404).json({ message: "Certificado não encontrado." });
         return;
       }
@@ -275,7 +286,8 @@ class ComplianceController {
       const current = await prisma.workerCertificate.findFirst({
         where: { id: req.params.id, organizationId: orgId },
       });
-      if (!current) {
+      /* Fora das unidades geridas responde como inexistente. [C2-13] */
+      if (!current || !managesPersonRecord(await scopeOfRequest(auth), current)) {
         res.status(404).json({ message: "Certificado não encontrado." });
         return;
       }
@@ -322,7 +334,7 @@ class ComplianceController {
       const rows = await prisma.occupationalExam.findMany({
         where: {
           organizationId: orgId,
-          ...(!seesAll(auth) ? { userId } : {}),
+          ...(!seesAll(auth) ? { userId } : personRecordScope(await scopeOfRequest(auth))),
         },
         orderBy: { createdAt: "desc" },
         include: { user: { select: { id: true, name: true } } },

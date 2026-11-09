@@ -386,3 +386,69 @@ describe("transferência não leva o histórico [C2-13]", () => {
     }
   });
 });
+
+describe("registro antigo, sem unidade, fica com a gestão central [C2-13]", () => {
+  it("o ADM loja não decide, não analisa, não baixa nem abre; o RH alcança", async () => {
+    const ferias = await prisma.leaveRequest.create({
+      data: {
+        organizationId: ORG_ID,
+        userId: colabRC.id,
+        establishmentId: null,
+        startDate: new Date("2026-03-02"),
+        endDate: new Date("2026-03-06"),
+        days: 5,
+      },
+    });
+    const atestado = await prisma.medicalCertificate.create({
+      data: {
+        organizationId: ORG_ID,
+        userId: colabRC.id,
+        establishmentId: null,
+        startDate: new Date("2026-03-10"),
+        days: 1,
+        storagePath: arquivo(`atestado-antigo-${colabRC.id}.pdf`),
+        fileName: "antigo.pdf",
+      },
+    });
+    const doc = await prisma.hrDocument.create({
+      data: {
+        organizationId: ORG_ID,
+        title: `Advertência antiga ${SUFIXO}`,
+        storagePath: arquivo(`doc-antigo-${colabRC.id}.pdf`),
+        fileName: "doc.pdf",
+        mimeType: "application/pdf",
+        sizeBytes: 10,
+        targetUserId: colabRC.id,
+        establishmentId: null,
+        publishedById: rh.user.id,
+      },
+    });
+
+    async function igualAInexistente(montar: (id: string) => request.Test, id: string) {
+      const antigo = await montar(id);
+      const inexistente = await montar(randomUUID());
+      expect(antigo.status).toBe(404);
+      expect(antigo.text).toBe(inexistente.text);
+    }
+    await igualAInexistente(
+      (id) => request(app).post(`/api/leaves/${id}/decide`).set(as(admRC.token)).send({ status: "APPROVED" }),
+      ferias.id,
+    );
+    await igualAInexistente(
+      (id) => request(app).post(`/api/medical-certificates/${id}/review`).set(as(admRC.token)).send({ status: "ACCEPTED" }),
+      atestado.id,
+    );
+    await igualAInexistente((id) => request(app).get(`/api/medical-certificates/${id}/file`).set(as(admRC.token)), atestado.id);
+    await igualAInexistente((id) => request(app).get(`/api/hr-documents/${id}`).set(as(admRC.token)), doc.id);
+    const lista = await request(app).get("/api/leaves").set(as(admRC.token));
+    expect(lista.body.leaves.map((l: { id: string }) => l.id)).not.toContain(ferias.id);
+
+    // A gestão central continua alcançando.
+    expect((await request(app).get(`/api/medical-certificates/${atestado.id}/file`).set(as(rh.token))).status).toBe(200);
+    expect((await request(app).get(`/api/hr-documents/${doc.id}`).set(as(rh.token))).status).toBe(200);
+    const decidida = await request(app).post(`/api/leaves/${ferias.id}/decide`).set(as(rh.token)).send({ status: "APPROVED" });
+    expect(decidida.status, JSON.stringify(decidida.body)).toBe(200);
+
+    await prisma.hrDocument.delete({ where: { id: doc.id } });
+  });
+});

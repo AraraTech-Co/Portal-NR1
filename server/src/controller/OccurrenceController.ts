@@ -421,6 +421,22 @@ class OccurrenceController {
           res.status(400).json({ message: conferido.message });
           return;
         }
+      } else if (body.risk_id === undefined && body.establishment_id && current.riskId) {
+        /*
+          Trocar só a unidade não separa a ocorrência do risco dela: o risco
+          já ligado tem de ser da unidade nova (S3-D), senão a ação aberta
+          por ela ficaria com risco de uma unidade e ocorrência de outra.
+          [C2-13]
+        */
+        const conferido = await riskOfEstablishment(
+          orgId,
+          current.riskId,
+          body.establishment_id as string,
+        );
+        if (!conferido.ok) {
+          res.status(400).json({ message: conferido.message });
+          return;
+        }
       }
 
       const occurrence = await new Occurrence().update.one(
