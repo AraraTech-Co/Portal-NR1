@@ -1,6 +1,7 @@
 /**
  * Seed isolado: org "teste" + 1 usuário por papel da matriz + mock em cada módulo.
- * Uso (no container): npx tsx scripts/seed-teste-org.ts
+ * Uso, só em banco local: npx tsx scripts/seed-teste-org.ts
+ * (com outro host no DATABASE_URL, ele para sem gravar nada).
  */
 import {
   AccountRole,
@@ -37,6 +38,10 @@ import {
 } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { orgRoleToAccountRole } from "../server/src/helper/auth";
+import { exigirBancoLocal } from "./banco-local";
+
+/* Antes de qualquer conexão: o seed de teste só grava em banco local. */
+exigirBancoLocal();
 
 const prisma = new PrismaClient();
 
