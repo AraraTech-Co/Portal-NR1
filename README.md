@@ -104,7 +104,7 @@ npm run local:dev
 - API: http://localhost:8080  
 - Client: http://localhost:5173  
 
-Seed: `master` / `admin123` (MASTER) · `admin` / `admin123` (OWNER).
+Seed: `master` / `admin123` (MASTER) · `admin` / `admin123` (OWNER). Sem `SEED_ADMIN_PASSWORD`, o seed só roda em banco local (`localhost`, `127.0.0.1` ou `::1`, sem parâmetro `host` na URL).
 
 Em produção (`NODE_ENV=production`) o seed exige `SEED_ADMIN_PASSWORD` (12 caracteres ou mais): ela vira a senha inicial do `master` e do `admin`, que trocam no primeiro acesso, e não substitui a senha de quem já existe. O `scripts/deploy-americana.sh` gera essa senha no servidor e a mostra uma vez.
 
