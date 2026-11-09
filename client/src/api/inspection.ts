@@ -156,6 +156,7 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   "payslip.batch": "Folha do mês publicada em lote",
   "membership.role_changed": "Papel de uma pessoa alterado",
   "user.password_reset": "Senha redefinida",
+  "user.password_reset_refused": "Redefinição de senha recusada: conta usada em outra empresa",
   "consulta.view": "Consulta abriu uma tela",
   /*
     Faltavam rótulo: o convite, a planilha e o que entrou depois. O Histórico
