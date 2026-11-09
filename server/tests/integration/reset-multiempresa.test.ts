@@ -108,11 +108,19 @@ describe("reset de conta usada em outra empresa", () => {
   });
 
   /** Quem age (o RH desta empresa) passa a ter este papel na outra empresa. */
-  async function rhNaOutra(role: Role) {
+  async function rhNaOutra(
+    role: Role,
+    estado: { suspendedAt?: Date | null; accessExpiresAt?: Date | null } = {},
+  ) {
+    const dados = {
+      role,
+      suspendedAt: estado.suspendedAt ?? null,
+      accessExpiresAt: estado.accessExpiresAt ?? null,
+    };
     await prisma.membership.upsert({
       where: { userId_organizationId: { userId: rh.user.id, organizationId: outra } },
-      create: { userId: rh.user.id, organizationId: outra, role },
-      update: { role, suspendedAt: null },
+      create: { userId: rh.user.id, organizationId: outra, ...dados },
+      update: dados,
     });
   }
 
@@ -138,6 +146,34 @@ describe("reset de conta usada em outra empresa", () => {
 
   it("lá, quem age é RH e a pessoa colaboradora: redefine", async () => {
     const p = await pessoa("rh-nas-duas");
+    await prisma.membership.create({ data: { userId: p.id, organizationId: outra, role: Role.COLABORADOR } });
+    await rhNaOutra(Role.RH);
+    expect((await redefinir(rh.token, p.id)).status).toBe(200);
+  });
+
+  it("o vínculo de QUEM AGE lá precisa estar ativo: RH lá, mas suspenso ou com acesso vencido, recusa", async () => {
+    for (const [nome, estado] of [
+      ["agente-suspenso", { suspendedAt: new Date() }],
+      ["agente-vencido", { accessExpiresAt: new Date(Date.now() - 1000) }],
+    ] as const) {
+      const p = await pessoa(nome);
+      await prisma.membership.create({
+        data: { userId: p.id, organizationId: outra, role: Role.COLABORADOR },
+      });
+      // Seria RH acima da pessoa lá — se o vínculo dele lá estivesse ativo.
+      await rhNaOutra(Role.RH, estado);
+      const sessao = (await entrar(p.login)).body.token as string;
+      const antes = await prisma.user.findUniqueOrThrow({ where: { id: p.id } });
+
+      const res = await redefinir(rh.token, p.id);
+      expect(res.status, `${nome}: ${JSON.stringify(res.body)}`).toBe(409);
+      expect(res.body.code).toBe("OTHER_ORG");
+      const depois = await prisma.user.findUniqueOrThrow({ where: { id: p.id } });
+      expect(depois.passwordHash, nome).toBe(antes.passwordHash);
+      expect((await request(app).get("/api/auth").set(as(sessao))).status, nome).toBe(200);
+    }
+    // Canário: com o vínculo dele lá ativo, a mesma situação redefine.
+    const p = await pessoa("agente-ativo");
     await prisma.membership.create({ data: { userId: p.id, organizationId: outra, role: Role.COLABORADOR } });
     await rhNaOutra(Role.RH);
     expect((await redefinir(rh.token, p.id)).status).toBe(200);
