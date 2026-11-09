@@ -6,10 +6,55 @@ import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
 import { effectivePermission, orgRoleToAccountRole } from "../helper/auth";
 import { assignableOrgRoles, canAssignOrgRole } from "../helper/invite-access";
-import { modulesForRole } from "../helper/module-access";
+import { canWriteModule, modulesForRole } from "../helper/module-access";
 import { accessEnded, resolveAccessUntil } from "../helper/access-period";
 import { temporaryPassword } from "../helper/temporary-password";
-import type { AuthRequest } from "../types/auth";
+import type { Actor, AuthRequest } from "../types/auth";
+
+/**
+ * A conta (senha, sessões) é uma só para todas as empresas; o vínculo é por
+ * empresa. Redefinir a senha mexe na conta inteira, então só redefine quem
+ * poderia redefinir em TODAS as empresas ativas dela: vínculo ativo em cada
+ * uma, com Conta e usuários e papel acima do da pessoa ali. Devolve as
+ * empresas em que falta esse poder.
+ */
+async function empresasSemPoderDeRedefinir(
+  actor: Actor,
+  orgId: string,
+  targetId: string,
+): Promise<string[]> {
+  const agora = new Date();
+  const ativa = {
+    suspendedAt: null,
+    OR: [{ accessExpiresAt: null }, { accessExpiresAt: { gt: agora } }],
+    organization: { active: true },
+  };
+  const outras = await prisma.membership.findMany({
+    where: { userId: targetId, organizationId: { not: orgId }, ...ativa },
+    select: { organizationId: true, role: true },
+  });
+  const faltam: string[] = [];
+  for (const vinculo of outras) {
+    const meu = await prisma.membership.findFirst({
+      where: { userId: actor.userId, organizationId: vinculo.organizationId, ...ativa },
+      select: { role: true },
+    });
+    const permission = meu ? effectivePermission(meu.role) : "";
+    const ali: Actor = {
+      ...actor,
+      organizationId: vinculo.organizationId,
+      role: meu?.role ?? Role.COLABORADOR,
+      permission,
+      isMaster: meu?.role === Role.MASTER,
+    };
+    const pode =
+      Boolean(meu) &&
+      canWriteModule(permission, "conta") &&
+      canAssignOrgRole(ali, vinculo.role);
+    if (!pode) faltam.push(vinculo.organizationId);
+  }
+  return faltam;
+}
 
 function fail(res: Response, err: unknown) {
   const e = err as { status?: number; message?: string };
@@ -336,6 +381,31 @@ class PeopleAccessController {
       }
       if (!membership.user.active) {
         res.status(409).json({ message: "Usuário desativado: reative antes de redefinir a senha." });
+        return;
+      }
+
+      /*
+        A senha vale para a conta em todas as empresas: se ela também é usada
+        em outra empresa onde quem age não redefine, nada muda — nem senha,
+        nem sessão.
+      */
+      const semPoder = await empresasSemPoderDeRedefinir(actor, orgId, targetId);
+      if (semPoder.length > 0) {
+        await writeAudit({
+          organizationId: orgId,
+          actorId: actor.userId,
+          action: "user.password_reset_refused",
+          entityType: "User",
+          entityId: targetId,
+          context: { reason: "OTHER_ORG", organizations: semPoder.length },
+        });
+        res.status(409).json({
+          message:
+            "Esta conta também é usada em outra empresa, e a senha vale para todas. " +
+            "Só pode redefinir quem tem esse poder em todas as empresas da pessoa. " +
+            "A própria pessoa pode trocar a senha em Trocar senha.",
+          code: "OTHER_ORG",
+        });
         return;
       }
 
