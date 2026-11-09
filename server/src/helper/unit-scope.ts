@@ -266,7 +266,8 @@ export function actionReadScope(scope: UnitScope): Record<string, unknown> {
   return {
     OR: [
       { assigneeId: scope.userId },
-      { assigneeId: null, createdById: scope.userId },
+      /* Quem abriu a ação continua a vê-la, mesmo sem unidade. */
+      { createdById: scope.userId },
       ...(unidades.length ? [actionInUnits(unidades)] : []),
     ],
   };
@@ -278,9 +279,13 @@ export function actionManagerScope(scope: UnitScope): Record<string, unknown> {
   return actionInUnits(scope.managed);
 }
 
-/** O ator vê a ação: no escopo coletivo, ou é quem a executa. */
+/** O ator vê a ação: no escopo coletivo, executa ou a abriu. */
 export function seesAction(scope: UnitScope, action: ActionUnitRow & { assigneeId: string | null; createdById: string }): boolean {
-  return executesAction(scope, action) || collectiveView(scope, actionUnitOf(action)) !== "none";
+  return (
+    executesAction(scope, action) ||
+    action.createdById === scope.userId ||
+    collectiveView(scope, actionUnitOf(action)) !== "none"
+  );
 }
 
 /**

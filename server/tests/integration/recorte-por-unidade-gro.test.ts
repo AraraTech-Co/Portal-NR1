@@ -799,3 +799,20 @@ describe("tirar a unidade corta o acesso na sessão aberta [C2-13]", () => {
     }
   });
 });
+
+describe("ação sem risco aberta por gestor (achado do simulado) [C2-13]", () => {
+  it("abre como antes; quem abriu e quem executa veem; outra loja, não", async () => {
+    const res = await request(app).post("/api/actions").set(as(gerRC.token)).send({
+      title: `Achado do simulado ${SUFIXO}`,
+      description: "Achado do simulado de emergência: rota de fuga obstruída",
+      assignee_id: colabRC.id,
+      due_date: PRAZO,
+      priority: "HIGH",
+      effectiveness_criteria: "Rota livre na próxima inspeção",
+    });
+    const acao = ok(res, 201).action.id as string;
+    expect((await listas(gerRC.token)).acoes, "quem abriu").toContain(acao);
+    expect((await listas(colabRC.token)).acoes, "quem executa").toContain(acao);
+    expect((await listas(admB.token)).acoes, "outra loja").not.toContain(acao);
+  });
+});

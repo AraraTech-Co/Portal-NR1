@@ -967,16 +967,10 @@ class RiskController {
         return;
       }
       /*
-        A ação de quem tem recorte nasce numa unidade gerida, pelo risco.
-        Ação sem risco não tem unidade e fica com a central. [C2-13]
+        Ação sem risco (como a aberta pelo achado do simulado) não tem
+        unidade: fica com a central, com quem a executa e com quem a abriu.
+        Abrir continua possível para quem já podia. [C2-13]
       */
-      if (!escopo.wholeOrg && !risk_id) {
-        res.status(400).json({
-          message: "Escolha o risco da unidade a que a ação se refere.",
-          code: "ACTION_NEEDS_UNIT",
-        });
-        return;
-      }
       if (risk_id) {
         const risk = await prisma.risk.findFirst({
           where: { id: risk_id, organizationId: orgId, archivedAt: null },
