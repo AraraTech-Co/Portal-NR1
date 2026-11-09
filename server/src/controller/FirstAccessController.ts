@@ -16,10 +16,12 @@ import {
   clientIp,
   firstAccessKey,
   ipKey,
+  lockIfAtLimit,
   lockedUntil,
   pseudonym,
   recordAttempt,
-  registerFailure,
+  releaseAttempt,
+  reserveAttempt,
 } from "../helper/auth-attempts";
 
 /**
@@ -111,7 +113,16 @@ class FirstAccessController {
       ip,
     };
 
-    if (await lockedUntil([chave, chaveDoIp])) {
+    /*
+      A tentativa é RESERVADA antes de consultar a ficha: só as 5 primeiras
+      (20 por IP) chegam a conferir, mesmo numa rajada simultânea. Conferir
+      antes e contar depois deixava a rajada inteira passar pela trava.
+    */
+    const [daMatricula, doIp] = await Promise.all([
+      reserveAttempt(chave, ACCOUNT_MAX_FAILURES, null),
+      reserveAttempt(chaveDoIp, IP_MAX_FAILURES, IP_WINDOW_MS),
+    ]);
+    if (!daMatricula.ok || !doIp.ok) {
       await recordAttempt({ ...tentativa, userId: null, success: false });
       negar(res);
       return;
@@ -119,8 +130,8 @@ class FirstAccessController {
 
     const falhou = async (userId: string | null) => {
       await Promise.all([
-        registerFailure(chave, ACCOUNT_MAX_FAILURES, null),
-        registerFailure(chaveDoIp, IP_MAX_FAILURES, IP_WINDOW_MS),
+        lockIfAtLimit(chave, ACCOUNT_MAX_FAILURES),
+        lockIfAtLimit(chaveDoIp, IP_MAX_FAILURES),
       ]);
       await recordAttempt({ ...tentativa, userId, success: false });
       negar(res);
@@ -204,6 +215,7 @@ class FirstAccessController {
       }),
     ]);
     await clearFailures(chave);
+    await releaseAttempt(chaveDoIp);
     await recordAttempt({ ...tentativa, userId: ficha.user.id, success: true });
 
     res.setHeader("Cache-Control", "no-store");

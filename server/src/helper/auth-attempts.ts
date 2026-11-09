@@ -95,41 +95,83 @@ export async function lockedUntil(keys: Array<string | null>): Promise<Date | nu
 }
 
 /**
- * Soma um erro na chave, de forma atômica. Ao chegar no teto, bloqueia por
- * 15 minutos e zera a contagem. Com `windowMs`, a contagem recomeça quando a
- * janela passa (limite por IP); sem, conta erros seguidos até um acerto.
- * Devolve até quando ficou bloqueada, se bloqueou agora.
+ * RESERVA a tentativa antes de conferir qualquer coisa, numa instrução só.
+ *
+ * Conferir primeiro e contar o erro depois deixava uma rajada inteira passar
+ * pela trava: todas liam "sem bloqueio" antes de o primeiro erro ser gravado.
+ * Agora cada tentativa conta ANTES (INSERT … ON CONFLICT, atômico no banco):
+ * só as `max` primeiras seguem para a conferência, e a que passa do teto já
+ * grava o bloqueio na mesma instrução. Um acerto apaga a contagem
+ * (`clearFailures`) ou devolve a vaga (`releaseAttempt`, no limite por IP,
+ * que conta só erros).
+ *
+ * - Bloqueio vigente: recusa, sem contar.
+ * - Bloqueio vencido, ou janela vencida (limite por IP): recomeça em 1.
+ *
+ * Devolve `ok: false` com até quando, quando a tentativa não pode seguir.
  */
-export async function registerFailure(
+export async function reserveAttempt(
   key: string | null,
   max: number,
   windowMs: number | null,
-): Promise<Date | null> {
-  if (!key) return null;
+): Promise<{ ok: boolean; lockedUntil: Date | null }> {
+  if (!key) return { ok: true, lockedUntil: null };
   const agora = new Date();
-  const inicioDaJanela = windowMs ? new Date(agora.getTime() - windowMs) : new Date(0);
-  const rows = await prisma.$queryRaw<Array<{ failures: number }>>`
-    INSERT INTO "AuthLockout" ("key", "failures", "windowStart", "updatedAt")
-    VALUES (${key}, 1, ${agora}, ${agora})
+  const piso = windowMs ? new Date(agora.getTime() - windowMs) : new Date(0);
+  const ate = new Date(agora.getTime() + LOCK_MS);
+  const rows = await prisma.$queryRaw<Array<{ failures: number; lockedUntil: Date | null }>>`
+    INSERT INTO "AuthLockout" ("key", "failures", "windowStart", "lockedUntil", "updatedAt")
+    VALUES (${key}, 1, ${agora}, NULL, ${agora})
     ON CONFLICT ("key") DO UPDATE SET
       "failures" = CASE
-        WHEN "AuthLockout"."windowStart" < ${inicioDaJanela} THEN 1
+        WHEN "AuthLockout"."lockedUntil" > ${agora} THEN "AuthLockout"."failures"
+        WHEN "AuthLockout"."lockedUntil" IS NOT NULL OR "AuthLockout"."windowStart" < ${piso} THEN 1
         ELSE "AuthLockout"."failures" + 1
       END,
       "windowStart" = CASE
-        WHEN "AuthLockout"."windowStart" < ${inicioDaJanela} THEN ${agora}
+        WHEN "AuthLockout"."lockedUntil" > ${agora} THEN "AuthLockout"."windowStart"
+        WHEN "AuthLockout"."lockedUntil" IS NOT NULL OR "AuthLockout"."windowStart" < ${piso} THEN ${agora}
         ELSE "AuthLockout"."windowStart"
       END,
+      "lockedUntil" = CASE
+        WHEN "AuthLockout"."lockedUntil" > ${agora} THEN "AuthLockout"."lockedUntil"
+        WHEN "AuthLockout"."lockedUntil" IS NOT NULL OR "AuthLockout"."windowStart" < ${piso} THEN NULL
+        WHEN "AuthLockout"."failures" + 1 > ${max} THEN ${ate}
+        ELSE NULL
+      END,
       "updatedAt" = ${agora}
-    RETURNING "failures"`;
-  const failures = Number(rows[0]?.failures ?? 0);
-  if (failures < max) return null;
+    RETURNING "failures", "lockedUntil"`;
+  const r = rows[0];
+  const travada = r?.lockedUntil && r.lockedUntil.getTime() > agora.getTime() ? r.lockedUntil : null;
+  return { ok: !travada && Number(r?.failures ?? 0) <= max, lockedUntil: travada };
+}
+
+/**
+ * Depois de uma tentativa reservada que errou: se a contagem chegou ao teto,
+ * bloqueia por 15 minutos. Uma instrução, sem ler antes, e sem estourar se
+ * um acerto simultâneo já apagou a linha. Devolve até quando, se bloqueou.
+ */
+export async function lockIfAtLimit(key: string | null, max: number): Promise<Date | null> {
+  if (!key) return null;
+  const agora = new Date();
   const ate = new Date(agora.getTime() + LOCK_MS);
-  await prisma.authLockout.update({
-    where: { key },
-    data: { lockedUntil: ate, failures: 0, windowStart: agora },
-  });
-  return ate;
+  const rows = await prisma.$queryRaw<Array<{ lockedUntil: Date }>>`
+    UPDATE "AuthLockout"
+       SET "lockedUntil" = ${ate}, "updatedAt" = ${agora}
+     WHERE "key" = ${key}
+       AND "failures" >= ${max}
+       AND ("lockedUntil" IS NULL OR "lockedUntil" <= ${agora})
+    RETURNING "lockedUntil"`;
+  return rows[0]?.lockedUntil ?? null;
+}
+
+/** Acerto no limite por IP: a tentativa reservada não era erro, devolve a vaga. */
+export async function releaseAttempt(key: string | null): Promise<void> {
+  if (!key) return;
+  const agora = new Date();
+  await prisma.$executeRaw`
+    UPDATE "AuthLockout" SET "failures" = GREATEST("failures" - 1, 0)
+     WHERE "key" = ${key} AND ("lockedUntil" IS NULL OR "lockedUntil" <= ${agora})`;
 }
 
 /** Um acerto zera os erros seguidos da chave (e o bloqueio, se houver). */

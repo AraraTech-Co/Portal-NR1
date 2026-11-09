@@ -310,6 +310,18 @@ describe("limite de tentativas no login [C1-7]", () => {
     expect(outro.status).toBe(200);
   });
 
+  it("com TRUST_PROXY, logins certos não gastam o limite do IP (a loja sai toda pelo mesmo IP)", async () => {
+    process.env.TRUST_PROXY = "loopback";
+    const comProxy = createApp();
+    for (let i = 0; i < 25; i++) {
+      const res = await request(comProxy)
+        .post("/api/auth")
+        .set("X-Forwarded-For", "198.51.100.40")
+        .send({ login: "teste.rh", password: SENHA });
+      expect(res.status, `entrada ${i + 1}`).toBe(200);
+    }
+  });
+
   it("TRUST_PROXY=true é recusado: deixaria quem acessa escolher o próprio IP", () => {
     expect(() => trustProxySetting("true")).toThrow();
     expect(trustProxySetting("")).toBe(false);

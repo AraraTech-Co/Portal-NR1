@@ -21,16 +21,18 @@ import {
   ACCOUNT_MAX_FAILURES,
   IP_MAX_FAILURES,
   IP_WINDOW_MS,
+  LOCK_MS,
   accountKey,
   clearFailures,
   clientIp,
   identifierKey,
   ipKey,
-  lockedUntil,
+  lockIfAtLimit,
   minutesLeft,
   pseudonym,
   recordAttempt,
-  registerFailure,
+  releaseAttempt,
+  reserveAttempt,
 } from "../helper/auth-attempts";
 
 /** Senhas provisórias da carga inicial — forçam troca no próximo acesso. */
@@ -138,10 +140,19 @@ class AuthController {
       userId: umaSo?.id ?? null,
       ip,
     };
-    const bloqueada = await lockedUntil([chaveDaConta, chaveDoIp]);
-    if (bloqueada) {
+    /*
+      A tentativa é RESERVADA antes de conferir a senha: só as 5 primeiras
+      (20 por IP) chegam ao bcrypt, mesmo numa rajada simultânea.
+    */
+    const [daConta, doIp] = await Promise.all([
+      reserveAttempt(chaveDaConta, ACCOUNT_MAX_FAILURES, null),
+      reserveAttempt(chaveDoIp, IP_MAX_FAILURES, IP_WINDOW_MS),
+    ]);
+    if (!daConta.ok || !doIp.ok) {
       await recordAttempt({ ...tentativa, success: false });
-      res.status(429).json(bloqueioDoLogin(bloqueada));
+      res.status(429).json(
+        bloqueioDoLogin(daConta.lockedUntil ?? doIp.lockedUntil ?? new Date(Date.now() + LOCK_MS)),
+      );
       return;
     }
 
@@ -152,6 +163,9 @@ class AuthController {
         if (user) {
           // Duas pessoas com a mesma matrícula e a mesma senha: não há como
           // saber quem é, e escolher uma seria entrar na conta errada.
+          // A senha conferiu: não é erro, a reserva sai. [C1-7]
+          await clearFailures(chaveDaConta);
+          await releaseAttempt(chaveDoIp);
           res.status(401).json({
             message:
               "Não foi possível identificar você por este número. Entre com o seu login ou e-mail.",
@@ -164,8 +178,8 @@ class AuthController {
     }
     if (!user) {
       const [bloqueouConta, bloqueouIp] = await Promise.all([
-        registerFailure(chaveDaConta, ACCOUNT_MAX_FAILURES, null),
-        registerFailure(chaveDoIp, IP_MAX_FAILURES, IP_WINDOW_MS),
+        lockIfAtLimit(chaveDaConta, ACCOUNT_MAX_FAILURES),
+        lockIfAtLimit(chaveDoIp, IP_MAX_FAILURES),
       ]);
       await recordAttempt({ ...tentativa, success: false });
       const bloqueou = bloqueouConta ?? bloqueouIp;
@@ -176,9 +190,10 @@ class AuthController {
       res.status(401).json({ message: "Credenciais inválidas." });
       return;
     }
-    /* Acertou: os erros seguidos desta conta zeram. */
+    /* Acertou: os erros seguidos desta conta zeram, e a vaga do IP volta. */
     await clearFailures(chaveDaConta);
     await clearFailures(accountKey(user.id));
+    await releaseAttempt(chaveDoIp);
     await recordAttempt({ ...tentativa, userId: user.id, success: true });
 
     // Senha provisória da carga: marca troca obrigatória antes de emitir sessão.
