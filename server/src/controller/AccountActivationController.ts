@@ -49,13 +49,38 @@ function liberadoAte(): Date {
   return new Date(Date.now() + FIRST_ACCESS_WINDOW_DAYS * 24 * 3600_000);
 }
 
-async function ultimaEntrada(orgId: string, userId: string): Promise<Date | null> {
+/**
+ * A última entrada da CONTA, em qualquer empresa. A conta (senha, marcador
+ * de ativação, janela do primeiro acesso) é uma só para todas as empresas:
+ * a entrada pela empresa B desmente "nunca entrou" dito pelo RH da A.
+ */
+async function ultimaEntrada(userId: string): Promise<Date | null> {
   const e = await prisma.auditEvent.findFirst({
-    where: { organizationId: orgId, action: "session.signin", entityType: "User", entityId: userId },
+    where: { action: "session.signin", entityType: "User", entityId: userId },
     orderBy: { createdAt: "desc" },
     select: { createdAt: true },
   });
   return e?.createdAt ?? null;
+}
+
+/**
+ * A conta tem vínculo ativo em outra empresa? Então abrir o primeiro acesso
+ * por aqui daria a quem tem os dados desta ficha a senha de uma conta que
+ * também é usada lá. O caminho é o reset.
+ */
+async function temVinculoEmOutraEmpresa(orgId: string, userId: string): Promise<boolean> {
+  const agora = new Date();
+  const outro = await prisma.membership.findFirst({
+    where: {
+      userId,
+      organizationId: { not: orgId },
+      suspendedAt: null,
+      OR: [{ accessExpiresAt: null }, { accessExpiresAt: { gt: agora } }],
+      organization: { active: true },
+    },
+    select: { id: true },
+  });
+  return Boolean(outro);
 }
 
 /** A pessoa desta empresa sobre quem se age, com o que a ação precisa. */
@@ -173,9 +198,14 @@ class AccountActivationController {
       });
       const bloqueioPorChave = new Map(bloqueios.map((b) => [b.key, b.lockedUntil!]));
 
+      /* A última entrada da conta, em qualquer empresa: a conta é uma só. */
       const entradas = await prisma.auditEvent.groupBy({
         by: ["entityId"],
-        where: { organizationId: orgId, action: "session.signin", entityType: "User" },
+        where: {
+          action: "session.signin",
+          entityType: "User",
+          entityId: { in: membros.map((m) => m.user.id) },
+        },
         _max: { createdAt: true },
       });
       const entradaPor = new Map(entradas.map((e) => [e.entityId, e._max.createdAt]));
@@ -262,6 +292,13 @@ class AccountActivationController {
         });
         return;
       }
+      if (await temVinculoEmOutraEmpresa(a.orgId, a.user.id)) {
+        res.status(409).json({
+          message: "Esta conta também tem acesso em outra empresa: use Redefinir senha.",
+          code: "OTHER_ORG",
+        });
+        return;
+      }
       await abrirPrimeiroAcesso(a.user);
       await writeAudit({
         organizationId: a.orgId,
@@ -304,7 +341,15 @@ class AccountActivationController {
         return;
       }
       if (outcome === "NEVER_SIGNED_IN") {
-        const entrada = await ultimaEntrada(a.orgId, a.user.id);
+        if (await temVinculoEmOutraEmpresa(a.orgId, a.user.id)) {
+          res.status(409).json({
+            message:
+              'Esta conta também tem acesso em outra empresa: não pode ser classificada como "nunca entrou". Use Redefinir senha.',
+            code: "OTHER_ORG",
+          });
+          return;
+        }
+        const entrada = await ultimaEntrada(a.user.id);
         if (entrada) {
           res.status(409).json({
             message: `A trilha registra entrada desta conta em ${entrada.toLocaleDateString("pt-BR", {

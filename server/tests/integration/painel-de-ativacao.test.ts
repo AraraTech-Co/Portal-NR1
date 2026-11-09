@@ -245,3 +245,62 @@ describe("reabrir e classificar [C1-7]", () => {
     expect(u.firstAccessEligible).toBe(false);
   });
 });
+
+describe("a conta é uma só para todas as empresas [C1-7]", () => {
+  let outra: string;
+
+  beforeAll(async () => {
+    outra = (await prisma.organization.create({ data: { name: `Empresa B ${SUFIXO}` } })).id;
+  });
+
+  afterAll(async () => {
+    await prisma.auditEvent.deleteMany({ where: { organizationId: outra } });
+    await prisma.organization.deleteMany({ where: { id: outra } });
+  });
+
+  it("com vínculo ativo em outra empresa, nem 'nunca entrou' nem reabrir: o caminho é o reset", async () => {
+    const id = await pessoa();
+    await prisma.user.update({ where: { id }, data: { firstAccessEligible: false, firstAccessUntil: null } });
+    await prisma.membership.create({ data: { userId: id, organizationId: outra, role: "COLABORADOR" } });
+
+    const classificar = await request(app)
+      .post(`/api/pessoas-acessos/${id}/classificar`)
+      .set(as(rh.token))
+      .send({ outcome: "NEVER_SIGNED_IN", reason: "Aqui ela nunca entrou." });
+    expect(classificar.status, JSON.stringify(classificar.body)).toBe(409);
+    expect(classificar.body.code).toBe("OTHER_ORG");
+
+    // Mesmo já elegível (conta nova), reabrir também é recusado.
+    await prisma.user.update({ where: { id }, data: { firstAccessEligible: true } });
+    const reabrir = await request(app)
+      .post(`/api/pessoas-acessos/${id}/reabrir-primeiro-acesso`)
+      .set(as(rh.token));
+    expect(reabrir.status).toBe(409);
+    expect(reabrir.body.code).toBe("OTHER_ORG");
+
+    const u = await prisma.user.findUniqueOrThrow({ where: { id } });
+    expect(u.firstAccessUntil).toBeNull();
+  });
+
+  it("entrada só pela outra empresa desmente 'nunca entrou', e o painel a mostra", async () => {
+    const id = await pessoa();
+    await prisma.user.update({ where: { id }, data: { firstAccessEligible: false, firstAccessUntil: null } });
+    // Vínculo encerrado lá (não conta como ativo), mas a entrada ficou na trilha de lá.
+    await prisma.membership.create({
+      data: { userId: id, organizationId: outra, role: "COLABORADOR", suspendedAt: new Date() },
+    });
+    await prisma.auditEvent.create({
+      data: { organizationId: outra, actorId: id, action: "session.signin", entityType: "User", entityId: id },
+    });
+
+    const res = await request(app)
+      .post(`/api/pessoas-acessos/${id}/classificar`)
+      .set(as(rh.token))
+      .send({ outcome: "NEVER_SIGNED_IN", reason: "Aqui ela nunca entrou." });
+    expect(res.status, JSON.stringify(res.body)).toBe(409);
+    expect(res.body.code).toBe("HAS_SIGNIN");
+
+    const linha = (await painel(rh.token)).body.people.find((p: { userId: string }) => p.userId === id);
+    expect(linha.lastSigninAt).not.toBeNull();
+  });
+});
