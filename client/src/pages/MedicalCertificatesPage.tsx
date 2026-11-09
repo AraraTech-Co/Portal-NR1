@@ -261,7 +261,13 @@ export function MedicalCertificatesPage() {
       {!loading && !error && rows.length === 0 && (
         <EmptyState
           title="Nenhum atestado"
-          description={canManage ? "Atestados enviados pela equipe aparecem aqui." : "Os atestados que você enviar aparecem aqui."}
+          description={
+            canManage
+              ? "Atestados enviados pela equipe aparecem aqui."
+              : canWrite
+                ? "Os atestados que você enviar aparecem aqui."
+                : "Nenhum atestado seu registrado no portal."
+          }
         />
       )}
       {actionError && (

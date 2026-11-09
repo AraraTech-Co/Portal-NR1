@@ -43,6 +43,16 @@ export function AppShell() {
               Acesso só de consulta: você vê o que a fiscalização pede, mas nada aqui pode ser alterado.
             </p>
           )}
+          {/*
+            Gestor sem unidade atribuída não vê registros de terceiros; o
+            aviso diz o que fazer, em vez de a tela parecer vazia. [C2-13]
+          */}
+          {user?.needs_units && (
+            <p className="readonly-banner" role="status">
+              Nenhuma unidade está sob a sua responsabilidade ainda. Até o RH ou o Master
+              atribuir, você vê só os seus próprios registros.
+            </p>
+          )}
           <Outlet />
         </main>
       </div>

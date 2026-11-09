@@ -10,6 +10,7 @@ import { NAV_GROUPS } from "@/layout/nav";
 import { avisoDoPapel, formatDay, ORG_ROLE_LABEL, PERMISSION_LABEL } from "@/lib/labels";
 import "@/components/form.css";
 import "./pessoas-acessos.css";
+import { PAPEIS_COM_UNIDADE, UnidadesSobResponsabilidade } from "./UnidadesSobResponsabilidade";
 
 type Person = {
   id: string;
@@ -372,6 +373,10 @@ export function PessoasEAcessos() {
                                   </Button>
                                 )}
                               </div>
+                            )}
+                            {/* Quem muda o papel define as unidades do gestor. [C2-13] */}
+                            {p.can_change_role && PAPEIS_COM_UNIDADE.includes(p.org_role) && (
+                              <UnidadesSobResponsabilidade userId={p.id} name={p.name} />
                             )}
                             <Acessos modules={p.modules} />
                           </div>
