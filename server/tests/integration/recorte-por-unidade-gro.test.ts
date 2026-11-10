@@ -328,6 +328,10 @@ async function listas(token: string) {
     request(app).get("/api/participations").set(as(token)),
     request(app).get("/api/emergency-procedures").set(as(token)),
   ]);
+  // Status antes do conteúdo: uma resposta sem corpo não pode virar "lista vazia".
+  for (const [nome, res] of Object.entries({ ocorrencias, acoes, aeps, participacoes, emergencias })) {
+    expect(res.status, `${nome}: ${JSON.stringify(res.body).slice(0, 200)}`).toBe(200);
+  }
   return {
     ocorrencias: ids(ocorrencias.body.occurrences),
     acoes: ids(acoes.body.actions),
