@@ -61,7 +61,16 @@ async function importar(linhas: Record<string, unknown>[], dryRun = false) {
   const res = await request(app)
     .post("/api/pessoas-acessos/importar")
     .set(as(rh.token))
-    .send({ people: linhas, dry_run: dryRun });
+    /*
+      A organização de teste tem mais de uma filial: a linha sem função diz
+      qual (a do seed, a mesma das funções do seed); com função, vale a dela. [C3-3]
+    */
+    .send({
+      people: linhas.map((l) =>
+        l.job_role_id ? l : { establishment_id: "aaaaaaaa-0001-4000-8000-000000000011", ...l },
+      ),
+      dry_run: dryRun,
+    });
   if (!dryRun && res.status === 201) {
     for (const r of res.body.results as { login?: string }[]) {
       if (!r.login) continue;
@@ -313,8 +322,13 @@ describe("a planilha completa quem já existe [CB-2] [S1-G]", () => {
     expect(antes.taxId).toBeNull();
     expect(antes.jobRoleId).toBeNull();
 
+    /* Uma função da filial em que a pessoa entrou (a do seed). [C3-3] */
     const funcao = await prisma.jobRole.findFirstOrThrow({
-      where: { organizationId: ORG_ID, archivedAt: null },
+      where: {
+        organizationId: ORG_ID,
+        archivedAt: null,
+        sector: { establishmentId: "aaaaaaaa-0001-4000-8000-000000000011" },
+      },
       select: { id: true, name: true },
     });
     const cpf = cpfFicticio(Date.now() + 104729);

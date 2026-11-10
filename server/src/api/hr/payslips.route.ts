@@ -18,6 +18,9 @@ router.get("/api/payslips/open-questions", writeRh, (req, res) =>
 );
 router.post("/api/payslips", writeRh, (req, res) => payslips.create(req, res));
 /** A folha do mês num arquivo só: conferir antes, depois publicar. [B4-F] */
+router.get("/api/payslips/lote/filiais", writeRh, (req, res) =>
+  payslips.batchEstablishments(req, res),
+);
 router.post("/api/payslips/lote/previa", writeRh, (req, res) =>
   payslips.previewBatch(req, res),
 );

@@ -56,6 +56,8 @@ type Resultado = {
    * nascimento. [C1-7]
    */
   awaiting_first_access?: boolean;
+  /** A filial em que a linha cai, para a prévia mostrar. [C3-3] */
+  establishment?: { id: string; name: string } | null;
 };
 
 function texto(v: unknown): string | null {
@@ -227,9 +229,10 @@ class PeopleImportController {
       const filialDaFuncao = new Map(funcoes.map((f) => [f.id, f.sector.establishmentId]));
       const filiaisAtivas = await prisma.establishment.findMany({
         where: { organizationId: orgId, archivedAt: null },
-        select: { id: true },
+        select: { id: true, name: true },
       });
       const filialValida = new Set(filiaisAtivas.map((f) => f.id));
+      const nomeDaFilial = new Map(filiaisAtivas.map((f) => [f.id, f.name]));
       /* Uma filial só na empresa: é a de todos. */
       const filialUnica = filiaisAtivas.length === 1 ? filiaisAtivas[0].id : null;
       const contratadaValida = new Set(contratadas.map((c) => c.id));
@@ -247,6 +250,7 @@ class PeopleImportController {
           line: numero,
           name: nome ?? "",
           status: "error",
+          establishment: null,
         };
 
         try {
@@ -287,10 +291,17 @@ class PeopleImportController {
           }
           /*
             Filial da linha: a da função; sem função, a informada; sem as
-            duas, a única da empresa, se houver uma só. A coluna da filial na
-            tela vem na C3-3. [C3-2]
+            duas, a única da empresa, se houver uma só. [C3-2]
+
+            Com mais de uma filial, a linha precisa dizer qual: a filial é o
+            que separa a matrícula 153 da loja da 153 da AG. A função já diz
+            a dela; sem função, a coluna é obrigatória. A tela pede a coluna
+            em toda linha. [C3-3]
           */
           const filialInformada = texto(linha.establishment_id);
+          if (!filialInformada && !jobRoleId && filiaisAtivas.length > 1) {
+            throw new Error("Informe a filial da linha: a empresa tem mais de uma.");
+          }
           if (filialInformada && !filialValida.has(filialInformada)) {
             throw new Error("Filial não existe nesta empresa.");
           }
@@ -300,6 +311,9 @@ class PeopleImportController {
           const filial = jobRoleId
             ? filialDaFuncao.get(jobRoleId) ?? null
             : filialInformada ?? filialUnica;
+          registro.establishment = filial
+            ? { id: filial, name: nomeDaFilial.get(filial) ?? "" }
+            : null;
           const chave = matricula ? canonicalRegistration(matricula) : null;
 
           const bond = (texto(linha.bond) ?? WorkerBond.EMPLOYEE) as WorkerBond;

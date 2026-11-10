@@ -171,6 +171,8 @@ export type PayslipBatchSummary = {
 };
 
 type PayslipBatchInput = {
+  /** A filial da folha; obrigatória com mais de uma na empresa. [C3-3] */
+  establishment_id?: string;
   reference_month: number;
   reference_year: number;
   kind: string;
@@ -178,6 +180,13 @@ type PayslipBatchInput = {
   mime_type: string;
   content_base64: string;
 };
+
+/** As filiais que quem envia alcança, e se a escolha é obrigatória. [C3-3] */
+export function fetchPayslipBatchEstablishments() {
+  return request<{ obrigatoria: boolean; filiais: { id: string; name: string }[] }>(
+    "/api/payslips/lote/filiais",
+  );
+}
 
 /** Confere a folha do mês sem gravar nada. [B4-F] */
 export function previewPayslipBatch(input: PayslipBatchInput) {

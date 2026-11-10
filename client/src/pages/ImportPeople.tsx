@@ -5,7 +5,7 @@ import {
   type ImportReport,
 } from "@/api/people";
 import { fetchContractorList } from "@/api/contractors";
-import { fetchJobRoles, type JobRole } from "@/api/operation";
+import { fetchEstablishments, fetchJobRoles, type JobRole } from "@/api/operation";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
 import { ORG_ROLE_LABEL } from "@/lib/labels";
@@ -16,6 +16,7 @@ import {
   CABECALHO_OFICIAL,
   lerLinhas,
   lerPlanilha,
+  type FilialDaEmpresa,
   type FuncaoDaEmpresa,
 } from "@/lib/planilha";
 
@@ -77,6 +78,8 @@ export function ImportPeople() {
   const [erroDoArquivo, setErroDoArquivo] = useState<string | null>(null);
   const [funcoes, setFuncoes] = useState<JobRole[]>([]);
   const [empresas, setEmpresas] = useState<{ id: string; name: string }[]>([]);
+  /* A filial de cada linha, pelo nome ou pelo CNPJ. [C3-3] */
+  const [filiais, setFiliais] = useState<FilialDaEmpresa[]>([]);
   const [previa, setPrevia] = useState<ImportReport | null>(null);
   const [relatorio, setRelatorio] = useState<ImportReport | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -89,15 +92,23 @@ export function ImportPeople() {
     fetchContractorList()
       .then((rows) => setEmpresas(rows.map((c) => ({ id: c.id, name: c.name }))))
       .catch(() => setEmpresas([]));
+    fetchEstablishments()
+      .then((d) =>
+        setFiliais(d.establishments.map((e) => ({ id: e.id, name: e.name, taxId: e.taxId }))),
+      )
+      .catch(() => setFiliais([]));
   }, []);
 
   const lido = useMemo(
     () =>
-      lerLinhas(texto, funcoes as FuncaoDaEmpresa[], empresas, {
-        papeis: ORG_ROLE_LABEL,
-        vinculos: WORKER_BOND_LABEL,
-      }),
-    [texto, funcoes, empresas],
+      lerLinhas(
+        texto,
+        funcoes as FuncaoDaEmpresa[],
+        empresas,
+        { papeis: ORG_ROLE_LABEL, vinculos: WORKER_BOND_LABEL },
+        filiais,
+      ),
+    [texto, funcoes, empresas, filiais],
   );
 
   async function conferir() {
@@ -177,14 +188,25 @@ export function ImportPeople() {
         />
         <span className="form-hint">
           {arquivo ? `${arquivo.name} — ` : ""}
-          Colunas: {CABECALHO_OFICIAL.join("; ")}. Só o nome é obrigatório.
+          Colunas: {CABECALHO_OFICIAL.join("; ")}.{" "}
+          {filiais.length > 1 ? (
+            <>
+              Obrigatórios: o nome e a <strong>filial</strong>, porque a empresa
+              tem mais de uma.
+            </>
+          ) : (
+            "Só o nome é obrigatório."
+          )}
+          <br />
+          {/* A filial separa a matrícula 153 da loja da 153 da AG. [C3-3] */}
+          Filial: o nome ou o CNPJ do estabelecimento, como cadastrado em Operação → Estabelecimentos.
           <br />
           No Excel, salve com <strong>Salvar como → CSV UTF-8</strong>; no
           Excel em português o separador sai como ponto e vírgula, que é o do
           modelo.
           <br />
           Exemplo de linha: Maria de Souza;1023;529.982.247-25;
-          maria@empresa.com.br;Torneiro;Matriz;10/03/2025;Empregado;;Colaborador
+          maria@empresa.com.br;Torneiro;{filiais[0]?.name ?? "Matriz"};10/03/2025;Empregado;;Colaborador
           <br />
           Vínculo: {Object.values(WORKER_BOND_LABEL).join(", ")}. A empresa
           precisa estar cadastrada em Terceiros.
@@ -272,6 +294,7 @@ export function ImportPeople() {
                 <tr>
                   <th>#</th>
                   <th>Nome</th>
+                  <th>Filial</th>
                   <th>Situação</th>
                   <th>Login</th>
                 </tr>
@@ -281,6 +304,7 @@ export function ImportPeople() {
                   <tr key={r.line}>
                     <td className="import-line">{r.line}</td>
                     <td>{r.name || <span className="muted">—</span>}</td>
+                    <td>{r.establishment?.name ?? <span className="muted">—</span>}</td>
                     <td>
                       <Chip tone={tone(r.status)}>
                         {r.status === "created"

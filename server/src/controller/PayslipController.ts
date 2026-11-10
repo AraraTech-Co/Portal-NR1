@@ -10,7 +10,8 @@ import { notify } from "../helper/notify";
 import { canManageModule } from "../helper/module-access";
 import { randomUUID } from "crypto";
 import { PDFDocument } from "pdf-lib";
-import { checkPayslip, podeJustificar, sameRegistration } from "../helper/payslip-check";
+import { checkPayslip, podeJustificar } from "../helper/payslip-check";
+import { canonicalRegistration } from "../helper/auth-attempts";
 import { splitBatchPages } from "../helper/payslip-batch";
 import { extractPdfPages, extractPdfText, MAX_BATCH_PAGES } from "../helper/pdf-text";
 import {
@@ -231,6 +232,47 @@ const MOTIVO_DO_PROBLEMA: Record<string, string> = {
     "A mesma matrícula aparece em outro trecho do arquivo. Publique essa pessoa pelo envio individual.",
 };
 
+type FilialDoLote = { id: string; name: string };
+
+/** As filiais ativas da empresa e as que quem envia alcança. [C3-3] */
+async function filiaisDoLote(escopo: UnitScope, orgId: string) {
+  const ativas = await prisma.establishment.findMany({
+    where: { organizationId: orgId, archivedAt: null },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
+  });
+  return {
+    obrigatoria: ativas.length > 1,
+    alcancadas: escopo.wholeOrg ? ativas : ativas.filter((f) => escopo.managed.includes(f.id)),
+  };
+}
+
+/**
+ * A filial da folha. Com mais de uma na empresa, é obrigatória: a matrícula
+ * 153 da loja e a 153 da AG são pessoas diferentes. Precisa ser ativa, desta
+ * empresa e sob a gestão de quem envia; sem ela, com uma filial só, o lote
+ * procura na empresa, como antes. [C3-3]
+ */
+async function filialDoLote(
+  escopo: UnitScope,
+  orgId: string,
+  raw: unknown,
+): Promise<FilialDoLote | null> {
+  const valor = typeof raw === "string" ? raw.trim() : "";
+  const { obrigatoria, alcancadas } = await filiaisDoLote(escopo, orgId);
+  if (!valor) {
+    if (obrigatoria) {
+      throw new ErroDoLote(400, "Escolha a filial da folha: a empresa tem mais de uma.");
+    }
+    return null;
+  }
+  const filial = alcancadas.find((f) => f.id === valor);
+  if (!filial) {
+    throw new ErroDoLote(400, "Filial inválida: escolha uma das filiais da lista.");
+  }
+  return filial;
+}
+
 /**
  * Lê o arquivo da folha, separa por pessoa e confere cada parte como o envio
  * individual confere — mesma `checkPayslip`, com a pessoa achada pela
@@ -243,6 +285,7 @@ const MOTIVO_DO_PROBLEMA: Record<string, string> = {
 async function lerLote(
   escopo: UnitScope,
   orgId: string,
+  filial: FilialDoLote | null,
   data: Buffer,
   referenceMonth: number,
   referenceYear: number,
@@ -259,21 +302,38 @@ async function lerLote(
     );
   }
 
+  const comVinculo = {
+    organizationId: orgId,
+    registration: { not: null },
+    user: { memberships: { some: { organizationId: orgId } } },
+    /* Só casa página com quem está sob a gestão de quem publica. [C2-13] */
+    ...profileScope(escopo),
+  };
+  /*
+    Com a filial escolhida, o dono é procurado só nas fichas dela, pela
+    chave da matrícula: a 153 da loja não casa com a 153 da AG. [C3-3]
+  */
   const fichas = await prisma.employeeProfile.findMany({
-    where: {
-      organizationId: orgId,
-      registration: { not: null },
-      user: { memberships: { some: { organizationId: orgId } } },
-      /* Só casa página com quem está sob a gestão de quem publica. [C2-13] */
-      ...profileScope(escopo),
-    },
+    where: { ...comVinculo, ...(filial ? { establishmentId: filial.id } : {}) },
     select: {
       userId: true,
       registration: true,
+      registrationKey: true,
       admittedAt: true,
       user: { select: { name: true } },
     },
   });
+  /* Ficha antiga ainda sem filial: o motivo diz o que completar. [C3-3] */
+  const semFilial = filial
+    ? new Set(
+        (
+          await prisma.employeeProfile.findMany({
+            where: { ...comVinculo, establishmentId: null },
+            select: { registrationKey: true },
+          })
+        ).map((ficha) => ficha.registrationKey),
+      )
+    : new Set<string | null>();
 
   const split = splitBatchPages(pages);
   const parts: ParteDoLote[] = split.map((part) => {
@@ -294,14 +354,19 @@ async function lerLote(
       };
     }
     const registration = part.registration;
-    const donos = fichas.filter(
-      (ficha) => ficha.registration && sameRegistration(ficha.registration, registration),
-    );
+    const chave = canonicalRegistration(registration);
+    const donos = fichas.filter((ficha) => ficha.registrationKey === chave);
     if (donos.length === 0) {
       return {
         ...base,
         situacao: "SEM_CADASTRO" as const,
-        motivos: [`Nenhum colaborador com a matrícula ${registration} no cadastro.`],
+        motivos: [
+          !filial
+            ? `Nenhum colaborador com a matrícula ${registration} no cadastro.`
+            : semFilial.has(chave)
+              ? `A ficha com a matrícula ${registration} está sem filial. Complete a filial na ficha e confira de novo.`
+              : `Nenhum colaborador com a matrícula ${registration} na filial ${filial.name}.`,
+        ],
       };
     }
     if (donos.length > 1) {
@@ -348,8 +413,17 @@ async function lerLote(
 
 /** Os campos do lote, conferidos; `null` quando já respondeu com erro. */
 function pedidoDoLote(req: Request, res: Response) {
-  const { reference_month, reference_year, kind, file_name, mime_type, content_base64 } =
+  const {
+    reference_month,
+    reference_year,
+    kind,
+    file_name,
+    mime_type,
+    content_base64,
+    establishment_id,
+  } =
     req.body as {
+      establishment_id?: unknown;
       reference_month?: number;
       reference_year?: number;
       kind?: string;
@@ -384,6 +458,7 @@ function pedidoDoLote(req: Request, res: Response) {
     kind: tipo,
     fileName: file_name.trim(),
     data,
+    establishmentId: establishment_id,
   };
 }
 
@@ -783,6 +858,20 @@ class PayslipController {
     }
   }
 
+  /** As filiais que a tela do lote oferece, e se a escolha é obrigatória. [C3-3] */
+  async batchEstablishments(req: Request, res: Response) {
+    try {
+      const auth = req as AuthRequest;
+      const { obrigatoria, alcancadas } = await filiaisDoLote(
+        await scopeOfRequest(auth),
+        actorOrgId(auth),
+      );
+      res.json({ obrigatoria, filiais: alcancadas });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
   /**
    * A prévia da folha do mês: quem confere, quem fica de fora e por quê, e
    * quem já tem holerite nessa competência. Não grava nada. [B4-F]
@@ -792,9 +881,12 @@ class PayslipController {
       const orgId = actorOrgId(req as AuthRequest);
       const pedido = pedidoDoLote(req, res);
       if (!pedido) return;
+      const escopo = await scopeOfRequest(req as AuthRequest);
+      const filial = await filialDoLote(escopo, orgId, pedido.establishmentId);
       const lote = await lerLote(
-        await scopeOfRequest(req as AuthRequest),
+        escopo,
         orgId,
+        filial,
         pedido.data,
         pedido.referenceMonth,
         pedido.referenceYear,
@@ -823,9 +915,12 @@ class PayslipController {
       const publisherId = actorUserId(auth);
       const pedido = pedidoDoLote(req, res);
       if (!pedido) return;
+      const escopo = await scopeOfRequest(auth);
+      const filial = await filialDoLote(escopo, orgId, pedido.establishmentId);
       const lote = await lerLote(
-        await scopeOfRequest(auth),
+        escopo,
         orgId,
+        filial,
         pedido.data,
         pedido.referenceMonth,
         pedido.referenceYear,

@@ -1,5 +1,6 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import {
+  fetchPayslipBatchEstablishments,
   fileToBase64,
   previewPayslipBatch,
   publishPayslipBatch,
@@ -70,6 +71,27 @@ export function PayslipBatchSection({
   const [ocupado, setOcupado] = useState<"conferindo" | "publicando" | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [feito, setFeito] = useState<string | null>(null);
+  /*
+    A filial da folha: a matrícula 153 da loja e a da AG são pessoas
+    diferentes. Com uma filial só que quem envia alcança, ela já vem
+    escolhida. [C3-3]
+  */
+  const [filiais, setFiliais] = useState<{ id: string; name: string }[]>([]);
+  const [filialObrigatoria, setFilialObrigatoria] = useState(false);
+  const [filial, setFilial] = useState("");
+
+  useEffect(() => {
+    fetchPayslipBatchEstablishments()
+      .then((r) => {
+        setFiliais(r.filiais);
+        setFilialObrigatoria(r.obrigatoria);
+        if (r.filiais.length === 1) setFilial(r.filiais[0]!.id);
+      })
+      .catch(() => {
+        setFiliais([]);
+        setFilialObrigatoria(false);
+      });
+  }, []);
 
   /* Mudou o arquivo ou a competência: a prévia de antes não vale mais. */
   function limpar() {
@@ -80,7 +102,9 @@ export function PayslipBatchSection({
 
   async function pedido() {
     if (!file) throw new Error("Escolha o arquivo da folha.");
+    if (filialObrigatoria && !filial) throw new Error("Escolha a filial da folha.");
     return {
+      ...(filial ? { establishment_id: filial } : {}),
       reference_month: Number(month),
       reference_year: Number(year),
       kind,
@@ -144,6 +168,31 @@ export function PayslipBatchSection({
         inteiro não fica guardado.
       </p>
       <form className="form-grid" onSubmit={conferir}>
+        {filialObrigatoria && (
+          <label className="form-field">
+            Filial
+            <select
+              value={filial}
+              onChange={(e) => {
+                setFilial(e.target.value);
+                limpar();
+              }}
+              disabled={ocupado !== null || filiais.length === 1}
+              required
+            >
+              {filiais.length !== 1 && <option value="">Escolha a filial da folha</option>}
+              {filiais.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
+            </select>
+            <span className="form-hint">
+              Cada filial tem a sua folha: a matrícula é procurada só nas
+              fichas da filial escolhida.
+            </span>
+          </label>
+        )}
         <div className="form-grid cols-2">
           <label className="form-field">
             Mês
@@ -222,7 +271,7 @@ export function PayslipBatchSection({
           <Button
             type="submit"
             variant={previa ? "secondary" : "primary"}
-            disabled={ocupado !== null || !file}
+            disabled={ocupado !== null || !file || (filialObrigatoria && !filial)}
           >
             {ocupado === "conferindo" ? "Conferindo…" : "Conferir o arquivo"}
           </Button>
