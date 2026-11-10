@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { AccountRole, InviteRoleMode, NotificationKind, Role } from "@prisma/client";
 import { Request, Response } from "express";
 import prisma from "../model/prisma";
+import { filialDaFicha } from "../helper/filial-da-ficha";
 import {
   allocateUniqueLogin,
   loginCandidateFromEmail,
@@ -624,6 +625,8 @@ class AccountInviteController {
       */
       const isExternal = body.is_external === true;
       const registration = isExternal ? null : blank(body.registration);
+      const filial = await filialDaFicha(request.account.organizationId, {});
+      const filialDoPedido = filial.ok ? filial.establishmentId : null;
 
       await prisma.$transaction(async (tx) => {
         if (request.email) {
@@ -708,6 +711,11 @@ class AccountInviteController {
               organizationId: request.account.organizationId,
               userId: user.id,
               registration,
+              /*
+                Sem função no pedido: com uma filial só na empresa, é a dela;
+                com mais de uma, a ficha fica sem filial e o RH completa. [C3-2]
+              */
+              establishmentId: filialDoPedido,
             },
           });
         }

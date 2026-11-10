@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { AccessSuspensionReason, Prisma, WorkerBond } from "@prisma/client";
+import { filialDaFicha } from "../helper/filial-da-ficha";
 import prisma from "../model/prisma";
 import { EmployeeProfile } from "../model/schema/EmployeeProfile/EmployeeProfile";
 import { JobRole } from "../model/schema/JobRole/JobRole";
@@ -64,7 +65,7 @@ function fail(res: Response, err: unknown) {
   if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
     res.status(409).json({
       message:
-        "Já existe perfil com este user_id, matrícula ou CPF nesta organização.",
+        "Já existe ficha desta pessoa, com este CPF na empresa ou com esta matrícula na filial.",
     });
     return;
   }
@@ -160,6 +161,7 @@ const CAMPOS_DA_FICHA: Record<string, string> = {
   taxId: "CPF",
   phone: "telefone",
   jobRoleId: "função",
+  establishmentId: "filial",
   bond: "vínculo",
   contractorId: "empresa contratada",
   admittedAt: "admissão",
@@ -196,6 +198,11 @@ class EmployeeProfileController {
       const orgId = actorOrgId(auth);
       const includeDismissed = req.query.include_dismissed === "true";
       const jobRoleId = req.query.job_role_id as string | undefined;
+      /*
+        Filtro por filial; "sem" lista as fichas sem filial, que o RH
+        completa depois da migração da C3-2. [C3-2]
+      */
+      const filial = req.query.establishment_id as string | undefined;
 
       // Colaborador sem RH só vê o próprio perfil.
       if (!seesAll(auth)) {
@@ -204,6 +211,7 @@ class EmployeeProfileController {
           include: {
             user: { select: { id: true, name: true, login: true, email: true } },
             jobRole: { select: { id: true, name: true } },
+            establishment: { select: { id: true, name: true } },
           },
         });
         res.json({ profiles: mine ? [mine] : [] });
@@ -216,6 +224,7 @@ class EmployeeProfileController {
           organizationId: orgId,
           ...(includeDismissed ? {} : { dismissedAt: null }),
           ...(jobRoleId ? { jobRoleId } : {}),
+          ...(filial ? { establishmentId: filial === "sem" ? null : filial } : {}),
           /* Gerente, supervisor e ADM loja: as fichas das unidades geridas. [C2-13] */
           ...profileScope(escopo),
         },
@@ -224,6 +233,7 @@ class EmployeeProfileController {
           user: { select: { id: true, name: true, login: true, email: true } },
           jobRole: { select: { id: true, name: true } },
           contractor: { select: { id: true, name: true } },
+          establishment: { select: { id: true, name: true } },
         },
       });
       res.json({ profiles: rows.map((p) => forViewer(auth, p)) });
@@ -241,6 +251,7 @@ class EmployeeProfileController {
         include: {
           user: { select: { id: true, name: true, login: true, email: true } },
           jobRole: { select: { id: true, name: true, sectorId: true } },
+          establishment: { select: { id: true, name: true } },
         },
       });
       const alcanca =
@@ -277,6 +288,7 @@ class EmployeeProfileController {
           user: { select: { id: true, name: true, login: true, email: true, active: true } },
           dismissedBy: { select: { id: true, name: true } },
           contractor: { select: { id: true, name: true, taxId: true, relation: true } },
+          establishment: { select: { id: true, name: true } },
           jobRole: {
             select: {
               id: true,
@@ -525,6 +537,7 @@ class EmployeeProfileController {
         tax_id,
         phone,
         job_role_id,
+        establishment_id,
         admitted_at,
       } = req.body as {
         user_id?: string;
@@ -532,6 +545,7 @@ class EmployeeProfileController {
         tax_id?: string;
         phone?: string;
         job_role_id?: string;
+        establishment_id?: string;
         admitted_at?: string;
       };
 
@@ -571,6 +585,24 @@ class EmployeeProfileController {
         }
       }
 
+      /*
+        A ficha nasce com filial: a da função ou, sem função, a escolhida. A
+        matrícula é única por filial, e é a filial que diz de qual CNPJ a
+        pessoa é. Com uma filial só na empresa, ela é a de todos. [C3-2]
+      */
+      const filial = await filialDaFicha(orgId, {
+        jobRoleId: job_role_id ?? null,
+        establishmentId: establishment_id ?? null,
+      });
+      if (!filial.ok) {
+        res.status(400).json({ message: filial.message, field: filial.field });
+        return;
+      }
+      if (!filial.establishmentId) {
+        res.status(400).json({ message: "Escolha a filial.", field: "establishment_id" });
+        return;
+      }
+
       const taxId = cpfDoColaborador(tax_id);
 
       const profile = await new EmployeeProfile().create.new({
@@ -580,6 +612,7 @@ class EmployeeProfileController {
         taxId,
         phone: blank(phone),
         jobRoleId: job_role_id ?? null,
+        establishmentId: filial.establishmentId,
         admittedAt: admitted_at ? new Date(admitted_at) : null,
       });
 
@@ -661,6 +694,38 @@ class EmployeeProfileController {
         }
       }
 
+      /*
+        Troca de filial. Com função, a filial é a da função: trocar só a
+        filial e manter uma função de outra filial é recusado (o banco
+        voltaria a filial em silêncio). Gerente e ADM loja só levam a ficha
+        para uma unidade gerida. [C3-2]
+      */
+      let novaFilial: string | undefined;
+      if (body.establishment_id !== undefined) {
+        const funcaoFinal =
+          body.job_role_id !== undefined ? (body.job_role_id as string) || null : current.jobRoleId;
+        const filial = await filialDaFicha(orgId, {
+          jobRoleId: funcaoFinal,
+          establishmentId: (body.establishment_id as string) || null,
+        });
+        if (!filial.ok) {
+          res.status(400).json({ message: filial.message, field: filial.field });
+          return;
+        }
+        if (!filial.establishmentId || !body.establishment_id) {
+          res.status(400).json({ message: "Escolha a filial.", field: "establishment_id" });
+          return;
+        }
+        if (!escopo.wholeOrg && !escopo.managed.includes(filial.establishmentId)) {
+          res.status(400).json({ message: "Filial inválida.", field: "establishment_id" });
+          return;
+        }
+        novaFilial = filial.establishmentId;
+      } else if (body.job_role_id) {
+        const filial = await filialDaFicha(orgId, { jobRoleId: body.job_role_id as string });
+        if (filial.ok && filial.establishmentId) novaFilial = filial.establishmentId;
+      }
+
       // CPF e matrícula são identidade: não entram por escrita comum. [OB-8]
       // O nascimento também: é um dos dados do primeiro acesso. [C1-7]
       if (
@@ -739,6 +804,7 @@ class EmployeeProfileController {
           ...(body.job_role_id !== undefined
             ? { jobRoleId: (body.job_role_id as string) || null }
             : {}),
+          ...(novaFilial !== undefined ? { establishmentId: novaFilial } : {}),
           ...(bond !== undefined ? { bond } : {}),
           ...(contractorId !== undefined ? { contractorId } : {}),
           ...(body.admitted_at !== undefined

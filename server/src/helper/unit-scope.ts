@@ -53,21 +53,21 @@ export type UnitScope = {
   managed: string[];
   /** Recortado por unidade e sem nenhuma atribuída: aviso para regularizar. */
   needsUnits: boolean;
-  /** Unidade de trabalho (ficha ativa → função → setor), se houver. */
+  /** Unidade de trabalho (a filial da ficha ativa), se houver. [C3-2] */
   work: string | null;
 };
 
-/** Unidade de trabalho atual da pessoa: ficha ativa → função → setor → unidade ativa. */
+/**
+ * Unidade de trabalho atual da pessoa: a filial da ficha ativa, se ativa.
+ * Com função, a filial é a da função (o banco garante); sem função, a que o
+ * RH escolheu. [C3-2]
+ */
 export async function currentUnitOf(organizationId: string, userId: string): Promise<string | null> {
   const ficha = await prisma.employeeProfile.findFirst({
     where: { organizationId, userId, dismissedAt: null },
-    select: {
-      jobRole: {
-        select: { sector: { select: { establishment: { select: { id: true, organizationId: true, archivedAt: true } } } } },
-      },
-    },
+    select: { establishment: { select: { id: true, organizationId: true, archivedAt: true } } },
   });
-  const unidade = ficha?.jobRole?.sector?.establishment;
+  const unidade = ficha?.establishment;
   if (!unidade || unidade.organizationId !== organizationId || unidade.archivedAt) return null;
   return unidade.id;
 }
@@ -140,7 +140,7 @@ export async function managesPerson(scope: UnitScope, userId: string): Promise<b
 
 /**
  * Filtro Prisma para o quadro de pessoas (fichas) visível ao recortado: a
- * própria ficha e as fichas cuja unidade de trabalho atual é gerida.
+ * própria ficha e as fichas cuja filial é gerida. [C3-2]
  */
 export function profileScope(scope: UnitScope): Record<string, unknown> {
   if (scope.wholeOrg) return {};
@@ -148,7 +148,7 @@ export function profileScope(scope: UnitScope): Record<string, unknown> {
     OR: [
       { userId: scope.userId },
       ...(scope.managed.length
-        ? [{ jobRole: { sector: { establishmentId: { in: scope.managed } } } }]
+        ? [{ establishmentId: { in: scope.managed } }]
         : []),
     ],
   };

@@ -59,10 +59,7 @@ export async function announcementAudience(
           employeeProfiles: {
             where: { organizationId },
             take: 1,
-            select: {
-              dismissedAt: true,
-              jobRole: { select: { sector: { select: { establishmentId: true } } } },
-            },
+            select: { dismissedAt: true, establishmentId: true },
           },
         },
       },
@@ -75,9 +72,9 @@ export async function announcementAudience(
       const ficha = m.user.employeeProfiles[0] ?? null;
       if (ficha?.dismissedAt) return false;
       if (!porUnidade) return true;
-      const unidade = ficha?.jobRole?.sector.establishmentId ?? null;
+      const unidade = ficha?.establishmentId ?? null;
       if (unidade !== null) return establishmentIds.includes(unidade);
-      /* Sem função: entra se não for colaborador. [CB-60] */
+      /* Sem filial: entra se não for colaborador. [CB-60] [C3-2] */
       return !ehColaborador(m.role);
     })
     .map((m) => m.userId);
@@ -110,11 +107,9 @@ export async function announcementVisibility(
   if (podeGerir) return {};
   const ficha = await prisma.employeeProfile.findFirst({
     where: { organizationId, userId },
-    select: {
-      jobRole: { select: { sector: { select: { establishmentId: true } } } },
-    },
+    select: { establishmentId: true },
   });
-  const minhaUnidade = ficha?.jobRole?.sector.establishmentId ?? null;
+  const minhaUnidade = ficha?.establishmentId ?? null;
   const daEmpresaToda = { establishments: { none: {} } };
   if (!minhaUnidade) {
     /*

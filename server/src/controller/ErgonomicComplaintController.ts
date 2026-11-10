@@ -120,12 +120,8 @@ class ErgonomicComplaintController {
       const ficha = await prisma.employeeProfile.findFirst({
         where: { organizationId: orgId, userId },
         select: {
-          jobRole: {
-            select: {
-              name: true,
-              sector: { select: { establishmentId: true } },
-            },
-          },
+          establishmentId: true,
+          jobRole: { select: { name: true } },
         },
       });
 
@@ -136,7 +132,7 @@ class ErgonomicComplaintController {
           description: blank(description)!,
           bodyPart: onde,
           jobRoleName: ficha?.jobRole?.name ?? null,
-          establishmentId: ficha?.jobRole?.sector.establishmentId ?? null,
+          establishmentId: ficha?.establishmentId ?? null,
         },
         select: PARA_A_TELA,
       });
