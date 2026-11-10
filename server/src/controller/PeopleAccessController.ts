@@ -4,6 +4,7 @@ import { Request, Response } from "express";
 import prisma from "../model/prisma";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
+import { accountKey } from "../helper/auth-attempts";
 import { effectivePermission, orgRoleToAccountRole } from "../helper/auth";
 import { assignableOrgRoles, canAssignOrgRole } from "../helper/invite-access";
 import { canWriteModule, modulesForRole } from "../helper/module-access";
@@ -411,12 +412,29 @@ class PeopleAccessController {
 
       const password = temporaryPassword();
       const passwordHash = await bcrypt.hash(password, 10);
+      const agora = new Date();
       await prisma.$transaction([
         prisma.user.update({
           where: { id: targetId },
-          data: { passwordHash, mustChangePassword: true },
+          data: {
+            passwordHash,
+            mustChangePassword: true,
+            /*
+              Senha definida por fluxo autorizado: a conta passa a contar
+              como ativada e o primeiro acesso por conferência de dados
+              deixa de valer. As fichas de ativação abertas caem, e o
+              bloqueio de login da conta, também. [C1-7]
+            */
+            activatedAt: agora,
+            firstAccessUntil: null,
+          },
         }),
         prisma.token.deleteMany({ where: { userId: targetId } }),
+        prisma.activationToken.updateMany({
+          where: { userId: targetId, usedAt: null, revokedAt: null },
+          data: { revokedAt: agora },
+        }),
+        prisma.authLockout.deleteMany({ where: { key: accountKey(targetId) } }),
       ]);
 
       await writeAudit({

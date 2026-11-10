@@ -1,0 +1,167 @@
+/* PDF do canal de denúncia: lista e denúncia. [C1-6] */
+/* Na tela do celular a tabela rola de lado em vez de alargar a página. */
+.ethics-print-scroll {
+  overflow-x: auto;
+}
+
+.ethics-print-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.ethics-print-table th,
+.ethics-print-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 0.35rem 0.4rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.ethics-print-table thead th {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+}
+
+.ethics-print-table tr {
+  break-inside: avoid;
+}
+
+.ethics-print-totals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0.75rem 1.5rem;
+  margin: 0;
+}
+
+.ethics-print-totals ul {
+  list-style: none;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  font-size: 0.85rem;
+}
+
+.ethics-print-text {
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+.ethics-print-messages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.ethics-print-messages li {
+  break-inside: avoid;
+  border-left: 3px solid var(--border);
+  padding-left: 0.75rem;
+}
+
+.ethics-print-warning {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--sem-warning-bd, var(--border));
+  background: var(--sem-warning, transparent);
+  color: var(--sem-warning-fg, inherit);
+  font-size: 0.875rem;
+}
+
+.ethics-print-footer {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+  text-align: center;
+}
+
+/*
+  Página nomeada: o rodapé "Documento confidencial" vale só para os PDFs do
+  canal. O portal é uma página só e a folha de estilo fica carregada depois
+  de visitada — com `@page` comum, o rodapé ia parar no cartaz do mural.
+*/
+.ethics-print {
+  page: canal-denuncia;
+}
+
+@media print {
+  @page canal-denuncia {
+    size: A4;
+    margin: 16mm 14mm 18mm;
+    @bottom-center {
+      content: "Documento confidencial: canal de denúncia — página " counter(page) " de " counter(pages);
+      font-size: 8pt;
+      color: #555;
+    }
+  }
+
+  .ethics-print-warning,
+  .ethics-print-footer {
+    display: none;
+  }
+
+  .ethics-print-scroll {
+    overflow: visible;
+  }
+
+  .ethics-print-table thead {
+    display: table-header-group;
+  }
+
+  .ethics-print-table th,
+  .ethics-print-table td {
+    border-bottom-color: #bbb;
+    color: #000;
+  }
+}
+
+/* Os totais sem o recuo padrão do `dd`, e palavras inteiras na tabela. [C1-6] */
+.ethics-print-totals dd {
+  margin: 0.15rem 0 0;
+}
+
+.ethics-print-totals dt {
+  font-size: 0.7rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+}
+
+.ethics-print-table th,
+.ethics-print-table td {
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+@media print {
+  /* A impressão do portal vira as grades em bloco; aqui, lado a lado. */
+  .ethics-print .doc-meta {
+    display: flex !important;
+    flex-wrap: wrap;
+    gap: 0.4rem 2rem;
+  }
+
+  .ethics-print .doc-meta > * + * {
+    margin-top: 0;
+  }
+
+  /* Data e hora numa linha só. */
+  .ethics-print-date {
+    white-space: nowrap;
+  }
+
+  /* Mais linhas por folha: o relatório pode passar de mil linhas. */
+  .ethics-print-table {
+    font-size: 8pt;
+  }
+
+  .ethics-print-table th,
+  .ethics-print-table td {
+    padding: 0.2rem 0.3rem;
+  }
+}

@@ -19,6 +19,7 @@ import {
   isEthicsCommittee,
   podeTriarDenuncia,
 } from "../helper/ethics-access";
+import { ethicsDeadline } from "../helper/ethics-deadline";
 import type { AuthRequest } from "../types/auth";
 
 function fail(res: Response, err: unknown) {
@@ -323,6 +324,53 @@ class HomeController {
             label: "Denúncias em aberto no comitê",
             count: abertas,
             link: "/comite",
+            tone: "warning",
+          });
+        }
+
+        /*
+          O prazo da primeira providência: só as que ainda estão em
+          "Recebido", no mesmo recorte da lista — quem tria vê as da
+          triagem. [C1-2] [B3-3-H]
+        */
+        const recebidas = await prisma.ethicsReport.findMany({
+          where: {
+            organizationId: orgId,
+            status: "RECEIVED",
+            ...(await ethicsReportScope(orgId, actor)),
+          },
+          select: {
+            organizationId: true,
+            status: true,
+            severity: true,
+            createdAt: true,
+            dueAt: true,
+            firstActionAt: true,
+          },
+        });
+        const agora = new Date();
+        let denunciasAtrasadas = 0;
+        let venceHoje = 0;
+        for (const r of recebidas) {
+          const { situation } = ethicsDeadline(r, agora);
+          if (situation === "OVERDUE") denunciasAtrasadas += 1;
+          if (situation === "DUE_TODAY") venceHoje += 1;
+        }
+        if (denunciasAtrasadas > 0) {
+          mesa.push({
+            id: "denuncias_atrasadas",
+            label: "Denúncias com a primeira providência atrasada",
+            count: denunciasAtrasadas,
+            link: "/comite?prazo=OVERDUE",
+            tone: "warning",
+          });
+        }
+        if (venceHoje > 0) {
+          mesa.push({
+            id: "denuncias_vencem_hoje",
+            label: "Denúncias cuja primeira providência vence hoje",
+            count: venceHoje,
+            link: "/comite?prazo=DUE_TODAY",
             tone: "warning",
           });
         }

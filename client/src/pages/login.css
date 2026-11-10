@@ -365,3 +365,20 @@
 .login-canal a {
   font-weight: 600;
 }
+
+/* Recado depois de criar a senha no primeiro acesso. [C1-7] */
+.login-notice {
+  margin: 0 0 1rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--sem-success-bd, var(--border));
+  background: var(--sem-success, transparent);
+  color: var(--sem-success-fg, inherit);
+  font-size: 0.875rem;
+}
+
+/* A tela de primeiro acesso é só o painel, sem o desenho do lado. [C1-7] */
+.login-page--solo {
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+}

@@ -280,31 +280,6 @@ export const fetchTrainingEnrollments = (id: string) =>
     `/api/trainings/${encodeURIComponent(id)}/enrollments`,
   ).then((d) => d.enrollments);
 
-export const fetchEthicsReports = () =>
-  request<{
-    reports: Array<{
-      id: string;
-      protocol: string;
-      category: string;
-      /** O começo do relato, para a lista não ser só protocolos. [B2-3-D] */
-      description: string;
-      status: string;
-      isAnonymous: boolean;
-      createdAt: string;
-      establishment: { name: string } | null;
-      _count: { messages: number };
-      unread_from_reporter: number;
-      /** Zero = o comitê nunca falou nesta denúncia. [B2-3-D] */
-      committee_messages: number;
-      /**
-       * Quem relatou disse que alguém do comitê está envolvido; enquanto
-       * `triagedAt` for nulo, o caso só chega a quem tria. [B3-3-H]
-       */
-      committeeInvolved: boolean;
-      triagedAt: string | null;
-    }>;
-  }>("/api/ethics-reports").then((d) => d.reports);
-
 export const fetchClimateSurveys = () =>
   request<{
     surveys: Array<{

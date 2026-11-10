@@ -14,6 +14,8 @@ export type LinhaDaPlanilha = {
   email?: string;
   job_role_id?: string;
   admitted_at?: string;
+  /** Nascimento, um dos três dados do primeiro acesso. [C1-7] */
+  birth_date?: string;
   bond?: string;
   org_role?: string;
   contractor_id?: string;
@@ -62,6 +64,7 @@ export const CABECALHO_OFICIAL = [
   "vinculo",
   "empresa contratada",
   "papel",
+  "nascimento",
 ] as const;
 
 const COLUNAS: Record<string, keyof LinhaLocal> = {
@@ -76,6 +79,8 @@ const COLUNAS: Record<string, keyof LinhaLocal> = {
   cargo: "job_role_id",
   admissao: "admitted_at",
   "data de admissao": "admitted_at",
+  nascimento: "birth_date",
+  "data de nascimento": "birth_date",
   vinculo: "bond",
   papel: "org_role",
   /// Terceirizado sem empresa deixa a lacuna à mostra na ficha. [S1-R] [CB-8]
@@ -319,6 +324,10 @@ export function lerLinhas(
     if (row.admitted_at && /^\d{2}\/\d{2}\/\d{4}$/.test(row.admitted_at)) {
       const [d, m, a] = row.admitted_at.split("/");
       row.admitted_at = `${a}-${m}-${d}`;
+    }
+    if (row.birth_date && /^\d{2}\/\d{2}\/\d{4}$/.test(row.birth_date)) {
+      const [d, m, a] = row.birth_date.split("/");
+      row.birth_date = `${a}-${m}-${d}`;
     }
     rows.push(row);
   }

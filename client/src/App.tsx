@@ -21,6 +21,11 @@ import { EmployeesPage } from "@/pages/EmployeesPage";
 import { EthicsPage } from "@/pages/EthicsPage";
 import { EthicsReportDetailPage } from "@/pages/EthicsReportDetailPage";
 import { EthicsReportPage } from "@/pages/EthicsReportPage";
+import { FirstAccessPage } from "@/pages/FirstAccessPage";
+import { ActivationPanelPage } from "@/pages/ActivationPanelPage";
+import { AnnouncementPosterPage } from "@/pages/AnnouncementPosterPage";
+import { EthicsListPrintPage } from "@/pages/EthicsListPrintPage";
+import { EthicsReportPrintPage } from "@/pages/EthicsReportPrintPage";
 import { GamificationPage } from "@/pages/GamificationPage";
 import { HealthPage } from "@/pages/HealthPage";
 import { HomePage } from "@/pages/HomePage";
@@ -94,6 +99,8 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      {/* Sem sessão: é como quem nunca entrou cria a senha. [C1-7] */}
+      <Route path="/primeiro-acesso" element={<FirstAccessPage />} />
       <Route path="/convite/:token" element={<ConvitePage />} />
       {/* O canal de denúncia fora do portal, sem login: é o que torna o
           anonimato verificável por quem denuncia. [S4-L] */}
@@ -145,14 +152,18 @@ function AppRoutes() {
               <Route path="participacao" element={<ParticipationsPage />} />
               <Route path="denuncia" element={<EthicsReportPage />} />
               <Route path="comite" element={<EthicsPage />} />
+              <Route path="comite/relatorio" element={<EthicsListPrintPage />} />
               <Route path="comite/:id" element={<EthicsReportDetailPage />} />
+              <Route path="comite/:id/imprimir" element={<EthicsReportPrintPage />} />
               <Route path="clima" element={<ClimatePage />} />
               <Route path="ideias" element={<IdeasPage />} />
               <Route path="mural" element={<AnnouncementsPage />} />
               <Route path="mural/:id" element={<AnnouncementDetailPage />} />
+              <Route path="mural/:id/cartaz" element={<AnnouncementPosterPage />} />
               <Route path="gamificacao" element={<GamificationPage />} />
               <Route path="convocacoes" element={<SummonsPage />} />
               <Route path="conta" element={<AccountPage />} />
+              <Route path="ativacao" element={<ActivationPanelPage />} />
               <Route path="configuracoes" element={<SettingsPage />} />
             </Route>
           </Route>

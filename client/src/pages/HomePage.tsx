@@ -18,7 +18,7 @@ const SHORTCUTS = [
   */
   { href: "/fiscalizacao", title: "Painel da fiscalização", desc: "O que um auditor pede, em uma tela.", module: "documentos_pgr" },
   { href: "/documentos", title: "Documentos do PGR", desc: "Inventário, plano de ação e critérios emitidos.", module: "documentos_pgr" },
-  { href: "/denuncia", title: "Fazer denúncia", desc: "Canal confidencial — anônimo por padrão.", module: "denuncia" },
+  { href: "/denuncia", title: "Fazer denúncia", desc: "Canal confidencial — você escolhe se quer se identificar.", module: "denuncia" },
   { href: "/mural", title: "Mural de avisos", desc: "Comunicados e campanhas da empresa.", module: "mural" },
   { href: "/holerites", title: "Holerites", desc: "Seus contracheques e status de leitura.", module: "holerites" },
   { href: "/inventario", title: "Inventário", desc: "Perigos, riscos e níveis validados.", module: "inventario" },

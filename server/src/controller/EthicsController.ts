@@ -19,16 +19,29 @@ import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { canReadModule } from "../helper/module-access";
 import { effectivePermission } from "../helper/auth";
 import { writeAudit } from "../helper/audit";
+import { computeDueAt } from "../helper/business-days";
+import { ethicsDeadline, holidayCalendarFor } from "../helper/ethics-deadline";
+import {
+  ethicsFiltersWhere,
+  parseEthicsFilters,
+  situationRank,
+  type EthicsFilters,
+} from "../helper/ethics-filters";
 import {
   ETHICS_ACCESS_CODE_BCRYPT_ROUNDS,
   ETHICS_ACCESS_CODE_LENGTH,
   ETHICS_PROTOCOL_PREFIX,
+  ETHICS_ACK_COMMENT_MAX,
+  ETHICS_EXPORT_MAX_ROWS,
+  ETHICS_LIST_PAGE_SIZE,
   REPORT_AUTHOR_SIDES,
   REPORT_CATEGORY_VALUES,
   REPORT_STATUSES,
   REPORT_STATUS_VALUES,
   isReportCategory,
+  isReportSeverity,
   isReportStatus,
+  severityForCategory,
 } from "../constants";
 import type { AuthRequest } from "../types/auth";
 
@@ -74,6 +87,7 @@ function publicReportView(report: {
   status: string;
   resolutionNote: string | null;
   resolvedAt: Date | null;
+  reporterAckAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   messages?: Array<{
@@ -92,6 +106,8 @@ function publicReportView(report: {
     status: report.status,
     resolutionNote: report.resolutionNote,
     resolvedAt: report.resolvedAt,
+    /** Quando quem denunciou deu ciência do encerramento. [C1-5] */
+    reporterAckAt: report.reporterAckAt,
     createdAt: report.createdAt,
     updatedAt: report.updatedAt,
     messages: report.messages?.map((m) => ({
@@ -136,6 +152,77 @@ async function estouImpedido(req: Request, reportId: string): Promise<boolean> {
   return reportIsHidden(actorOrgId(auth), auth.actor!, reportId);
 }
 
+/**
+ * Grava quando a denúncia teve a primeira providência — só a primeira vez.
+ * O filtro em `firstActionAt: null` faz a gravação valer uma vez só, mesmo
+ * com duas pessoas do comitê agindo ao mesmo tempo. [C1-2]
+ */
+async function marcarPrimeiraProvidencia(reportId: string) {
+  await prisma.ethicsReport.updateMany({
+    where: { id: reportId, firstActionAt: null },
+    data: { firstActionAt: new Date() },
+  });
+}
+
+/** Vencimento, primeira providência e a situação do prazo — uma só. [C1-2] */
+function prazoNaResposta(r: {
+  organizationId: string;
+  status: string;
+  severity: "HIGH" | "NORMAL";
+  createdAt: Date;
+  dueAt: Date | null;
+  firstActionAt: Date | null;
+}) {
+  const prazo = ethicsDeadline(r);
+  return {
+    dueAt: prazo.dueAt,
+    firstActionAt: r.firstActionAt,
+    deadline_situation: prazo.situation,
+  };
+}
+
+/**
+ * As denúncias que o filtro traz, já no recorte de quem está olhando e na
+ * ordem da lista: atrasadas, depois as que vencem hoje, depois as mais
+ * recentes. A situação do prazo depende do relógio, então é calculada
+ * aqui, e não no banco. [C1-6] [CB-27] [B3-3-H]
+ */
+async function denunciasFiltradas(
+  orgId: string,
+  actor: NonNullable<AuthRequest["actor"]>,
+  filters: EthicsFilters,
+) {
+  const recorte = await ethicsReportScope(orgId, actor);
+  /*
+    `AND`, e não espalhar: o recorte fala em `id`, e espalhar outro filtro
+    por cima o apagaria.
+  */
+  const leves = await prisma.ethicsReport.findMany({
+    where: { AND: [{ organizationId: orgId }, recorte, ...ethicsFiltersWhere(filters)] },
+    select: {
+      id: true,
+      organizationId: true,
+      status: true,
+      severity: true,
+      createdAt: true,
+      dueAt: true,
+      firstActionAt: true,
+    },
+  });
+  const agora = new Date();
+  return leves
+    .map((r) => {
+      const prazo = ethicsDeadline(r, agora);
+      return { ...r, dueAt: prazo.dueAt, situation: prazo.situation };
+    })
+    .filter((r) => !filters.situation || r.situation === filters.situation)
+    .sort(
+      (a, b) =>
+        situationRank(a.situation) - situationRank(b.situation) ||
+        b.createdAt.getTime() - a.createdAt.getTime(),
+    );
+}
+
 class EthicsController {
   /**
    * Abre relato. Anônimo por padrão: não grava reporterUserId.
@@ -171,15 +258,42 @@ class EthicsController {
         return;
       }
 
-      if (!category || !description?.trim()) {
-        res.status(400).json({
-          message: "Informe category e description.",
-        });
+      /*
+        Todos os campos são obrigatórios, e a resposta diz qual faltou. A
+        categoria vinha pré-escolhida na tela e as perguntas vinham com
+        resposta marcada: quem não mexia mandava o que não escolheu. [C1-4]
+      */
+      if (!category) {
+        res.status(400).json({ message: "Escolha a categoria.", field: "category" });
         return;
       }
       if (!isReportCategory(category)) {
         res.status(400).json({
-          message: `category inválida. Use: ${REPORT_CATEGORY_VALUES.join(", ")}.`,
+          message: `Categoria inválida. Use: ${REPORT_CATEGORY_VALUES.join(", ")}.`,
+          field: "category",
+        });
+        return;
+      }
+      if (typeof description !== "string" || !description.trim()) {
+        res.status(400).json({ message: "Descreva o que aconteceu.", field: "description" });
+        return;
+      }
+      if (typeof committee_involved !== "boolean") {
+        res.status(400).json({
+          message: "Responda se alguém do comitê de ética está envolvido.",
+          field: "committee_involved",
+        });
+        return;
+      }
+      /*
+        Dentro do portal a pessoa escolhe se identificar ou não, e precisa
+        responder. No canal público não há sessão: a denúncia é sempre
+        anônima e a pergunta nem aparece. [S4-L]
+      */
+      if (authReq.actor && typeof is_anonymous !== "boolean") {
+        res.status(400).json({
+          message: "Responda se quer se identificar.",
+          field: "is_anonymous",
         });
         return;
       }
@@ -192,16 +306,29 @@ class EthicsController {
         return;
       }
 
-      if (establishment_id) {
-        const est = await new Establishment().read.one({
-          id: establishment_id,
-          organizationId: orgId,
-          archivedAt: null,
+      /*
+        A unidade passa a ser obrigatória: sem ela a coluna "Estabelecimento"
+        saía sempre vazia, e o comitê não sabia de onde vinha o relato.
+        [C1-3]
+      */
+      if (typeof establishment_id !== "string" || !establishment_id.trim()) {
+        res.status(400).json({
+          message: "Escolha a unidade onde o fato aconteceu.",
+          field: "establishment_id",
         });
-        if (!est) {
-          res.status(400).json({ message: "Estabelecimento inválido." });
-          return;
-        }
+        return;
+      }
+      const est = await new Establishment().read.one({
+        id: establishment_id,
+        organizationId: orgId,
+        archivedAt: null,
+      });
+      if (!est) {
+        res.status(400).json({
+          message: "Unidade inválida para esta empresa.",
+          field: "establishment_id",
+        });
+        return;
       }
 
       const anonymous = is_anonymous !== false;
@@ -222,6 +349,12 @@ class EthicsController {
         ETHICS_ACCESS_CODE_BCRYPT_ROUNDS,
       );
 
+      /*
+        O prazo da primeira providência conta do recebimento: o instante é
+        o mesmo que fica gravado como `createdAt`. [C1-2]
+      */
+      const recebidaEm = new Date();
+      const severity = severityForCategory(category);
       const report = await new EthicsReport().create.new({
         organizationId: orgId,
         protocol,
@@ -231,8 +364,13 @@ class EthicsController {
         reporterUserId,
         accessCodeHash,
         status: REPORT_STATUSES.RECEIVED,
-        establishmentId: establishment_id ?? null,
-        committeeInvolved: committee_involved === true,
+        establishmentId: est.id,
+        committeeInvolved: committee_involved,
+        /* Quem define a gravidade é o servidor, pela categoria. [C1-1] */
+        severity,
+        severitySource: "AUTO",
+        createdAt: recebidaEm,
+        dueAt: computeDueAt(recebidaEm, severity, holidayCalendarFor(orgId)),
       });
 
       // Auditoria sem revelar identidade do denunciante anônimo.
@@ -394,37 +532,122 @@ class EthicsController {
     }
   }
 
+  /**
+   * Quem denunciou dá ciência do encerramento, pelo protocolo e código.
+   *
+   * Vale para a anônima e não grava identidade nenhuma [ADR-16]. Uma vez
+   * só; comentário opcional. Ciência não é concordância. [C1-5]
+   */
+  async acknowledge(req: Request, res: Response) {
+    try {
+      const { protocol, access_code, organization_id, comment } = req.body as {
+        protocol?: string;
+        access_code?: string;
+        organization_id?: string;
+        comment?: unknown;
+      };
+      if (!protocol?.trim() || !access_code?.trim()) {
+        res.status(400).json({ message: "Informe protocol e access_code." });
+        return;
+      }
+      if (comment !== undefined && comment !== null && typeof comment !== "string") {
+        res.status(400).json({ message: "O comentário precisa ser texto.", field: "comment" });
+        return;
+      }
+      const comentario = typeof comment === "string" ? comment.trim() : "";
+      if (comentario.length > ETHICS_ACK_COMMENT_MAX) {
+        res.status(400).json({
+          message: `O comentário pode ter até ${ETHICS_ACK_COMMENT_MAX} caracteres.`,
+          field: "comment",
+        });
+        return;
+      }
+
+      const report = await findByProtocolAndCode(organization_id, protocol, access_code);
+      if (!report) {
+        res.status(404).json({ message: "Protocolo ou código inválido." });
+        return;
+      }
+      if (
+        report.status !== REPORT_STATUSES.RESOLVED &&
+        report.status !== REPORT_STATUSES.ARCHIVED
+      ) {
+        res.status(409).json({
+          message: "A denúncia ainda não foi encerrada: não há encerramento para dar ciência.",
+        });
+        return;
+      }
+
+      /* `reporterAckAt: null` no filtro: duas ciências ao mesmo tempo, uma vale. */
+      const agora = new Date();
+      const gravou = await prisma.ethicsReport.updateMany({
+        where: { id: report.id, reporterAckAt: null },
+        data: { reporterAckAt: agora, reporterAckComment: comentario || null },
+      });
+      if (gravou.count === 0) {
+        res.status(409).json({ message: "A ciência deste encerramento já foi registrada." });
+        return;
+      }
+
+      /* Sem autor: a trilha registra o fato, não quem o fez. [ADR-16] */
+      await writeAudit({
+        organizationId: report.organizationId,
+        actorId: null,
+        action: "ethics_report.acknowledge",
+        entityType: "EthicsReport",
+        entityId: report.id,
+        after: { comment: Boolean(comentario) },
+      });
+
+      res.json({ reporterAckAt: agora });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
   // —— Comitê ——
 
+  /**
+   * A lista do comitê, com filtros e paginação no servidor. [C1-6]
+   *
+   * O recorte de acesso vem antes de qualquer filtro e nunca por fora dele:
+   * quem é citado não vê o caso, e o caso na triagem só aparece para quem
+   * tria. [CB-27] [B3-3-H]
+   */
   async list(req: Request, res: Response) {
     try {
-      const orgId = actorOrgId(req as AuthRequest);
-      const status = req.query.status as string | undefined;
-      /*
-        Quem é citado numa denúncia sai do caso: nem na lista ela aparece.
-        Era a denúncia contra alguém do RH indo parar na mesa dele. [CB-27]
-        E o caso que diz envolver o comitê só aparece depois da triagem, para
-        quem não a faz. [B3-3-H]
-      */
-      const recorte = await ethicsReportScope(orgId, (req as AuthRequest).actor!);
+      const auth = req as AuthRequest;
+      const orgId = actorOrgId(auth);
+      const lido = parseEthicsFilters(req.query as Record<string, unknown>);
+      if ("error" in lido) {
+        res.status(400).json(lido.error);
+        return;
+      }
+      const ordenadas = await denunciasFiltradas(orgId, auth.actor!, lido.filters);
 
-      const rows = await prisma.ethicsReport.findMany({
-        where: {
-          organizationId: orgId,
-          ...recorte,
-          ...(status && isReportStatus(status) ? { status } : {}),
-        },
-        orderBy: { createdAt: "desc" },
+      const pedida = Number.parseInt(String(req.query.pagina ?? "1"), 10);
+      const page = Number.isFinite(pedida) && pedida > 0 ? pedida : 1;
+      const daPagina = ordenadas.slice(
+        (page - 1) * ETHICS_LIST_PAGE_SIZE,
+        page * ETHICS_LIST_PAGE_SIZE,
+      );
+      const ids = daPagina.map((r) => r.id);
+
+      const encontradas = await prisma.ethicsReport.findMany({
+        where: { id: { in: ids }, organizationId: orgId },
         include: {
           establishment: { select: { id: true, name: true } },
           _count: { select: { messages: true } },
         },
       });
+      const porId = new Map(encontradas.map((r) => [r.id, r]));
+      const rows = ids.map((id) => porId.get(id)!).filter(Boolean);
+
       // Mensagens do denunciante que o comitê ainda não abriu. [S5-L]
       const unread = await prisma.ethicsReportMessage.groupBy({
         by: ["reportId"],
         where: {
-          reportId: { in: rows.map((r) => r.id) },
+          reportId: { in: ids },
           side: REPORT_AUTHOR_SIDES.REPORTER,
           readByCommitteeAt: null,
         },
@@ -441,7 +664,7 @@ class EthicsController {
       const doComite = await prisma.ethicsReportMessage.groupBy({
         by: ["reportId"],
         where: {
-          reportId: { in: rows.map((r) => r.id) },
+          reportId: { in: ids },
           side: REPORT_AUTHOR_SIDES.COMMITTEE,
         },
         _count: { _all: true },
@@ -449,6 +672,9 @@ class EthicsController {
       const respondidas = new Map(doComite.map((u) => [u.reportId, u._count._all]));
       // Nunca devolver accessCodeHash nem reporter em listagens anônimas.
       res.json({
+        total: ordenadas.length,
+        page,
+        page_size: ETHICS_LIST_PAGE_SIZE,
         reports: rows.map((r) => ({
           id: r.id,
           protocol: r.protocol,
@@ -465,6 +691,12 @@ class EthicsController {
           /** O caso que passou pela triagem, e quando voltou. [B3-3-H] */
           committeeInvolved: r.committeeInvolved,
           triagedAt: r.triagedAt,
+          /** Alta ou Normal; `COMMITTEE` = ajustada pelo comitê. [C1-1] */
+          severity: r.severity,
+          severitySource: r.severitySource,
+          ...prazoNaResposta(r),
+          /** Ciência de quem denunciou no encerramento. [C1-5] */
+          reporterAckAt: r.reporterAckAt,
           createdAt: r.createdAt,
           updatedAt: r.updatedAt,
           _count: r._count,
@@ -472,6 +704,216 @@ class EthicsController {
           /** Zero = o comitê nunca falou nesta denúncia. [B2-3-D] */
           committee_messages: respondidas.get(r.id) ?? 0,
         })),
+      });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
+  /**
+   * Os dados do PDF da lista: tudo o que o filtro traz, sem paginação, e sem
+   * o texto da denúncia nem as mensagens. A exportação fica na trilha, com
+   * quem gerou, os filtros e a quantidade. [C1-6]
+   */
+  async exportList(req: Request, res: Response) {
+    try {
+      const auth = req as AuthRequest;
+      const orgId = actorOrgId(auth);
+      const actorId = actorUserId(auth);
+      const lido = parseEthicsFilters(req.query as Record<string, unknown>);
+      if ("error" in lido) {
+        res.status(400).json(lido.error);
+        return;
+      }
+      const ordenadas = await denunciasFiltradas(orgId, auth.actor!, lido.filters);
+      if (ordenadas.length > ETHICS_EXPORT_MAX_ROWS) {
+        res.status(400).json({
+          message:
+            `O filtro traz ${ordenadas.length} denúncias; o PDF vai até ` +
+            `${ETHICS_EXPORT_MAX_ROWS}. Filtre mais (por período ou unidade) e exporte de novo.`,
+          code: "TOO_MANY",
+          total: ordenadas.length,
+        });
+        return;
+      }
+      const ids = ordenadas.map((r) => r.id);
+      const encontradas = await prisma.ethicsReport.findMany({
+        where: { id: { in: ids }, organizationId: orgId },
+        select: {
+          id: true,
+          protocol: true,
+          createdAt: true,
+          category: true,
+          severity: true,
+          severitySource: true,
+          status: true,
+          reporterAckAt: true,
+          establishment: { select: { name: true } },
+        },
+      });
+      const porId = new Map(encontradas.map((r) => [r.id, r]));
+
+      const [organizacao, quem, unidade] = await Promise.all([
+        prisma.organization.findUnique({ where: { id: orgId }, select: { name: true } }),
+        prisma.user.findUnique({ where: { id: actorId }, select: { name: true } }),
+        lido.filters.establishmentId
+          ? prisma.establishment.findFirst({
+              where: { id: lido.filters.establishmentId, organizationId: orgId },
+              select: { name: true },
+            })
+          : null,
+      ]);
+
+      const contar = (chave: (r: (typeof ordenadas)[number]) => string) => {
+        const m: Record<string, number> = {};
+        for (const r of ordenadas) m[chave(r)] = (m[chave(r)] ?? 0) + 1;
+        return m;
+      };
+
+      const geradoEm = new Date();
+      await writeAudit({
+        organizationId: orgId,
+        actorId,
+        action: "ethics_report.export_list",
+        entityType: "EthicsReport",
+        entityId: orgId,
+        context: { filters: lido.filters, count: ordenadas.length },
+      });
+
+      res.json({
+        organization: { name: organizacao?.name ?? "" },
+        generated_at: geradoEm,
+        generated_by: { name: quem?.name ?? "" },
+        filters: lido.filters,
+        establishment_name: unidade?.name ?? null,
+        total: ordenadas.length,
+        totals: {
+          by_status: contar((r) => r.status),
+          by_severity: contar((r) => r.severity),
+          by_situation: contar((r) => r.situation),
+        },
+        rows: ordenadas.map((r) => {
+          const d = porId.get(r.id)!;
+          return {
+            protocol: d.protocol,
+            createdAt: d.createdAt,
+            establishment: d.establishment?.name ?? null,
+            category: d.category,
+            severity: d.severity,
+            severitySource: d.severitySource,
+            status: d.status,
+            dueAt: r.dueAt,
+            deadline_situation: r.situation,
+            firstActionAt: r.firstActionAt,
+            reporterAckAt: d.reporterAckAt,
+          };
+        }),
+      });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
+  /**
+   * Os dados do PDF de uma denúncia: relato, mensagens, gravidade, prazo,
+   * encerramento e ciência.
+   *
+   * Nenhum identificador de quem denunciou sai daqui, nem na identificada:
+   * ela sai como "Identificada (consultar no portal)". As mensagens saem
+   * com data e lado; quem escreveu pelo comitê sai como "Comitê". O texto
+   * livre (relato, mensagens) vai como foi escrito e pode conter nomes: a
+   * tela avisa antes de exportar. A exportação fica na trilha. [C1-6]
+   */
+  async exportOne(req: Request, res: Response) {
+    try {
+      const auth = req as AuthRequest;
+      const orgId = actorOrgId(auth);
+      const actorId = actorUserId(auth);
+      if (await estouImpedido(req, req.params.id)) {
+        res.status(404).json({ message: "Relato não encontrado." });
+        return;
+      }
+      const report = await prisma.ethicsReport.findFirst({
+        where: { id: req.params.id, organizationId: orgId },
+        select: {
+          id: true,
+          organizationId: true,
+          protocol: true,
+          createdAt: true,
+          category: true,
+          description: true,
+          isAnonymous: true,
+          status: true,
+          severity: true,
+          severitySource: true,
+          dueAt: true,
+          firstActionAt: true,
+          resolutionNote: true,
+          resolvedAt: true,
+          reporterAckAt: true,
+          reporterAckComment: true,
+          organization: { select: { name: true } },
+          establishment: { select: { name: true } },
+          severityChanges: {
+            orderBy: { at: "asc" },
+            select: { fromSeverity: true, toSeverity: true, reason: true, at: true },
+          },
+          messages: {
+            orderBy: { createdAt: "asc" },
+            select: { side: true, body: true, createdAt: true },
+          },
+          cited: {
+            orderBy: { markedAt: "asc" },
+            select: { user: { select: { name: true } } },
+          },
+        },
+      });
+      if (!report) {
+        res.status(404).json({ message: "Relato não encontrado." });
+        return;
+      }
+      const quem = await prisma.user.findUnique({ where: { id: actorId }, select: { name: true } });
+
+      await writeAudit({
+        organizationId: orgId,
+        actorId,
+        action: "ethics_report.export",
+        entityType: "EthicsReport",
+        entityId: report.id,
+        context: { protocol: report.protocol },
+      });
+
+      const prazo = ethicsDeadline(report);
+      res.json({
+        organization: { name: report.organization.name },
+        generated_at: new Date(),
+        generated_by: { name: quem?.name ?? "" },
+        report: {
+          protocol: report.protocol,
+          createdAt: report.createdAt,
+          establishment: report.establishment?.name ?? null,
+          category: report.category,
+          severity: report.severity,
+          severitySource: report.severitySource,
+          severityChanges: report.severityChanges.map((c) => ({ ...c, by: "Comitê" })),
+          dueAt: prazo.dueAt,
+          deadline_situation: prazo.situation,
+          firstActionAt: report.firstActionAt,
+          status: report.status,
+          reporter: report.isAnonymous ? "Anônima" : "Identificada (consultar no portal)",
+          description: report.description,
+          messages: report.messages.map((m) => ({
+            side: m.side,
+            author: m.side === REPORT_AUTHOR_SIDES.COMMITTEE ? "Comitê" : "Denunciante",
+            body: m.body,
+            createdAt: m.createdAt,
+          })),
+          cited: report.cited.map((c) => c.user.name),
+          resolutionNote: report.resolutionNote,
+          resolvedAt: report.resolvedAt,
+          reporterAckAt: report.reporterAckAt,
+          reporterAckComment: report.reporterAckComment,
+        },
       });
     } catch (err) {
       fail(res, err);
@@ -879,6 +1321,18 @@ class EthicsController {
               author: { select: { id: true, name: true } },
             },
           },
+          /** Os ajustes de gravidade, com autor e justificativa. [C1-1] */
+          severityChanges: {
+            orderBy: { at: "asc" },
+            select: {
+              id: true,
+              fromSeverity: true,
+              toSeverity: true,
+              reason: true,
+              at: true,
+              by: { select: { id: true, name: true } },
+            },
+          },
         },
       });
       if (!report) {
@@ -899,6 +1353,7 @@ class EthicsController {
       res.json({
         report: {
           ...safe,
+          ...prazoNaResposta(report),
           reporterUserId: report.isAnonymous ? null : report.reporterUserId,
           reporter: undefined,
         },
@@ -987,6 +1442,11 @@ class EthicsController {
         },
       );
 
+      /* Sair de "Recebido" é a primeira providência do comitê. [C1-2] */
+      if (status !== REPORT_STATUSES.RECEIVED) {
+        await marcarPrimeiraProvidencia(current.id);
+      }
+
       await writeAudit({
         organizationId: orgId,
         actorId: userId,
@@ -1001,8 +1461,131 @@ class EthicsController {
         return;
       }
 
+      /*
+        Encerrada agora a denúncia identificada: quem relatou é avisado para
+        ver o resultado e dar ciência. A anônima não tem a quem avisar.
+        [C1-5] [ADR-16]
+      */
+      const encerrou =
+        (status === REPORT_STATUSES.RESOLVED || status === REPORT_STATUSES.ARCHIVED) &&
+        current.status !== REPORT_STATUSES.RESOLVED &&
+        current.status !== REPORT_STATUSES.ARCHIVED;
+      if (encerrou && !current.isAnonymous && current.reporterUserId) {
+        await notify({
+          organizationId: orgId,
+          userId: current.reporterUserId,
+          kind: NotificationKind.ETHICS_REPORT_CLOSED,
+          title: "Sua denúncia foi encerrada",
+          body: "Veja o resultado e dê ciência pelo acompanhamento, com o protocolo e o código.",
+          link: "/denuncia",
+          entityType: "EthicsReport",
+          entityId: current.id,
+        });
+      }
+
       const { accessCodeHash: _h, ...safe } = report;
       res.json({ report: safe });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
+  /**
+   * O comitê ajusta a gravidade (Alta ↔ Normal), sempre com justificativa.
+   *
+   * O ajuste fica registrado — quem, quando, de → para e por quê — e aparece
+   * no detalhe do caso. [C1-1]
+   */
+  async setSeverity(req: Request, res: Response) {
+    try {
+      const auth = req as AuthRequest;
+      const orgId = actorOrgId(auth);
+      const actorId = actorUserId(auth);
+      /* Fora do alcance de quem abriu: 404, como nas outras ações. [CB-27] */
+      if (await estouImpedido(req, req.params.id)) {
+        res.status(404).json({ message: "Relato não encontrado." });
+        return;
+      }
+      const { severity, reason } = req.body as {
+        severity?: unknown;
+        reason?: unknown;
+      };
+      if (!isReportSeverity(severity)) {
+        res.status(400).json({
+          message: "Informe a gravidade: Alta (HIGH) ou Normal (NORMAL).",
+          field: "severity",
+        });
+        return;
+      }
+      const justificativa = typeof reason === "string" ? reason.trim() : "";
+      if (!justificativa) {
+        res.status(400).json({
+          message: "Escreva por que a gravidade está sendo ajustada.",
+          field: "reason",
+        });
+        return;
+      }
+
+      const report = await prisma.ethicsReport.findFirst({
+        where: { id: req.params.id, organizationId: orgId },
+        select: { id: true, severity: true, createdAt: true },
+      });
+      if (!report) {
+        res.status(404).json({ message: "Relato não encontrado." });
+        return;
+      }
+      if (report.severity === severity) {
+        res.status(400).json({
+          message: "A denúncia já está com essa gravidade.",
+          field: "severity",
+        });
+        return;
+      }
+
+      const [, change] = await prisma.$transaction([
+        prisma.ethicsReport.update({
+          where: { id: report.id },
+          data: {
+            severity,
+            severitySource: "COMMITTEE",
+            /*
+              O prazo continua contando do recebimento, com o nível novo: se
+              a Alta deixar o vencimento no passado, a denúncia aparece
+              atrasada. [C1-2]
+            */
+            dueAt: computeDueAt(report.createdAt, severity, holidayCalendarFor(orgId)),
+          },
+        }),
+        prisma.ethicsReportSeverityChange.create({
+          data: {
+            reportId: report.id,
+            fromSeverity: report.severity,
+            toSeverity: severity,
+            reason: justificativa,
+            byId: actorId,
+          },
+          select: {
+            id: true,
+            fromSeverity: true,
+            toSeverity: true,
+            reason: true,
+            at: true,
+            by: { select: { id: true, name: true } },
+          },
+        }),
+      ]);
+
+      await writeAudit({
+        organizationId: orgId,
+        actorId,
+        action: "ethics_report.severity",
+        entityType: "EthicsReport",
+        entityId: report.id,
+        before: { severity: report.severity },
+        after: { severity, reason: justificativa },
+      });
+
+      res.json({ change });
     } catch (err) {
       fail(res, err);
     }
@@ -1057,6 +1640,8 @@ class EthicsController {
           { status: REPORT_STATUSES.IN_ANALYSIS },
         );
       }
+      /* A primeira mensagem do comitê é providência. [C1-2] */
+      await marcarPrimeiraProvidencia(report.id);
 
       /*
         A pergunta do comitê ficava esperando a pessoa voltar sozinha ao
@@ -1093,6 +1678,26 @@ class EthicsController {
    */
   async listCategories(req: Request, res: Response) {
     const orgId = (req.query.organization_id as string | undefined) ?? null;
+    /*
+      As unidades para quem relata escolher. Dentro do portal, as da empresa
+      da sessão; no canal público, as da empresa do link. A empresa é a
+      mesma que a criação usa — a da sessão, quando há uma —, para a unidade
+      escolhida sempre conferir. Sem empresa nenhuma, nada sai. Só id e
+      nome: endereço não. [C1-3] [CB-63]
+    */
+    const actorOrg = (req as AuthRequest).actor?.organizationId ?? null;
+    const unidadesDe = actorOrg ?? orgId;
+    const establishments = unidadesDe
+      ? await prisma.establishment.findMany({
+          where: {
+            organizationId: unidadesDe,
+            archivedAt: null,
+            organization: { active: true },
+          },
+          orderBy: { name: "asc" },
+          select: { id: true, name: true },
+        })
+      : [];
     const organization = orgId
       ? await prisma.organization.findFirst({
           where: { id: orgId, active: true },
@@ -1121,6 +1726,7 @@ class EthicsController {
       statuses: REPORT_STATUS_VALUES.map((id) => ({ id })),
       organization,
       single_organization: ativas.length === 1 ? ativas[0] : null,
+      establishments,
     });
   }
 }

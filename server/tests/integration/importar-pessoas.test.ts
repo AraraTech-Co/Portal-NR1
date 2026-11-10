@@ -103,12 +103,21 @@ describe("cadastrar várias pessoas de uma vez [S1-A]", () => {
     const criada = res.body.results[0];
     expect(criada.status).toBe("created");
     expect(criada.login).toBeTruthy();
-    expect(criada.temporary_password).toHaveLength(12);
-
-    // A pessoa entra com a senha e o portal obriga a trocar.
-    const login = await entrar(criada.login, criada.temporary_password);
-    expect(login.status).toBe(200);
-    expect(login.body.user.must_change_password).toBe(true);
+    /*
+      Nenhuma senha sai da planilha: a conta nasce aguardando o primeiro
+      acesso por conferência de dados, por 30 dias. [C1-7]
+    */
+    expect(criada).not.toHaveProperty("temporary_password");
+    expect(criada.awaiting_first_access).toBe(true);
+    const conta = await prisma.user.findUniqueOrThrow({
+      where: { login: criada.login },
+      select: { activatedAt: true, firstAccessEligible: true, firstAccessUntil: true },
+    });
+    expect(conta.activatedAt).toBeNull();
+    expect(conta.firstAccessEligible).toBe(true);
+    const dias = (conta.firstAccessUntil!.getTime() - Date.now()) / (24 * 3600_000);
+    expect(dias).toBeGreaterThan(29.9);
+    expect(dias).toBeLessThanOrEqual(30);
 
     // E chegou com função, matrícula e admissão.
     const perfil = await prisma.employeeProfile.findFirst({

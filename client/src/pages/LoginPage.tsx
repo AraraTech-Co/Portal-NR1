@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { Link, Navigate } from "react-router-dom";
+import { Link, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
 import { Button } from "@/components/Button";
 import { CANAL_BASE } from "@/lib/canal";
@@ -30,6 +30,8 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  /* Recado de quem acabou de criar a senha no primeiro acesso. [C1-7] */
+  const aviso = (useLocation().state as { aviso?: string } | null)?.aviso ?? null;
 
   const asideRef = useRef<HTMLDivElement>(null);
   const markRef = useRef<HTMLDivElement>(null);
@@ -196,6 +198,11 @@ export function LoginPage() {
               esse login de cor. [B2-1-F] */}
           Entre com a sua matrícula, o seu CPF, o seu login ou o seu e-mail.
         </p>
+        {aviso && (
+          <p className="login-notice" role="status">
+            {aviso}
+          </p>
+        )}
         <form className="login-form" onSubmit={onSubmit}>
           <label className="login-field">
             {/* Dizia "Login ou e-mail", e quem entrou pela planilha precisava
@@ -223,6 +230,14 @@ export function LoginPage() {
             {loading ? "Entrando…" : "Entrar"}
           </Button>
         </form>
+        {/* Sem senha em papel: quem nunca entrou cria a própria. [C1-7] */}
+        <p className="login-canal">
+          <Link to="/primeiro-acesso">Primeiro acesso</Link>
+          <span className="muted">
+            {" "}
+            — nunca entrou? Crie a sua senha com matrícula, CPF e nascimento.
+          </span>
+        </p>
         {/*
           Quem vai denunciar é muitas vezes quem não tem conta aqui —
           terceiro, candidato, quem já saiu — e a entrada não dizia que o

@@ -170,6 +170,9 @@ function CadastroEditor({
   const [aberto, setAberto] = useState(false);
   const [registration, setRegistration] = useState(profile.registration ?? "");
   const [taxId, setTaxId] = useState(profile.taxId ?? "");
+  const [birthDate, setBirthDate] = useState(
+    profile.birthDate ? String(profile.birthDate).slice(0, 10) : "",
+  );
   const [phone, setPhone] = useState(profile.phone ?? "");
   const [jobRoleId, setJobRoleId] = useState(profile.jobRole?.id ?? "");
   const [admittedAt, setAdmittedAt] = useState(
@@ -193,7 +196,11 @@ function CadastroEditor({
     try {
       await updateEmployeeProfile(profileId, {
         ...(cuidaDoQuadro
-          ? { registration: registration.trim(), tax_id: taxId.trim() }
+          ? {
+              registration: registration.trim(),
+              tax_id: taxId.trim(),
+              birth_date: birthDate || null,
+            }
           : {}),
         phone: phone.trim(),
         job_role_id: jobRoleId || null,
@@ -248,6 +255,21 @@ function CadastroEditor({
           </span>
         </label>
       </div>
+      {/* Um dos três dados do primeiro acesso; só o RH altera. [C1-7] */}
+      <label className="form-field">
+        Data de nascimento
+        <input
+          type="date"
+          value={birthDate}
+          onChange={(e) => setBirthDate(e.target.value)}
+          disabled={!cuidaDoQuadro}
+        />
+        <span className="form-hint">
+          {cuidaDoQuadro
+            ? "Com matrícula e CPF, é o que a pessoa usa no primeiro acesso."
+            : "Só o RH altera o nascimento."}
+        </span>
+      </label>
       <div className="form-grid cols-2">
         <label className="form-field">
           Função
@@ -513,6 +535,10 @@ export function EmployeeFilePage() {
                 <div>
                   <dt>CPF</dt>
                   <dd>{formatCpf(profile.taxId)}</dd>
+                </div>
+                <div>
+                  <dt>Nascimento</dt>
+                  <dd>{formatDay(profile.birthDate ?? null)}</dd>
                 </div>
                 <div>
                   <dt>Telefone</dt>

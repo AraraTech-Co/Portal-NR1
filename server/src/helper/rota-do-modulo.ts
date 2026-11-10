@@ -37,6 +37,8 @@ const MODULO_POR_ROTA: Record<string, string> = {
   gamificacao: "gamificacao",
   convocacoes: "convocacoes",
   conta: "conta",
+  /** Painel de ativação das contas (primeiro acesso). [C1-7] */
+  ativacao: "ativacao",
   configuracoes: "configuracoes",
 };
 

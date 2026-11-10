@@ -35,6 +35,7 @@ describe("Ethics channel (Lei 14.457)", () => {
         description: "Situação de constrangimento reiterado no setor",
         establishment_id: EST_ID,
         is_anonymous: true,
+        committee_involved: false,
       });
     expect(res.status).toBe(201);
     expect(res.body.report.protocol).toMatch(/^CX-\d{4}$/);

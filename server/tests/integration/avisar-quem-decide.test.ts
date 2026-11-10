@@ -25,6 +25,7 @@ import prisma from "../../src/model/prisma";
  * Exige a organização do `scripts/seed-teste-org.ts`.
  */
 const ORG_ID = "aaaaaaaa-0001-4000-8000-000000000001";
+const EST_ID = "aaaaaaaa-0001-4000-8000-000000000011";
 const ACCOUNT_ID = "aaaaaaaa-0001-4000-8000-000000000002";
 const SENHA = "teste1234";
 const SUFIXO = Date.now().toString(36);
@@ -331,7 +332,7 @@ describe("a denúncia nova chega ao comitê [CB-29]", () => {
       organization_id: ORG_ID,
       category: "SAFETY_RISK",
       description: `Relato de fora do portal ${SUFIXO}, sem login nenhum.`,
-      is_anonymous: true,
+      is_anonymous: true, establishment_id: EST_ID, committee_involved: false,
     });
     expect(res.status, JSON.stringify(res.body)).toBe(201);
     relatos.push(res.body.report.id);
