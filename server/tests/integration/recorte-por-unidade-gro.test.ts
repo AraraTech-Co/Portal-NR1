@@ -1041,6 +1041,68 @@ describe("conformidade e vencimentos do Início nas unidades visíveis [C2-13]",
     }
   });
 
+  it("avaliação vencida e risco a reavaliar de Barueri não entram na conta de Rio Claro", async () => {
+    const versao = await prisma.riskMethodologyVersion.findFirstOrThrow({
+      where: { methodology: { organizationId: null, isDefault: true } },
+      orderBy: { version: "desc" },
+      select: { id: true },
+    });
+    const vencida = await prisma.riskAssessment.create({
+      data: {
+        organizationId: ORG_ID,
+        riskId: barueri.riskId,
+        methodologyVersionId: versao.id,
+        severity: 2,
+        probability: 2,
+        resultingLevel: "MODERATE",
+        status: "VALIDATED",
+        assessorId: sst.user.id,
+        validatedById: master.user.id,
+        validatedAt: new Date(Date.now() - 400 * 86_400_000),
+        expiresAt: new Date(Date.now() - 5 * 86_400_000),
+      },
+    });
+    const antes = await prisma.risk.findUniqueOrThrow({
+      where: { id: barueri.riskId },
+      select: { needsReassessment: true },
+    });
+    await prisma.risk.update({ where: { id: barueri.riskId }, data: { needsReassessment: true } });
+    try {
+      const emRC = { hazard: { activity: { establishmentId: rioClaro.id } } };
+      const vencidas = (extra: object) =>
+        prisma.risk.count({
+          where: {
+            organizationId: ORG_ID,
+            archivedAt: null,
+            ...extra,
+            assessments: { some: { status: "VALIDATED", supersededAt: null, expiresAt: { lt: new Date() } } },
+          },
+        });
+      const aReavaliar = (extra: object) =>
+        prisma.risk.count({ where: { organizationId: ORG_ID, archivedAt: null, needsReassessment: true, ...extra } });
+
+      const inicio = ok(await request(app).get("/api/inicio").set(as(gerRC.token)), 200);
+      expect(cartaoDoInicio(inicio, "avaliacoes_vencidas"), "vencidas de Rio Claro").toBe(await vencidas(emRC));
+      expect(cartaoDoInicio(inicio, "para_reavaliar"), "a reavaliar de Rio Claro").toBe(await aReavaliar(emRC));
+
+      // A empresa conta Barueri: a diferença é o que o recorte tira.
+      const central = ok(await request(app).get("/api/inicio").set(as(master.token)), 200);
+      const vencidasDaEmpresa = await vencidas({});
+      const aReavaliarDaEmpresa = await aReavaliar({});
+      expect(vencidasDaEmpresa, "a de Barueri está na conta da empresa").toBeGreaterThan(
+        cartaoDoInicio(inicio, "avaliacoes_vencidas"),
+      );
+      expect(aReavaliarDaEmpresa, "o de Barueri está na conta da empresa").toBeGreaterThan(
+        cartaoDoInicio(inicio, "para_reavaliar"),
+      );
+      expect(cartaoDoInicio(central, "avaliacoes_vencidas")).toBe(vencidasDaEmpresa);
+      expect(cartaoDoInicio(central, "para_reavaliar")).toBe(aReavaliarDaEmpresa);
+    } finally {
+      await prisma.risk.update({ where: { id: barueri.riskId }, data: { needsReassessment: antes.needsReassessment } });
+      await prisma.riskAssessment.deleteMany({ where: { id: vencida.id } });
+    }
+  });
+
   it("primeiros passos: o gestor sem unidade não vê as ações da empresa como suas", async () => {
     const semUnidade = await pessoa("ger-sem-unidade", Role.GERENTE, null);
     const passo = (corpo: { first_steps: { id: string; done: boolean }[] | null }) =>
