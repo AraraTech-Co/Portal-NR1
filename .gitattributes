@@ -1,0 +1,3 @@
+# O texto sai do repositório com LF em qualquer sistema, inclusive no Windows
+# com core.autocrlf=true: testes e scripts leem os arquivos esperando LF. [C2-9]
+* text=auto eol=lf

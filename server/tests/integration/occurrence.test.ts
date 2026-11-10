@@ -1,7 +1,8 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import request from "supertest";
 import { createApp } from "../../src/app";
 import type { Express } from "express";
+import prisma from "../../src/model/prisma";
 
 const EST_ID = "00000000-0000-4000-8000-000000000010";
 const RISK_ID = "00000000-0000-4000-8000-000000000015";
@@ -20,6 +21,12 @@ describe("Occurrence module (NR-1 1.5.5.5)", () => {
   let occurrenceId: string;
   /* Responsável e prazo passaram a ser obrigatórios também aqui. [S2-M] */
   let responsavel: string;
+  /*
+    O seed não avalia o risco: o nível na abertura da ação dependia de outro
+    arquivo ter avaliado antes. O teste avalia o próprio risco e desfaz no
+    fim, e passa em qualquer ordem. [C2-9]
+  */
+  let avaliacao = "";
 
   beforeAll(async () => {
     app = createApp();
@@ -29,6 +36,28 @@ describe("Occurrence module (NR-1 1.5.5.5)", () => {
       .set("Authorization", `Bearer ${token}`);
     expect(eu.status).toBe(200);
     responsavel = eu.body.user.id as string;
+    const versao = await prisma.riskMethodologyVersion.findFirstOrThrow({
+      where: { methodology: { organizationId: null, isDefault: true } },
+      orderBy: { version: "desc" },
+      select: { id: true },
+    });
+    const criada = await prisma.riskAssessment.create({
+      data: {
+        organizationId: (await prisma.risk.findUniqueOrThrow({ where: { id: RISK_ID } })).organizationId,
+        riskId: RISK_ID,
+        methodologyVersionId: versao.id,
+        severity: 3,
+        probability: 3,
+        resultingLevel: "MODERATE",
+        status: "DRAFT",
+        assessorId: responsavel,
+      },
+    });
+    avaliacao = criada.id;
+  });
+
+  afterAll(async () => {
+    if (avaliacao) await prisma.riskAssessment.deleteMany({ where: { id: avaliacao } });
   });
 
   it("rejects invalid type", async () => {

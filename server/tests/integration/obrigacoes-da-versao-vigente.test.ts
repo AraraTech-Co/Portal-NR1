@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 import type { Express } from "express";
 import { readFileSync } from "node:fs";
@@ -258,6 +258,7 @@ describe("o formulário traz o texto da vigente [B3-4-E]", () => {
 describe("a leitura que o formulário usa traz o texto [B3-4-E]", () => {
   let app: Express;
   let sst: string;
+  let ordemEmitida = "";
 
   beforeAll(async () => {
     app = createApp();
@@ -266,6 +267,37 @@ describe("a leitura que o formulário usa traz o texto [B3-4-E]", () => {
       .send({ login: "teste.sst", password: "teste1234" });
     expect(res.status).toBe(200);
     sst = res.body.token as string;
+
+    /*
+      Os seeds não emitem ordem de serviço: a vigente vinha de outro arquivo,
+      quando ele rodava antes. Sem nenhuma, o teste emite a sua e apaga no
+      fim, e passa em qualquer ordem. [C2-9]
+    */
+    const lista = await request(app)
+      .get("/api/service-orders")
+      .set({ Authorization: `Bearer ${sst}` });
+    expect(lista.status).toBe(200);
+    const funcoes = lista.body.job_roles as Array<{ id: string; current: { id: string } | null }>;
+    if (!funcoes.some((r) => r.current)) {
+      expect(funcoes.length, "a organização de teste tem função").toBeGreaterThan(0);
+      const emitida = await request(app)
+        .post("/api/service-orders")
+        .set({ Authorization: `Bearer ${sst}` })
+        .send({
+          job_role_id: funcoes[0].id,
+          duties: "Usar o EPI da função. Avisar o supervisor de qualquer risco.",
+          emergency_instructions: "Parar a tarefa e acionar o supervisor.",
+          responsible_name: "Responsável do teste",
+        });
+      expect(emitida.status, JSON.stringify(emitida.body)).toBe(201);
+      ordemEmitida = emitida.body.service_order.id as string;
+    }
+  });
+
+  afterAll(async () => {
+    if (!ordemEmitida) return;
+    await prisma.auditEvent.deleteMany({ where: { entityId: ordemEmitida } });
+    await prisma.serviceOrder.deleteMany({ where: { id: ordemEmitida } });
   });
 
   it("quem emite lê, da vigente, as obrigações e a emergência gravadas", async () => {
