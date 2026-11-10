@@ -47,8 +47,13 @@ const criados: string[] = [];
 const pedidos: string[] = [];
 const links: string[] = [];
 
-async function entrar(login: string, senha = SENHA) {
-  return request(app).post("/api/auth").send({ login, password: senha });
+/*
+  A filial vem primeiro na entrada (C3-2b): matrícula e CPF vão com a
+  filial; login e e-mail, com "externo" (o padrão aqui).
+*/
+let FILIAL = "";
+async function entrar(login: string, senha = SENHA, filial = "externo") {
+  return request(app).post("/api/auth").send({ login, password: senha, establishment_id: filial });
 }
 
 /** Cria gente pela planilha e guarda para limpar no fim. */
@@ -68,6 +73,10 @@ async function importar(linhas: Record<string, unknown>[], dryRun = false) {
 }
 
 beforeAll(async () => {
+  process.env.LOGIN_ORG_ID = ORG_ID;
+  FILIAL = (
+    await prisma.establishment.create({ data: { organizationId: ORG_ID, name: `Filial entrada ${SUFIXO}` } })
+  ).id;
   app = createApp();
   master = (await entrar("teste.master")).body;
   rh = (await entrar("teste.rh")).body;
@@ -77,6 +86,8 @@ afterAll(async () => {
   await prisma.accountJoinRequest.deleteMany({ where: { id: { in: pedidos } } });
   await prisma.user.deleteMany({ where: { id: { in: criados } } });
   await prisma.accountInviteLink.deleteMany({ where: { id: { in: links } } });
+  await prisma.establishment.delete({ where: { id: FILIAL } });
+  delete process.env.LOGIN_ORG_ID;
 });
 
 describe("o trabalhador entra pelo que ele sabe de cor [B2-1-F]", () => {
@@ -88,6 +99,7 @@ describe("o trabalhador entra pelo que ele sabe de cor [B2-1-F]", () => {
         name: `Pereira Entrada ${SUFIXO}`,
         registration: matricula,
         tax_id: cpf,
+        establishment_id: FILIAL,
       },
     ]);
     expect(criar.status, JSON.stringify(criar.body)).toBe(201);
@@ -107,12 +119,12 @@ describe("o trabalhador entra pelo que ele sabe de cor [B2-1-F]", () => {
     // Pelo login gerado, como sempre funcionou.
     expect((await entrar(linha.login, senha)).status).toBe(200);
     // Pela matrícula, que é o número que ele usa na fábrica.
-    const porMatricula = await entrar(matricula, senha);
+    const porMatricula = await entrar(matricula, senha, FILIAL);
     expect(porMatricula.status, "matrícula entra").toBe(200);
     expect(porMatricula.body.user.login).toBe(linha.login);
     // E pelo CPF, formatado como ele costuma escrever.
     const formatado = `${cpf.slice(0, 3)}.${cpf.slice(3, 6)}.${cpf.slice(6, 9)}-${cpf.slice(9)}`;
-    const porCpf = await entrar(formatado, senha);
+    const porCpf = await entrar(formatado, senha, FILIAL);
     expect(porCpf.status, "CPF entra").toBe(200);
     expect(porCpf.body.user.login).toBe(linha.login);
   });
@@ -120,11 +132,11 @@ describe("o trabalhador entra pelo que ele sabe de cor [B2-1-F]", () => {
   it("matrícula certa com senha errada continua sendo recusada", async () => {
     const matricula = `N${SUFIXO}`.slice(0, 12);
     const criar = await importar([
-      { name: `Souza Senha ${SUFIXO}`, registration: matricula },
+      { name: `Souza Senha ${SUFIXO}`, registration: matricula, establishment_id: FILIAL },
     ]);
     expect(criar.status).toBe(201);
 
-    const res = await entrar(matricula, "senha-errada-mesmo");
+    const res = await entrar(matricula, "senha-errada-mesmo", FILIAL);
     expect(res.status).toBe(401);
   });
 
@@ -136,8 +148,8 @@ describe("o trabalhador entra pelo que ele sabe de cor [B2-1-F]", () => {
     const senha = ["senha", "zeros", SUFIXO].join("-");
 
     const criar = await importar([
-      { name: `Lima Zeros ${SUFIXO}`, registration: comZeros },
-      { name: `Rocha Zeros ${SUFIXO}`, registration: semZeros },
+      { name: `Lima Zeros ${SUFIXO}`, registration: comZeros, establishment_id: FILIAL },
+      { name: `Rocha Zeros ${SUFIXO}`, registration: semZeros, establishment_id: FILIAL },
     ]);
     expect(criar.status, JSON.stringify(criar.body)).toBe(201);
     const [a, b] = criar.body.results as { status: string; login: string }[];
@@ -151,18 +163,18 @@ describe("o trabalhador entra pelo que ele sabe de cor [B2-1-F]", () => {
 
     // Cadastrada com zeros, digitada sem eles ou com outra quantidade.
     for (const digitado of [String(n), `0${n}`, comZeros, `00000${n}`]) {
-      const res = await entrar(digitado, senha);
+      const res = await entrar(digitado, senha, FILIAL);
       expect(res.status, `matrícula ${digitado}`).toBe(200);
       expect(res.body.user.login).toBe(a.login);
     }
     // Cadastrada sem zeros, digitada com eles.
-    const res = await entrar(`00${semZeros}`, senha);
+    const res = await entrar(`00${semZeros}`, senha, FILIAL);
     expect(res.status, "zeros só no que foi digitado").toBe(200);
     expect(res.body.user.login).toBe(b.login);
 
     // Outro número continua outro número: os zeros só saem da frente.
-    expect((await entrar(`${n}0`, senha)).status).toBe(401);
-    expect((await entrar(`${comZeros}`, "senha-errada-mesmo")).status).toBe(401);
+    expect((await entrar(`${n}0`, senha, FILIAL)).status).toBe(401);
+    expect((await entrar(`${comZeros}`, "senha-errada-mesmo", FILIAL)).status).toBe(401);
   });
 
   it("número que não é matrícula de ninguém é recusado", async () => {

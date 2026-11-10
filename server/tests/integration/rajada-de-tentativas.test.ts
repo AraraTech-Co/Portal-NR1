@@ -24,6 +24,10 @@ const RAJADA = 30;
 
 const as = (token: string) => ({ Authorization: `Bearer ${token}` });
 
+/* A filial vem primeiro na entrada e no primeiro acesso. [C3-2b] */
+const ORG_ID = "aaaaaaaa-0001-4000-8000-000000000001";
+let FILIAL = "";
+
 let app: Express;
 let rh: { token: string };
 
@@ -48,7 +52,13 @@ async function pessoaNova(n: number) {
     .set(as(rh.token))
     .send({
       people: [
-        { name: `Rajada Pessoa ${n} ${SUFIXO}`, registration: matricula, tax_id: cpf, birth_date: "1990-03-15" },
+        {
+          name: `Rajada Pessoa ${n} ${SUFIXO}`,
+          registration: matricula,
+          tax_id: cpf,
+          birth_date: "1990-03-15",
+          establishment_id: FILIAL,
+        },
       ],
     });
   expect(res.status, JSON.stringify(res.body)).toBe(201);
@@ -58,6 +68,10 @@ async function pessoaNova(n: number) {
 }
 
 beforeAll(async () => {
+  process.env.LOGIN_ORG_ID = ORG_ID;
+  FILIAL = (
+    await prisma.establishment.create({ data: { organizationId: ORG_ID, name: `Filial rajada ${SUFIXO}` } })
+  ).id;
   app = createApp();
   const res = await request(app).post("/api/auth").send({ login: "teste.rh", password: SENHA });
   expect(res.status).toBe(200);
@@ -73,6 +87,8 @@ beforeAll(async () => {
 afterAll(async () => {
   await prisma.user.deleteMany({ where: { name: { contains: "Rajada Pessoa" } } });
   await prisma.authLockout.deleteMany({});
+  await prisma.establishment.delete({ where: { id: FILIAL } });
+  delete process.env.LOGIN_ORG_ID;
 });
 
 describe("rajada simultânea [C1-7]", () => {
@@ -87,7 +103,7 @@ describe("rajada simultânea [C1-7]", () => {
     // Canário: a contagem enxerga a conferência do servidor.
     const canario = await request(app)
       .post("/api/auth/primeiro-acesso")
-      .send({ matricula: p.matricula, cpf: p.cpf, nascimento: "1901-01-01" });
+      .send({ matricula: p.matricula, cpf: p.cpf, nascimento: "1901-01-01", establishment_id: FILIAL });
     expect(canario.status, "o canário chega à recusa normal").toBe(400);
     expect(conferencias.mock.calls.length, "a contagem vê a conferência").toBe(1);
     await prisma.authLockout.deleteMany({});
@@ -96,7 +112,7 @@ describe("rajada simultânea [C1-7]", () => {
     const datas = Array.from({ length: RAJADA - 1 }, (_, i) => `19${50 + i}-01-01`).concat(["1990-03-15"]);
     const respostas = await Promise.all(
       datas.map((nascimento) =>
-        request(app).post("/api/auth/primeiro-acesso").send({ matricula: p.matricula, cpf: p.cpf, nascimento }),
+        request(app).post("/api/auth/primeiro-acesso").send({ matricula: p.matricula, cpf: p.cpf, nascimento, establishment_id: FILIAL }),
       ),
     );
 
@@ -129,7 +145,9 @@ describe("rajada simultânea [C1-7]", () => {
 
     const respostas = await Promise.all(
       Array.from({ length: RAJADA }, (_, i) =>
-        request(app).post("/api/auth").send({ login: i % 2 ? p.cpf : p.matricula, password: `errada-${i}` }),
+        request(app)
+          .post("/api/auth")
+          .send({ login: i % 2 ? p.cpf : p.matricula, password: `errada-${i}`, establishment_id: FILIAL }),
       ),
     );
     expect(comparacoes.mock.calls.length, "bcrypt na rajada").toBeLessThanOrEqual(5);

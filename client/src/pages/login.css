@@ -48,11 +48,25 @@
   font-weight: 550;
 }
 
-.login-field input {
+.login-field input,
+.login-field select {
   border: 1px solid var(--input);
   border-radius: var(--radius);
   background: var(--card);
   padding: 0.55rem 0.7rem;
+}
+
+/* A filial vem primeiro: o seletor tem a mesma cara dos campos. [C3-2b] */
+.login-field select {
+  font: inherit;
+  font-weight: 400;
+  color: inherit;
+  min-height: 2.6rem;
+}
+
+.login-field .muted {
+  font-weight: 400;
+  font-size: 0.8125rem;
 }
 
 .login-error {

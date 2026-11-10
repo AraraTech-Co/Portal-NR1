@@ -25,6 +25,8 @@ export type SessionUser = {
   managed_units?: string[];
   /** Recortado por unidade e sem nenhuma atribuída: mostra o aviso. [C2-13] */
   needs_units?: boolean;
+  /** Só para o Master: a tela de login não sabe de qual empresa mostrar as filiais. [C3-2b] */
+  login_without_establishments?: boolean;
   organization: { id: string; name: string };
   account: { id: string; name: string };
 };
@@ -41,7 +43,15 @@ export type AccessibleAccount = {
   organization: { id: string; name: string };
 };
 
-export async function login(loginId: string, password: string) {
+/** As filiais da tela de entrada: id e nome. [C3-2b] */
+export async function fetchLoginEstablishments() {
+  return request<{ establishments: { id: string; name: string }[] }>("/api/auth/filiais");
+}
+
+/** A opção de quem não tem ficha (Master, RH e SST da central). [C3-2b] */
+export const EXTERNO = "externo";
+
+export async function login(loginId: string, password: string, establishmentId: string) {
   const data = await request<{
     token: string;
     user: SessionUser;
@@ -50,7 +60,7 @@ export async function login(loginId: string, password: string) {
     "/api/auth",
     {
       method: "POST",
-      body: JSON.stringify({ login: loginId, password }),
+      body: JSON.stringify({ login: loginId, password, establishment_id: establishmentId }),
     },
   );
   setToken(data.token);

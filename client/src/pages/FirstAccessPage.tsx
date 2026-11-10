@@ -2,6 +2,8 @@ import { FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { createFirstPassword, verifyFirstAccess } from "@/api/first-access";
 import { Button } from "@/components/Button";
+import { EXTERNO } from "@/api/auth";
+import { lembrarFilial, useFiliaisDoLogin } from "@/lib/filial-do-login";
 import "./login.css";
 
 /**
@@ -11,6 +13,9 @@ import "./login.css";
  */
 export function FirstAccessPage() {
   const navigate = useNavigate();
+  /* A filial vem primeiro, como na entrada; aqui não há "Externo". [C3-2b] */
+  const { filiais, carregando, escolhida, setEscolhida } = useFiliaisDoLogin(false);
+  const filial = escolhida === EXTERNO ? "" : escolhida;
   const [matricula, setMatricula] = useState("");
   const [cpf, setCpf] = useState("");
   const [nascimento, setNascimento] = useState("");
@@ -25,7 +30,8 @@ export function FirstAccessPage() {
     setError(null);
     setLoading(true);
     try {
-      const r = await verifyFirstAccess({ matricula, cpf, nascimento });
+      const r = await verifyFirstAccess({ matricula, cpf, nascimento, establishment_id: filial });
+      lembrarFilial(filial);
       setToken(r.token);
       /* Os dados conferidos não ficam na tela depois de usados. */
       setCpf("");
@@ -77,6 +83,24 @@ export function FirstAccessPage() {
             </p>
             <form className="login-form" onSubmit={onConferir}>
               <label className="login-field">
+                Onde você trabalha
+                <select
+                  value={filial}
+                  onChange={(e) => setEscolhida(e.target.value)}
+                  disabled={carregando}
+                  required
+                >
+                  <option value="" disabled>
+                    {carregando ? "Carregando…" : "Escolha a filial"}
+                  </option>
+                  {filiais.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="login-field">
                 Matrícula
                 <input
                   value={matricula}
@@ -110,7 +134,7 @@ export function FirstAccessPage() {
                   {error}
                 </p>
               )}
-              <Button type="submit" disabled={loading}>
+              <Button type="submit" disabled={loading || !filial}>
                 {loading ? "Conferindo…" : "Conferir"}
               </Button>
             </form>
