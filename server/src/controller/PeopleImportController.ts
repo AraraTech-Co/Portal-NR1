@@ -13,6 +13,7 @@ import {
 } from "../helper/login-name";
 import { randomBytes } from "crypto";
 import { FIRST_ACCESS_WINDOW_DAYS, canonicalRegistration } from "../helper/auth-attempts";
+import { MATRICULA_FORA_DO_PADRAO, matriculaNoPadrao } from "../helper/matricula";
 import { parseBirthDate } from "../helper/birth-date";
 import type { AuthRequest } from "../types/auth";
 
@@ -268,6 +269,7 @@ class PeopleImportController {
           }
 
           const matricula = texto(linha.registration);
+          if (matricula && !matriculaNoPadrao(matricula)) throw new Error(MATRICULA_FORA_DO_PADRAO);
           const email = texto(linha.email)?.toLowerCase() ?? null;
           const jobRoleId = texto(linha.job_role_id);
           const admittedAt = dataDeCalendario(linha.admitted_at, "Data de admissão");

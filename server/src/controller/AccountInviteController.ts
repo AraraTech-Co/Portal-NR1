@@ -4,6 +4,7 @@ import { AccountRole, InviteRoleMode, NotificationKind, Role } from "@prisma/cli
 import { Request, Response } from "express";
 import prisma from "../model/prisma";
 import { filialDaFicha } from "../helper/filial-da-ficha";
+import { MATRICULA_FORA_DO_PADRAO, matriculaNoPadrao } from "../helper/matricula";
 import {
   allocateUniqueLogin,
   loginCandidateFromEmail,
@@ -625,6 +626,9 @@ class AccountInviteController {
       */
       const isExternal = body.is_external === true;
       const registration = isExternal ? null : blank(body.registration);
+      if (registration && !matriculaNoPadrao(registration)) {
+        throw httpError(400, MATRICULA_FORA_DO_PADRAO);
+      }
       const filial = await filialDaFicha(request.account.organizationId, {});
       const filialDoPedido = filial.ok ? filial.establishmentId : null;
 
