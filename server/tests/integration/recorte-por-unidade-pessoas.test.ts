@@ -452,3 +452,38 @@ describe("registro antigo, sem unidade, fica com a gestão central [C2-13]", () 
     await prisma.hrDocument.delete({ where: { id: doc.id } });
   });
 });
+
+describe("o caminho interno do arquivo não sai do servidor [C2-13]", () => {
+  it("detalhe do holerite; envio, lista e detalhe do documento do RH", async () => {
+    const holerite = await request(app).get(`/api/payslips/${regRC.holeriteId}`).set(as(colabRC.token));
+    expect(holerite.status, holerite.text).toBe(200);
+    expect(holerite.body.payslip.fileName, "o holerite vem").toBe("holerite.pdf");
+    expect(holerite.text).not.toContain("storagePath");
+
+    const envio = await request(app).post("/api/hr-documents").set(as(rh.token)).send({
+      title: `Comunicado ${SUFIXO}`,
+      target_user_id: colabRC.id,
+      file_name: "comunicado.pdf",
+      mime_type: "application/pdf",
+      content_base64: PDF,
+    });
+    expect(envio.status, envio.text).toBe(201);
+    const docId = envio.body.document.id as string;
+    try {
+      expect(envio.text).not.toContain("storagePath");
+      const lista = await request(app).get("/api/hr-documents").set(as(colabRC.token));
+      expect(lista.status).toBe(200);
+      expect(lista.body.documents.map((d: { id: string }) => d.id), "o documento vem").toContain(docId);
+      expect(lista.text).not.toContain("storagePath");
+      const detalhe = await request(app).get(`/api/hr-documents/${docId}`).set(as(rh.token));
+      expect(detalhe.status).toBe(200);
+      expect(detalhe.body.document.fileName).toBe("comunicado.pdf");
+      expect(detalhe.text).not.toContain("storagePath");
+    } finally {
+      const doc = await prisma.hrDocument.findUnique({ where: { id: docId }, select: { storagePath: true } });
+      if (doc) fs.rmSync(path.join(uploadsRoot(), doc.storagePath), { force: true });
+      await prisma.hrDocumentAck.deleteMany({ where: { documentId: docId } });
+      await prisma.hrDocument.deleteMany({ where: { id: docId } });
+    }
+  });
+});

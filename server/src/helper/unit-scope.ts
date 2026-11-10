@@ -187,6 +187,15 @@ export function collectiveReadScope(scope: UnitScope, ownerField?: string): Reco
   return ou.length ? { OR: ou } : { id: { in: [] } };
 }
 
+/**
+ * Unidades cujo coletivo o ator vê: as geridas e a de trabalho. `null` é
+ * sem recorte (a empresa inteira); lista vazia é nenhuma.
+ */
+export function visibleUnits(scope: UnitScope): string[] | null {
+  if (scope.wholeOrg) return null;
+  return [...new Set([...scope.managed, ...(scope.work ? [scope.work] : [])])];
+}
+
 /** Filtro Prisma das unidades em que o ator age como gestor (escrita de gestor). */
 export function managedUnitFilter(scope: UnitScope): Record<string, unknown> {
   if (scope.wholeOrg) return {};

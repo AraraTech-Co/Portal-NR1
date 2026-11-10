@@ -865,3 +865,254 @@ describe("unidade da ação: risco antes da ocorrência [C2-13] [S3-D]", () => {
     await igualAInexistente((id) => request(app).get(`/api/evidences?action_id=${id}`).set(as(admB.token)), acao.id);
   });
 });
+
+/* ---- o que ainda escapava do recorte ---------------------------------- */
+
+const cartaoDoInicio = (corpo: unknown, id: string) => {
+  const m = JSON.stringify(corpo).match(new RegExp(`"id":"${id}"[^}]*"count":(\\d+)`));
+  return Number(m?.[1] ?? 0);
+};
+
+describe("histórico do risco: as ações e as ocorrências seguem o recorte [C2-13]", () => {
+  it("o risco de Barueri abre para todos; o que aconteceu nele, só no escopo", async () => {
+    const descricao = `Quase queda na doca de Barueri ${SUFIXO}`;
+    ok(
+      await request(app).post("/api/occurrences").set(as(sst.token)).send({
+        type: "DANGEROUS_EVENT",
+        description: descricao,
+        occurred_at: "2026-11-04T10:00:00.000Z",
+        establishment_id: barueri.id,
+        risk_id: barueri.riskId,
+      }),
+    );
+    // Ação ligada a uma medida de controle do risco: vem por outro caminho do histórico.
+    const medida = await prisma.controlMeasure.create({
+      data: { organizationId: ORG_ID, riskId: barueri.riskId, type: "ENGINEERING", description: `Carrinho ${SUFIXO}` },
+    });
+    const daMedida = await prisma.action.create({
+      data: {
+        organizationId: ORG_ID,
+        title: `Comprar carrinho B ${SUFIXO}`,
+        riskId: barueri.riskId,
+        controlId: medida.id,
+        createdById: sst.user.id,
+      },
+    });
+    const historico = (token: string) =>
+      request(app).get(`/api/risks/${barueri.riskId}/historico`).set(as(token));
+
+    const doGestorRC = ok(await historico(gerRC.token), 200);
+    expect(ids(doGestorRC.actions), "ação de Barueri").not.toContain(regB.acao);
+    expect(JSON.stringify(doGestorRC), "ocorrência de Barueri").not.toContain(descricao);
+    expect(JSON.stringify(doGestorRC), "ação da medida de Barueri").not.toContain(`Comprar carrinho B ${SUFIXO}`);
+    expect(
+      (doGestorRC.changes as { action: string }[]).filter((c) => /^(action|occurrence)\./.test(c.action)),
+      "a trilha não traz ação nem ocorrência fora do escopo",
+    ).toEqual([]);
+
+    // Quem gere Barueri, e a central, veem (canário).
+    for (const [quem, token] of [
+      ["ADM de Barueri", admB.token],
+      ["Master", master.token],
+    ] as const) {
+      const corpo = ok(await historico(token), 200);
+      expect(ids(corpo.actions), quem).toContain(regB.acao);
+      expect(JSON.stringify(corpo), quem).toContain(descricao);
+      expect(JSON.stringify(corpo), quem).toContain(`Comprar carrinho B ${SUFIXO}`);
+    }
+    await prisma.action.deleteMany({ where: { id: daMedida.id } });
+    await prisma.controlMeasure.deleteMany({ where: { id: medida.id } });
+  });
+});
+
+describe("painel da fiscalização nas unidades visíveis [C2-13]", () => {
+  it("o gestor de Rio Claro vê o painel de Rio Claro; Barueri responde igual a inexistente", async () => {
+    const painel = ok(await request(app).get("/api/fiscalizacao").set(as(gerRC.token)), 200);
+    expect(ids(painel.establishments)).toEqual([rioClaro.id]);
+    const texto = JSON.stringify(painel);
+    expect(texto, "o risco da unidade dele aparece").toContain(`Lombalgia Rio Claro ${SUFIXO}`);
+    expect(texto, "o de Barueri não").not.toContain(`Lombalgia Barueri ${SUFIXO}`);
+    expect(texto).not.toContain(`Caixa pesada Barueri ${SUFIXO}`);
+    // Ações de Barueri, abertas no teste das contagens do Início.
+    expect(texto, "ação de Barueri").not.toContain(`Atrasada B ${SUFIXO}`);
+    await igualAInexistente(
+      (id) => request(app).get(`/api/fiscalizacao?establishment_id=${id}`).set(as(gerRC.token)),
+      barueri.id,
+    );
+    // Na própria unidade, o filtro continua valendo.
+    ok(await request(app).get(`/api/fiscalizacao?establishment_id=${rioClaro.id}`).set(as(gerRC.token)), 200);
+
+    const central = ok(await request(app).get("/api/fiscalizacao").set(as(master.token)), 200);
+    expect(ids(central.establishments)).toEqual(expect.arrayContaining([rioClaro.id, barueri.id]));
+    expect(JSON.stringify(central)).toContain(`Lombalgia Barueri ${SUFIXO}`);
+    expect(JSON.stringify(central)).toContain(`Atrasada B ${SUFIXO}`);
+  });
+});
+
+describe("conformidade e vencimentos do Início nas unidades visíveis [C2-13]", () => {
+  it("riscos, avaliações a revisar, funções e unidades sem AEP ou emergência contam só Rio Claro", async () => {
+    const versao = await prisma.riskMethodologyVersion.findFirstOrThrow({
+      where: { methodology: { organizationId: null, isDefault: true } },
+      orderBy: { version: "desc" },
+      select: { id: true },
+    });
+    // Avaliação de Barueri vencendo: não entra na conta de Rio Claro.
+    const avaliacaoB = await prisma.riskAssessment.create({
+      data: {
+        organizationId: ORG_ID,
+        riskId: barueri.riskId,
+        methodologyVersionId: versao.id,
+        severity: 2,
+        probability: 2,
+        resultingLevel: "MODERATE",
+        status: "VALIDATED",
+        assessorId: sst.user.id,
+        validatedById: master.user.id,
+        validatedAt: new Date(),
+        expiresAt: new Date(Date.now() + 10 * 86_400_000),
+      },
+    });
+    try {
+      const inicio = ok(await request(app).get("/api/inicio").set(as(gerRC.token)), 200);
+      expect(inicio.compliance_units, "a tela diz que conta a unidade dele").toBe(1);
+      const emRC = { hazard: { activity: { establishmentId: rioClaro.id } } };
+      expect(cartaoDoInicio(inicio, "riscos_sem_avaliacao"), "riscos sem avaliação").toBe(
+        await prisma.risk.count({
+          where: { organizationId: ORG_ID, archivedAt: null, ...emRC, assessments: { none: { status: "VALIDATED" } } },
+        }),
+      );
+      expect(cartaoDoInicio(inicio, "funcoes_sem_ordem"), "funções sem ordem").toBe(
+        await prisma.jobRole.count({
+          where: {
+            organizationId: ORG_ID,
+            archivedAt: null,
+            sector: { establishmentId: rioClaro.id },
+            serviceOrders: { none: {} },
+            employees: { some: { dismissedAt: null, user: { active: true } } },
+          },
+        }),
+      );
+      const aepConcluida = await prisma.aep.count({ where: { establishmentId: rioClaro.id, status: "CONCLUDED" } });
+      expect(cartaoDoInicio(inicio, "sem_aep"), "unidades sem AEP").toBe(aepConcluida ? 0 : 1);
+      // Rio Claro tem procedimento de emergência.
+      expect(cartaoDoInicio(inicio, "sem_emergencia"), "unidades sem emergência").toBe(0);
+      expect(cartaoDoInicio(inicio, "avaliacoes"), "avaliações a revisar").toBe(
+        await prisma.riskAssessment.count({
+          where: {
+            organizationId: ORG_ID,
+            status: "VALIDATED",
+            supersededAt: null,
+            expiresAt: { lte: new Date(Date.now() + 60 * 86_400_000) },
+            risk: { archivedAt: null, ...emRC },
+          },
+        }),
+      );
+
+      // A central conta a empresa inteira (canário).
+      const central = ok(await request(app).get("/api/inicio").set(as(master.token)), 200);
+      expect(central.compliance_units, "a central conta a empresa").toBeNull();
+      expect(cartaoDoInicio(central, "riscos_sem_avaliacao")).toBeGreaterThan(cartaoDoInicio(inicio, "riscos_sem_avaliacao"));
+      expect(cartaoDoInicio(central, "sem_emergencia")).toBeGreaterThan(0);
+      expect(cartaoDoInicio(central, "avaliacoes")).toBeGreaterThan(cartaoDoInicio(inicio, "avaliacoes"));
+    } finally {
+      await prisma.riskAssessment.deleteMany({ where: { id: avaliacaoB.id } });
+    }
+  });
+
+  it("primeiros passos: o gestor sem unidade não vê as ações da empresa como suas", async () => {
+    const semUnidade = await pessoa("ger-sem-unidade", Role.GERENTE, null);
+    const passo = (corpo: { first_steps: { id: string; done: boolean }[] | null }) =>
+      (corpo.first_steps ?? []).find((s) => s.id === "acao");
+    const dele = ok(await request(app).get("/api/inicio").set(as(semUnidade.token)), 200);
+    expect(passo(dele), "o passo aparece").toBeTruthy();
+    expect(passo(dele)!.done, "nenhuma ação no escopo dele").toBe(false);
+    const daCentral = ok(await request(app).get("/api/inicio").set(as(master.token)), 200);
+    expect(passo(daCentral)?.done ?? true, "a empresa tem ações").toBe(true);
+  });
+});
+
+describe("a ficha mostra as ações e os certificados no recorte [C2-13]", () => {
+  it("a ação sem unidade e o certificado sem unidade da pessoa ficam com a central", async () => {
+    const ficha = await prisma.employeeProfile.findFirstOrThrow({
+      where: { organizationId: ORG_ID, userId: colabRC.id },
+      select: { id: true },
+    });
+    const exigencia = await prisma.jobRoleRequirement.create({
+      data: { organizationId: ORG_ID, jobRoleId: rioClaro.jobRoleId, name: `NR-35 ${SUFIXO}`, kind: "TRAINING" },
+    });
+    const antigo = await prisma.workerCertificate.create({
+      data: {
+        organizationId: ORG_ID,
+        userId: colabRC.id,
+        requirementId: exigencia.id,
+        name: `Certificado antigo ${SUFIXO}`,
+        status: "APPROVED",
+      },
+    });
+    const daLoja = await prisma.workerCertificate.create({
+      data: {
+        organizationId: ORG_ID,
+        userId: colabRC.id,
+        establishmentId: rioClaro.id,
+        name: `Certificado da loja ${SUFIXO}`,
+        status: "PENDING",
+      },
+    });
+    try {
+      const doGestor = ok(await request(app).get(`/api/employee-profiles/${ficha.id}/ficha`).set(as(gerRC.token)), 200);
+      expect(ids(doGestor.actions), "a ação da loja").toContain(regRC.acao);
+      expect(ids(doGestor.actions), "a ação sem unidade").not.toContain(acaoManual);
+      expect(ids(doGestor.certificates)).toContain(daLoja.id);
+      expect(ids(doGestor.certificates), "o certificado sem unidade").not.toContain(antigo.id);
+      const req = (doGestor.requirements as { id: string; status: string; certificate: { id: string } | null }[]).find(
+        (q) => q.id === exigencia.id,
+      )!;
+      expect(req.status, "a situação é da pessoa hoje").toBe("ok");
+      expect(req.certificate, "o certificado em si fica com a central").toBeNull();
+      expect(JSON.stringify(doGestor)).not.toContain(`Certificado antigo ${SUFIXO}`);
+
+      const daCentral = ok(await request(app).get(`/api/employee-profiles/${ficha.id}/ficha`).set(as(master.token)), 200);
+      expect(ids(daCentral.actions)).toEqual(expect.arrayContaining([regRC.acao, acaoManual]));
+      expect(ids(daCentral.certificates)).toEqual(expect.arrayContaining([daLoja.id, antigo.id]));
+      expect(
+        (daCentral.requirements as { id: string; certificate: { id: string } | null }[]).find((q) => q.id === exigencia.id)!
+          .certificate?.id,
+      ).toBe(antigo.id);
+    } finally {
+      await prisma.workerCertificate.deleteMany({ where: { id: { in: [antigo.id, daLoja.id] } } });
+      await prisma.jobRoleRequirement.deleteMany({ where: { id: exigencia.id } });
+    }
+  });
+});
+
+describe("o caminho interno do arquivo não sai do servidor [C2-13]", () => {
+  it("detalhe e envio de ocorrência, AEP, participação e simulado", async () => {
+    const anexo = { file_name: "mais.pdf", mime_type: "application/pdf", content_base64: PDF };
+    const envios = [
+      await request(app).post(`/api/occurrences/${regRC.ocorrencia}/evidences`).set(as(sst.token)).send(anexo),
+      await request(app).post(`/api/aeps/${regRC.aep}/evidences`).set(as(sst.token)).send(anexo),
+      await request(app).post(`/api/participations/${regRC.participacao}/evidences`).set(as(sst.token)).send(anexo),
+      await request(app)
+        .post(`/api/emergency-procedures/${regRC.emergencia}/drills/${regRC.simulado}/evidences`)
+        .set(as(sst.token))
+        .send(anexo),
+    ];
+    for (const r of envios) {
+      expect(r.status, r.text).toBe(201);
+      expect(r.body.evidence.id, "a resposta traz a evidência").toBeTruthy();
+      expect(r.text, r.req.path).not.toContain("storagePath");
+    }
+    const detalhes = await Promise.all([
+      request(app).get(`/api/occurrences/${regRC.ocorrencia}`).set(as(sst.token)),
+      request(app).get(`/api/aeps/${regRC.aep}`).set(as(sst.token)),
+      request(app).get(`/api/participations/${regRC.participacao}`).set(as(sst.token)),
+      request(app).get(`/api/emergency-procedures/${regRC.emergencia}`).set(as(sst.token)),
+      request(app).get(`/api/emergency-procedures/${regRC.emergencia}/drills/${regRC.simulado}`).set(as(sst.token)),
+    ]);
+    for (const r of detalhes) {
+      expect(r.status, r.text).toBe(200);
+      expect(r.text, `${r.req.path}: a evidência vem`).toContain("mais.pdf");
+      expect(r.text, r.req.path).not.toContain("storagePath");
+    }
+  });
+});

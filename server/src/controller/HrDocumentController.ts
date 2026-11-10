@@ -76,6 +76,8 @@ class HrDocumentController {
                   }),
         },
         orderBy: { createdAt: "desc" },
+        /* O caminho interno do arquivo não sai do servidor. [C2-13] */
+        omit: { storagePath: true },
         include: {
           publishedBy: { select: { id: true, name: true } },
           target: { select: { id: true, name: true } },
@@ -107,6 +109,7 @@ class HrDocumentController {
       const escopo = await scopeOfRequest(auth);
       const doc = await prisma.hrDocument.findFirst({
         where: { id: req.params.id, organizationId: orgId },
+        omit: { storagePath: true },
         include: {
           publishedBy: { select: { id: true, name: true } },
           target: { select: { id: true, name: true } },
@@ -251,7 +254,8 @@ class HrDocumentController {
         entityId: document.id,
       });
 
-      res.status(201).json({ document });
+      const { storagePath: _interno, ...publico } = document;
+      res.status(201).json({ document: publico });
     } catch (err) {
       fail(res, err);
     }

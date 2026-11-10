@@ -198,7 +198,11 @@ class AepController {
               },
             },
           },
-          evidences: { orderBy: { uploadedAt: "desc" } },
+          evidences: {
+            orderBy: { uploadedAt: "desc" },
+            /* O caminho interno do arquivo não sai do servidor. [C2-13] */
+            omit: { storagePath: true },
+          },
         },
       });
       const escopo = await scopeOfRequest(req as AuthRequest);
@@ -587,7 +591,9 @@ class AepController {
         },
       });
 
-      res.status(201).json({ evidence });
+      /* O caminho interno do arquivo não sai do servidor. [C2-13] */
+      const { storagePath: _interno, ...publica } = evidence;
+      res.status(201).json({ evidence: publica });
     } catch (err) {
       fail(res, err);
     }

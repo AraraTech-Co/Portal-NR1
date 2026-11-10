@@ -23,7 +23,9 @@ import { ethicsDeadline } from "../helper/ethics-deadline";
 import type { AuthRequest } from "../types/auth";
 import {
   actionManagerScope,
+  actionReadScope,
   collectiveReadScope,
+  visibleUnits,
   managedUnitFilter,
   scopeOfRequest,
 } from "../helper/unit-scope";
@@ -116,6 +118,15 @@ class HomeController {
       /* Contagens de registro de terceiro: só das unidades geridas. [C2-13] */
       const escopo = await scopeOfRequest(auth);
       const daGestao = managedUnitFilter(escopo);
+      /*
+        Conformidade e vencimentos do coletivo: as unidades que a pessoa vê,
+        como no Painel da fiscalização. Os documentos do PGR são de todos.
+        [C2-13]
+      */
+      const unidades = visibleUnits(escopo);
+      const doRiscoNaUnidade = unidades
+        ? { hazard: { activity: { establishmentId: { in: unidades } } } }
+        : {};
 
       // ---------- o que é meu ----------
       const meu: Card[] = [];
@@ -468,6 +479,7 @@ class HomeController {
             where: {
               organizationId: orgId,
               archivedAt: null,
+              ...doRiscoNaUnidade,
               assessments: { none: { status: AssessmentStatus.VALIDATED } },
             },
           }),
@@ -475,6 +487,7 @@ class HomeController {
             where: {
               organizationId: orgId,
               archivedAt: null,
+              ...doRiscoNaUnidade,
               assessments: {
                 some: {
                   status: AssessmentStatus.VALIDATED,
@@ -485,7 +498,7 @@ class HomeController {
             },
           }),
           prisma.risk.count({
-            where: { organizationId: orgId, archivedAt: null, needsReassessment: true },
+            where: { organizationId: orgId, archivedAt: null, needsReassessment: true, ...doRiscoNaUnidade },
           }),
           /*
             O Início contava toda função sem ordem, inclusive as vazias; o
@@ -499,10 +512,15 @@ class HomeController {
               archivedAt: null,
               serviceOrders: { none: {} },
               employees: { some: { dismissedAt: null, user: { active: true } } },
+              ...(unidades ? { sector: { establishmentId: { in: unidades } } } : {}),
             },
           }),
           prisma.establishment.findMany({
-            where: { organizationId: orgId, archivedAt: null },
+            where: {
+              organizationId: orgId,
+              archivedAt: null,
+              ...(unidades ? { id: { in: unidades } } : {}),
+            },
             select: { id: true },
           }),
           prisma.aep.findMany({
@@ -591,7 +609,7 @@ class HomeController {
             status: AssessmentStatus.VALIDATED,
             supersededAt: null,
             expiresAt: { lte: limite },
-            risk: { archivedAt: null },
+            risk: { archivedAt: null, ...doRiscoNaUnidade },
           },
           select: { expiresAt: true },
           orderBy: { expiresAt: "asc" },
@@ -764,7 +782,8 @@ class HomeController {
             prisma.riskAssessment.count({
               where: { organizationId: orgId, status: AssessmentStatus.VALIDATED },
             }),
-            prisma.action.count({ where: { organizationId: orgId } }),
+            /* As ações que a pessoa vê no Plano de ação. [C2-13] */
+            prisma.action.count({ where: { organizationId: orgId, AND: [actionReadScope(escopo)] } }),
             prisma.pgrDocument.count({ where: { organizationId: orgId } }),
             prisma.serviceOrder.count({ where: { organizationId: orgId } }),
           ]);
@@ -788,6 +807,8 @@ class HomeController {
         mine: meu,
         desk: mesa,
         compliance: conformidade,
+        /* Quantas unidades a conformidade conta; null é a empresa. [C2-13] */
+        compliance_units: unidades ? unidades.length : null,
         expiring: vencendo,
         /*
           Quando nada vence, o bloco sumia, e não dava para saber se o portal

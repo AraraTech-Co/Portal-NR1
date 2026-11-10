@@ -118,10 +118,23 @@ export function HomePage() {
       (item, i, todos) => todos.findIndex((o) => o.href === item.href) === i,
     );
 
+  /* Com recorte por unidade, o bloco conta só as unidades da pessoa. [C2-13] */
+  const tituloConformidade =
+    data?.compliance_units == null
+      ? "A empresa está em dia?"
+      : data.compliance_units === 1
+        ? "A sua unidade está em dia?"
+        : "As suas unidades estão em dia?";
+
+  /*
+    Sem nenhuma unidade, nada é contado: não dá para dizer que está em dia.
+    O aviso de gestor sem unidade já explica o que falta. [C2-13]
+  */
   const emDia =
     data?.compliance !== null &&
     data?.compliance !== undefined &&
-    data.compliance.length === 0;
+    data.compliance.length === 0 &&
+    data.compliance_units !== 0;
 
   return (
     <div>
@@ -205,9 +218,9 @@ export function HomePage() {
       )}
 
       {data?.compliance && data.compliance.length > 0 && (
-        <section className="home-block" aria-label="A empresa está em dia?">
+        <section className="home-block" aria-label={tituloConformidade}>
           <h2>
-            A empresa está em dia?{" "}
+            {tituloConformidade}{" "}
             <Link to="/fiscalizacao" className="home-block-link">
               ver o painel da fiscalização
             </Link>

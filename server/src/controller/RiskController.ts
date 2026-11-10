@@ -26,6 +26,7 @@ import { nivelDoRisco } from "../helper/nivel-do-risco";
 import type { AuthRequest } from "../types/auth";
 import {
   actionReadScope,
+  collectiveReadScope,
   collectiveView,
   peopleInScope,
   scopeOfRequest,
@@ -383,6 +384,12 @@ class RiskController {
   async riskHistory(req: Request, res: Response) {
     try {
       const orgId = actorOrgId(req as AuthRequest);
+      /*
+        O risco é do inventário, que todos leem; as ações e as ocorrências
+        dele seguem o recorte das telas delas. [C2-13]
+      */
+      const escopo = await scopeOfRequest(req as AuthRequest);
+      const acoesVisiveis = actionReadScope(escopo);
       const risk = await prisma.risk.findFirst({
         where: { id: req.params.id, organizationId: orgId },
         include: {
@@ -405,6 +412,7 @@ class RiskController {
             orderBy: { createdAt: "desc" },
             include: {
               actions: {
+                where: acoesVisiveis,
                 orderBy: { createdAt: "desc" },
                 select: {
                   id: true,
@@ -418,6 +426,7 @@ class RiskController {
             },
           },
           actions: {
+            where: acoesVisiveis,
             orderBy: { createdAt: "desc" },
             select: {
               id: true,
@@ -456,7 +465,11 @@ class RiskController {
         risco, no perigo e na atividade. [B3-4-C]
       */
       const ocorrencias = await prisma.occurrence.findMany({
-        where: { organizationId: orgId, riskId: risk.id },
+        where: {
+          organizationId: orgId,
+          riskId: risk.id,
+          AND: [collectiveReadScope(escopo, "reportedById")],
+        },
         select: { id: true, description: true },
       });
       const changes = await prisma.auditEvent.findMany({
@@ -491,7 +504,17 @@ class RiskController {
         quando a trilha não a tem. [B4-A]
       */
       const descricaoDa = new Map(ocorrencias.map((o) => [o.id, o.description]));
-      const mudancas = changes.map(({ entityId, ...c }) => {
+      /*
+        A abertura de ação é gravada na trilha do próprio risco, com título
+        e responsável. As ações do risco são da unidade dele: quem não vê a
+        unidade não recebe essas linhas. [C2-13]
+      */
+      const veAUnidade =
+        collectiveView(escopo, risk.hazard.activity.establishmentId) !== "none";
+      const visiveis = changes.filter(
+        (c) => veAUnidade || c.entityId !== risk.id || !c.action.startsWith("action."),
+      );
+      const mudancas = visiveis.map(({ entityId, ...c }) => {
         if (c.action !== "occurrence.create") return c;
         const depois = (c.after ?? {}) as Record<string, unknown>;
         if (depois.description || !descricaoDa.has(entityId)) return c;

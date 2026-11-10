@@ -493,6 +493,8 @@ class PayslipController {
       const userId = actorUserId(auth);
       const payslip = await prisma.payslip.findFirst({
         where: { id: req.params.id, organizationId: orgId },
+        /* O caminho interno do arquivo não sai do servidor. [C2-13] */
+        omit: { storagePath: true },
         include: {
           user: { select: { id: true, name: true } },
           publishedBy: { select: { id: true, name: true } },

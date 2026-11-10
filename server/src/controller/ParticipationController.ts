@@ -84,7 +84,11 @@ class ParticipationController {
         include: {
           establishment: { select: { id: true, name: true } },
           recordedBy: { select: { id: true, name: true } },
-          evidences: { orderBy: { uploadedAt: "desc" } },
+          evidences: {
+            orderBy: { uploadedAt: "desc" },
+            /* O caminho interno do arquivo não sai do servidor. [C2-13] */
+            omit: { storagePath: true },
+          },
         },
       });
       const escopo = await scopeOfRequest(req as AuthRequest);
@@ -388,7 +392,9 @@ class ParticipationController {
         validationStatus: EVIDENCE_VALIDATION_STATUSES.PENDING,
       });
 
-      res.status(201).json({ evidence });
+      /* O caminho interno do arquivo não sai do servidor. [C2-13] */
+      const { storagePath: _interno, ...publica } = evidence;
+      res.status(201).json({ evidence: publica });
     } catch (err) {
       fail(res, err);
     }

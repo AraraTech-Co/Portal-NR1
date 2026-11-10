@@ -15,7 +15,13 @@ import {
   isReadOnlyRole,
 } from "../helper/module-access";
 import type { AuthRequest } from "../types/auth";
-import { profileScope, scopeOfRequest, type UnitScope } from "../helper/unit-scope";
+import {
+  actionReadScope,
+  managesPersonRecord,
+  profileScope,
+  scopeOfRequest,
+  type UnitScope,
+} from "../helper/unit-scope";
 
 /**
  * A ficha de outra pessoa está ao alcance de quem vê o quadro: a empresa
@@ -284,9 +290,9 @@ class EmployeeProfileController {
         },
       });
       const propria = profile?.userId === userId;
+      const escopo = await scopeOfRequest(auth);
       const alcanca =
-        profile &&
-        (propria || (seesAll(auth) && (await fichaNoEscopo(await scopeOfRequest(auth), orgId, profile.id))));
+        profile && (propria || (seesAll(auth) && (await fichaNoEscopo(escopo, orgId, profile.id))));
       if (!profile || !alcanca) {
         res.status(404).json({ message: "Ficha não encontrada." });
         return;
@@ -327,6 +333,7 @@ class EmployeeProfileController {
               issuedAt: true,
               expiresAt: true,
               storagePath: true,
+              establishmentId: true,
             },
             orderBy: { createdAt: "desc" },
           }),
@@ -355,7 +362,8 @@ class EmployeeProfileController {
             : Promise.resolve(null),
           veAcoes
             ? prisma.action.findMany({
-                where: { organizationId: orgId, assigneeId: profile.userId },
+                /* As ações dela que quem abre a ficha vê no Plano de ação. [C2-13] */
+                where: { organizationId: orgId, assigneeId: profile.userId, AND: [actionReadScope(escopo)] },
                 select: { id: true, title: true, status: true, dueDate: true },
                 orderBy: { dueDate: "asc" },
                 take: 20,
@@ -381,6 +389,14 @@ class EmployeeProfileController {
         ]);
 
       const agora = new Date();
+      /*
+        A situação da exigência é da pessoa hoje e conta todo certificado
+        dela. O certificado em si segue o recorte do registro: o gravado em
+        outra unidade, ou antes da unidade no registro, fica com a central.
+        [C2-13]
+      */
+      const certificadoVisivel = (c: { establishmentId: string | null }) =>
+        propria || managesPersonRecord(escopo, c);
       const porExigencia = new Map<string, (typeof certificados)[number]>();
       for (const c of certificados) {
         if (c.requirementId && !porExigencia.has(c.requirementId)) {
@@ -422,7 +438,7 @@ class EmployeeProfileController {
             name: q.name,
             validity_months: q.validityMonths,
             status: situacao,
-            certificate: cert
+            certificate: cert && certificadoVisivel(cert)
               ? {
                   id: cert.id,
                   name: cert.name,
@@ -433,7 +449,7 @@ class EmployeeProfileController {
               : null,
           };
         }),
-        certificates: certificados.map(({ storagePath, ...c }) => ({
+        certificates: certificados.filter(certificadoVisivel).map(({ storagePath, establishmentId: _unidade, ...c }) => ({
           ...c,
           has_file: Boolean(storagePath),
         })),
