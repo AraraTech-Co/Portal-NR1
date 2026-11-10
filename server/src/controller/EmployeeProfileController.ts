@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { AccessSuspensionReason, Prisma, WorkerBond } from "@prisma/client";
 import { filialDaFicha } from "../helper/filial-da-ficha";
+import { MATRICULA_FORA_DO_PADRAO, matriculaNoPadrao } from "../helper/matricula";
 import prisma from "../model/prisma";
 import { EmployeeProfile } from "../model/schema/EmployeeProfile/EmployeeProfile";
 import { JobRole } from "../model/schema/JobRole/JobRole";
@@ -603,12 +604,18 @@ class EmployeeProfileController {
         return;
       }
 
+      const matricula = blank(registration);
+      if (matricula && !matriculaNoPadrao(matricula)) {
+        res.status(400).json({ message: MATRICULA_FORA_DO_PADRAO, field: "registration" });
+        return;
+      }
+
       const taxId = cpfDoColaborador(tax_id);
 
       const profile = await new EmployeeProfile().create.new({
         organizationId: orgId,
         userId: user_id,
-        registration: blank(registration),
+        registration: matricula,
         taxId,
         phone: blank(phone),
         jobRoleId: job_role_id ?? null,
@@ -747,6 +754,14 @@ class EmployeeProfileController {
           code: "PERSONNEL_RECORD_ONLY",
         });
         return;
+      }
+
+      if (body.registration !== undefined) {
+        const matricula = blank(body.registration as string);
+        if (matricula && !matriculaNoPadrao(matricula)) {
+          res.status(400).json({ message: MATRICULA_FORA_DO_PADRAO, field: "registration" });
+          return;
+        }
       }
 
       let taxId: string | null | undefined;

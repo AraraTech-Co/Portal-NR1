@@ -210,6 +210,78 @@ describe("a chave da matrícula apara como o servidor [C3-2]", () => {
   });
 });
 
+describe("matrícula só com ASCII imprimível [C3-2]", () => {
+  const FORA = "a\u00df1"; // "aß1": banco e servidor não poriam em maiúsculas do mesmo jeito
+  const MENSAGEM = "A matrícula aceita só letras sem acento, números e símbolos do teclado, sem espaço no meio.";
+
+  it("a tela recusa na criação e na edição, e aceita MAT-001", async () => {
+    const p = await membro("ascii-tela");
+    const fora = await criarFicha({ user_id: p.id, job_role_id: filialA.jobRoleId, registration: FORA });
+    expect(fora.status).toBe(400);
+    expect(fora.body.message).toBe(MENSAGEM);
+    const meio = await criarFicha({ user_id: p.id, job_role_id: filialA.jobRoleId, registration: "MAT 001" });
+    expect(meio.status, "espaço no meio").toBe(400);
+    expect(await prisma.employeeProfile.count({ where: { userId: p.id } })).toBe(0);
+
+    const ok = await criarFicha({ user_id: p.id, job_role_id: filialA.jobRoleId, registration: `MAT-${NUM}` });
+    expect(ok.status, JSON.stringify(ok.body)).toBe(201);
+    const { id } = await ficha(p.id);
+    const edicao = await editarFicha(id, { registration: FORA });
+    expect(edicao.status).toBe(400);
+    expect(edicao.body.message).toBe(MENSAGEM);
+    expect((await ficha(p.id)).registrationKey).toBe(`MAT-${NUM}`);
+  });
+
+  it("a planilha recusa a linha", async () => {
+    const res = await request(app)
+      .post("/api/pessoas-acessos/importar")
+      .set(as(rh.token))
+      .send({ people: [{ name: `C32 Planilha ${SUFIXO} ascii`, registration: FORA, job_role_id: filialA.jobRoleId }] });
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(res.body.results[0].status).toBe("error");
+    expect(res.body.results[0].message).toBe(MENSAGEM);
+  });
+
+  it("o convite recusa na aprovação", async () => {
+    const master = await entrar("teste.master", ["teste", "1234"].join(""));
+    const link = await request(app)
+      .post("/api/invite-links")
+      .set(as(master.token))
+      .send({ label: `C32 ${SUFIXO}`, role_mode: "FIXED", org_role: Role.COLABORADOR });
+    expect(link.status, JSON.stringify(link.body)).toBe(201);
+    try {
+      const pedido = await request(app)
+        .post(`/api/invites/${link.body.link.token}`)
+        .send({ name: `C32 Convite ${SUFIXO}`, password: ["senha", "convite", SUFIXO].join("-") });
+      expect(pedido.status, JSON.stringify(pedido.body)).toBe(201);
+      const aprovar = await request(app)
+        .post(`/api/join-requests/${pedido.body.request_id}/decide`)
+        .set(as(master.token))
+        .send({ action: "approve", org_role: Role.COLABORADOR, registration: FORA });
+      expect(aprovar.status).toBe(400);
+      expect(aprovar.body.message).toBe(MENSAGEM);
+      const situacao = await prisma.accountJoinRequest.findUniqueOrThrow({
+        where: { id: pedido.body.request_id },
+        select: { status: true },
+      });
+      expect(situacao.status, "o pedido continua aberto").not.toBe("APPROVED");
+      await prisma.accountJoinRequest.delete({ where: { id: pedido.body.request_id } });
+    } finally {
+      await prisma.accountInviteLink.delete({ where: { id: link.body.link.id } });
+    }
+  });
+
+  it("o banco recusa a escrita direta", async () => {
+    const p = await membro("ascii-banco");
+    await expect(
+      prisma.employeeProfile.create({
+        data: { organizationId: ORG_ID, userId: p.id, jobRoleId: filialA.jobRoleId, registration: FORA },
+      }),
+    ).rejects.toThrow(/EmployeeProfile_registrationKey_ascii/);
+    expect(await prisma.employeeProfile.count({ where: { userId: p.id } })).toBe(0);
+  });
+});
+
 describe("a filial na criação e na edição da ficha [C3-2]", () => {
   it("cria com a filial da função, ou com a escolhida quando não há função", async () => {
     const comFuncao = await membro("cria-funcao");
