@@ -7,6 +7,7 @@ import { mudancasDesdeAEmissao } from "../helper/ordem-desatualizada";
 import { formatCalendarDay } from "../helper/calendar-day";
 import { canSeeAllInModule, isReadOnlyRole } from "../helper/module-access";
 import type { AuthRequest } from "../types/auth";
+import { NOT_FOUND_BODY, actionReadScope, scopeOfRequest, visibleUnits } from "../helper/unit-scope";
 import {
   ACTION_STATUS_LABEL,
   PARTICIPATION_TYPE_LABEL,
@@ -131,7 +132,21 @@ class InspectionController {
           ? req.query.establishment_id
           : null;
       const agora = new Date();
-      const doEstabelecimento = establishmentId ? { establishmentId } : {};
+      /*
+        Quem tem recorte por unidade vê o painel das unidades que gere e da
+        sua unidade de trabalho; sem nenhuma, o painel vem sem unidade. Os
+        documentos do PGR continuam inteiros: a leitura deles é de todos.
+        [C2-13]
+      */
+      const escopo = await scopeOfRequest(auth);
+      const visiveis = visibleUnits(escopo);
+      if (establishmentId && visiveis && !visiveis.includes(establishmentId)) {
+        res.status(404).json(NOT_FOUND_BODY);
+        return;
+      }
+      const recorte = establishmentId ? [establishmentId] : visiveis;
+      const naUnidade = recorte ? { in: recorte } : undefined;
+      const doEstabelecimento = naUnidade ? { establishmentId: naUnidade } : {};
 
       const [
         org,
@@ -155,7 +170,11 @@ class InspectionController {
           página. A lista é sempre inteira; o recorte é feito abaixo. [B2-1-B]
         */
         prisma.establishment.findMany({
-          where: { organizationId: orgId, archivedAt: null },
+          where: {
+            organizationId: orgId,
+            archivedAt: null,
+            ...(visiveis ? { id: { in: visiveis } } : {}),
+          },
           orderBy: { name: "asc" },
           select: { id: true, name: true, address: true, taxId: true },
         }),
@@ -179,7 +198,7 @@ class InspectionController {
           where: {
             organizationId: orgId,
             archivedAt: null,
-            ...(establishmentId ? { activity: { establishmentId } } : {}),
+            ...(naUnidade ? { activity: { establishmentId: naUnidade } } : {}),
           },
           select: {
             id: true,
@@ -195,7 +214,7 @@ class InspectionController {
           where: {
             organizationId: orgId,
             archivedAt: null,
-            ...(establishmentId ? { hazard: { activity: { establishmentId } } } : {}),
+            ...(naUnidade ? { hazard: { activity: { establishmentId: naUnidade } } } : {}),
           },
           select: {
             id: true,
@@ -227,9 +246,13 @@ class InspectionController {
         prisma.action.findMany({
           where: {
             organizationId: orgId,
-            ...(establishmentId
-              ? { OR: [{ risk: { hazard: { activity: { establishmentId } } } }, { riskId: null }] }
-              : {}),
+            AND: [
+              ...(establishmentId
+                ? [{ OR: [{ risk: { hazard: { activity: { establishmentId } } } }, { riskId: null }] }]
+                : []),
+              /* As ações que a pessoa vê no Plano de ação. */
+              actionReadScope(escopo),
+            ],
           },
           select: {
             id: true,
@@ -280,7 +303,7 @@ class InspectionController {
           where: {
             organizationId: orgId,
             archivedAt: null,
-            ...(establishmentId ? { sector: { establishmentId } } : {}),
+            ...(naUnidade ? { sector: { establishmentId: naUnidade } } : {}),
           },
           select: {
             id: true,
@@ -322,7 +345,7 @@ class InspectionController {
         prisma.jobRoleRequirement.findMany({
           where: {
             organizationId: orgId,
-            ...(establishmentId ? { jobRole: { sector: { establishmentId } } } : {}),
+            ...(naUnidade ? { jobRole: { sector: { establishmentId: naUnidade } } } : {}),
           },
           select: {
             id: true,

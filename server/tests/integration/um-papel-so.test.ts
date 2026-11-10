@@ -17,6 +17,9 @@ import prisma from "../../src/model/prisma";
  * Exige a organização do `scripts/seed-teste-org.ts`.
  */
 const ORG_ID = "aaaaaaaa-0001-4000-8000-000000000001";
+/** Unidade e função do seed: gerente e supervisor respondem por ela aqui. [C2-13] */
+const EST_ID = "aaaaaaaa-0001-4000-8000-000000000011";
+const JOB_ID = "aaaaaaaa-0001-4000-8000-000000000013";
 const ACCOUNT_ID = "aaaaaaaa-0001-4000-8000-000000000002";
 const SENHA = "teste1234";
 const SUFIXO = Date.now().toString(36);
@@ -53,6 +56,7 @@ let rh: { token: string; user: { id: string } };
 let supervisor: { token: string; user: { id: string } };
 let gerente: { token: string; user: { id: string } };
 const criados: string[] = [];
+const vinculosCriados: string[] = [];
 
 async function entrar(login: string) {
   const res = await request(app).post("/api/auth").send({ login, password: SENHA });
@@ -80,7 +84,7 @@ async function pessoa(nome: string, orgRole: Role, accountRole: AccountRole) {
     data: { userId: user.id, organizationId: ORG_ID, role: orgRole },
   });
   const profile = await prisma.employeeProfile.create({
-    data: { organizationId: ORG_ID, userId: user.id },
+    data: { organizationId: ORG_ID, userId: user.id, jobRoleId: JOB_ID },
   });
   return { login, userId: user.id, profileId: profile.id };
 }
@@ -91,9 +95,23 @@ beforeAll(async () => {
   rh = await entrar("teste.rh");
   supervisor = await entrar("teste.supervisor");
   gerente = await entrar("teste.gerente");
+  // A equipe destes casos é da unidade sob a gestão dos dois. [C2-13]
+  for (const login of ["teste.supervisor", "teste.gerente"]) {
+    const vinculo = await prisma.membership.findFirstOrThrow({
+      where: { organizationId: ORG_ID, user: { login } },
+    });
+    vinculosCriados.push(
+      (
+        await prisma.managedEstablishment.create({
+          data: { organizationId: ORG_ID, membershipId: vinculo.id, establishmentId: EST_ID, createdById: master.user.id },
+        })
+      ).id,
+    );
+  }
 });
 
 afterAll(async () => {
+  await prisma.managedEstablishment.deleteMany({ where: { id: { in: vinculosCriados } } });
   await prisma.user.deleteMany({ where: { id: { in: criados } } });
 });
 

@@ -77,7 +77,10 @@ export function EmployeesPage() {
         title="Colaboradores"
         description={
           canManage
-            ? "Quem trabalha na empresa. Abra a ficha para ver função, treinamentos, ordem de serviço e registrar o desligamento."
+            ? /* Gerente e ADM loja veem as unidades sob sua gestão. [C2-13] */
+              user?.needs_units || (user?.managed_units?.length ?? 0) > 0
+              ? "Quem trabalha nas unidades sob sua responsabilidade. Abra a ficha para ver função, treinamentos e ordem de serviço."
+              : "Quem trabalha na empresa. Abra a ficha para ver função, treinamentos, ordem de serviço e registrar o desligamento."
             : /*
                 A consulta vê a lista inteira, não a própria ficha: dizer
                 "sua ficha" numa tela com nove pessoas é descrever outra
@@ -85,7 +88,14 @@ export function EmployeesPage() {
               */
               isReadOnlyPermission(user?.permission)
               ? "Quem trabalha na empresa: nome, matrícula, função e admissão. Sem CPF, contato nem motivo de desligamento."
-              : "Sua ficha na empresa."
+              : /*
+                  Quem vê a lista sem administrar (o supervisor) recebe o
+                  texto de lista; "sua ficha" fica para quem só vê a
+                  própria. Decide pelo que a tela mostra de fato. [C2-8]
+                */
+                rows.some((r) => r.userId !== user?.id)
+                ? "Quem trabalha com você. Abra a ficha para ver função, treinamentos e ordem de serviço."
+                : "Sua ficha na empresa."
         }
       />
 

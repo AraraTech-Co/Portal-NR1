@@ -3,6 +3,7 @@ import { verifyModule } from "../../model/lib/Auth";
 import people from "../../controller/PeopleAccessController";
 import peopleImport from "../../controller/PeopleImportController";
 import activation from "../../controller/AccountActivationController";
+import managedUnits from "../../controller/ManagedUnitsController";
 
 /** Conta e usuários: só Master e RH, pela planilha de acessos. */
 const conta = verifyModule("conta", "write");
@@ -19,6 +20,16 @@ router.post("/api/pessoas-acessos/:userId/redefinir-senha", conta, (req, res) =>
 /** Suspender e devolver o acesso sem inventar um desligamento. [CB-44] */
 router.post("/api/pessoas-acessos/:userId/acesso", conta, (req, res) =>
   people.setAccess(req, res),
+);
+/**
+ * Unidades sob responsabilidade de gerente, supervisor e ADM loja: Master,
+ * Dono e RH definem; ninguém define as próprias. [C2-13]
+ */
+router.get("/api/pessoas-acessos/:userId/unidades", conta, (req, res) =>
+  managedUnits.get(req, res),
+);
+router.put("/api/pessoas-acessos/:userId/unidades", conta, (req, res) =>
+  managedUnits.set(req, res),
 );
 /** Cadastro em massa a partir de planilha colada. [S1-A] */
 router.post("/api/pessoas-acessos/importar", conta, (req, res) =>

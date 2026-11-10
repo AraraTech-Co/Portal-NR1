@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
 import { ContextoDaConta } from "./ContextoDaConta";
 import { NAV_GROUPS, type NavGroup } from "./nav";
-import { canReadModule } from "@/lib/module-access";
+import { canOpenModule } from "@/lib/module-access";
 import "./sidebar.css";
 
 const COLLAPSED_KEY = "nr1.nav.collapsed";
@@ -105,7 +105,7 @@ export function Sidebar({ mobileOpen, onCloseMobile }: Props) {
 
       {NAV_GROUPS.map((group: NavGroup) => {
         const visibleItems = group.items.filter((item) =>
-          canReadModule(user?.modules, item.moduleId),
+          canOpenModule(user, item.moduleId),
         );
         if (visibleItems.length === 0) return null;
 

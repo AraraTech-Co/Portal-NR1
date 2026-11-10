@@ -131,7 +131,8 @@ describe("a versão que o trabalhador viu não some [S5-F]", () => {
     const outro = await request(app)
       .get(`/api/payslips/${payslip.id}/versoes/${versao.id}/file`)
       .set(as(rh.token));
-    expect(outro.status, "nem o RH abre o holerite de alguém").toBe(403);
+    // Nem o RH abre o holerite de alguém: responde como inexistente. [C2-13]
+    expect(outro.status, "nem o RH abre o holerite de alguém").toBe(404);
   });
 
   it("o detalhe lista as versões anteriores", async () => {

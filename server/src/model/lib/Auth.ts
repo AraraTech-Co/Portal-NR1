@@ -6,12 +6,14 @@ import { resolveAccountAccess } from "../../helper/account-access";
 import { effectivePermission } from "../../helper/auth";
 import { can } from "../../helper/permissions";
 import {
+  canConsultOwn,
   canManageModule,
   canReadModule,
   canWriteModule,
   isReadOnlyRole,
 } from "../../helper/module-access";
 import { writeAudit } from "../../helper/audit";
+import { hasActiveProfile } from "../../helper/active-profile";
 import type { AuthRequest, Actor } from "../../types/auth";
 
 const TOKEN_DURATION_SEC = 60 * 60 * 8; // 8h
@@ -115,9 +117,11 @@ function guardReadOnly(req: Request, res: Response, actor: Actor): boolean {
 /**
  * `read` cobre L e L/E. `write` exige L/E. `manage` exige L/E E que a escrita
  * não seja apenas sobre o próprio registro — é o que separa o RH do
- * colaborador em atestados, onde os dois escrevem.
+ * colaborador em atestados, onde os dois escrevem. `own` é a consulta
+ * própria: quem lê o módulo, ou quem tem ficha ativa e só vai ver o que é
+ * seu (o controlador filtra pela titularidade). Só em rota de leitura. [C2-1]
  */
-export type ModuleGateLevel = "read" | "write" | "manage";
+export type ModuleGateLevel = "read" | "write" | "manage" | "own";
 
 type Gate =
   | { kind: "public" }
@@ -179,7 +183,12 @@ async function authenticate(
         ? canManageModule(roleKey, gate.moduleId)
         : gate.level === "write"
           ? canWriteModule(roleKey, gate.moduleId)
-          : canReadModule(roleKey, gate.moduleId);
+          : gate.level === "own"
+            ? canReadModule(roleKey, gate.moduleId) ||
+              (["GET", "HEAD"].includes(req.method.toUpperCase()) &&
+                canConsultOwn(roleKey, gate.moduleId, true) &&
+                (await hasActiveProfile(access.organizationId, access.user.id)))
+            : canReadModule(roleKey, gate.moduleId);
     if (!ok) {
       res.status(403).json({
         message: "Você não tem permissão para este módulo.",

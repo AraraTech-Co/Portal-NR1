@@ -243,7 +243,10 @@ export function MedicalCertificatesPage() {
         description={
           canManage
             ? "Atestados enviados pela equipe. Abra o arquivo e aceite ou recuse."
-            : "Envie seu atestado e acompanhe a resposta do RH."
+            : canWrite
+              ? "Envie seu atestado e acompanhe a resposta do RH."
+              : /* Só consulta os próprios: sem formulário, sem "envie". [C2-1] */
+                "Seus atestados e a resposta do RH."
         }
       />
 
@@ -258,7 +261,13 @@ export function MedicalCertificatesPage() {
       {!loading && !error && rows.length === 0 && (
         <EmptyState
           title="Nenhum atestado"
-          description={canManage ? "Atestados enviados pela equipe aparecem aqui." : "Os atestados que você enviar aparecem aqui."}
+          description={
+            canManage
+              ? "Atestados enviados pela equipe aparecem aqui."
+              : canWrite
+                ? "Os atestados que você enviar aparecem aqui."
+                : "Nenhum atestado seu registrado no portal."
+          }
         />
       )}
       {actionError && (

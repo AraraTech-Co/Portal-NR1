@@ -101,3 +101,25 @@
 .people-edit p {
   margin: 0;
 }
+
+/* Unidades sob responsabilidade do gestor. [C2-13] */
+.people-units {
+  margin: 0.75rem 0;
+}
+
+.people-units > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.people-units fieldset {
+  border: 0;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+
+.people-unit-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}

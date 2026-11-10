@@ -5,7 +5,8 @@ import { fetchEstablishments, type Establishment } from "@/api/operation";
 import { Button } from "@/components/Button";
 import { Dialog } from "@/components/Dialog";
 import { NewRecordSection } from "@/components/NewRecordSection";
-import { useModuleAccess } from "@/lib/module-access";
+import { isReadOnlyPermission, useModuleAccess } from "@/lib/module-access";
+import { useAuth } from "@/auth/AuthContext";
 import { ListShell } from "@/components/ListShell";
 import { Chip } from "@/components/Chip";
 import { AEP_METHOD_LABEL, AEP_STATUS_LABEL, formatDay } from "@/lib/labels";
@@ -15,6 +16,9 @@ export function AepPage() {
   const { rows, loading, error, reload } = useResourceList(fetchAeps);
   /* Abrir avaliação é de quem responde tecnicamente. [CB-45] [P1] */
   const { canManage } = useModuleAccess("aep");
+  /* Só consulta não registra queixa: nem o formulário aparece. [C2-8] */
+  const { user } = useAuth();
+  const somenteConsulta = isReadOnlyPermission(user?.permission);
   const [unidade, setUnidade] = useState("");
   const [escopo, setEscopo] = useState("");
   const [metodo, setMetodo] = useState("OBSERVATION");
@@ -56,7 +60,7 @@ export function AepPage() {
       /* Quem trabalha diz onde dói; o SST decide o que vira avaliação. [P1] */
       before={
         <>
-          <ErgonomicComplaints onEvaluated={reload} />
+          {!somenteConsulta && <ErgonomicComplaints onEvaluated={reload} />}
           <NewRecordSection
             canWrite={canManage}
             openLabel="Nova avaliação"

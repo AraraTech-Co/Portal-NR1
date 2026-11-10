@@ -18,6 +18,14 @@ import {
 } from "../constants";
 import { sendPrivateFile } from "../helper/send-private-file";
 import type { AuthRequest } from "../types/auth";
+import {
+  collectiveReadScope,
+  collectiveView,
+  managesCollective,
+  seesCollective,
+  scopeOfRequest,
+  type UnitScope,
+} from "../helper/unit-scope";
 
 function fail(res: Response, err: unknown) {
   const e = err as { status?: number; message?: string };
@@ -28,6 +36,17 @@ function blank(v?: string | null) {
   return v && v.trim() !== "" ? v.trim() : null;
 }
 
+const NAO_ENCONTRADO = "Registro de participação não encontrado.";
+
+/**
+ * Unidade em que quem tem recorte registra ou para onde move o registro: só
+ * a gerida. Sem unidade, o registro é da central. [C2-13]
+ */
+function unidadeDeGestor(escopo: UnitScope, establishmentId: string | null): boolean {
+  if (escopo.wholeOrg) return true;
+  return establishmentId !== null && collectiveView(escopo, establishmentId) === "manager";
+}
+
 class ParticipationController {
   async list(req: Request, res: Response) {
     try {
@@ -35,11 +54,14 @@ class ParticipationController {
       const establishmentId = req.query.establishment_id as string | undefined;
       const type = req.query.type as string | undefined;
 
+      /* Unidades geridas e a de trabalho; sem unidade, só a central. [C2-13] */
+      const escopo = await scopeOfRequest(req as AuthRequest);
       const rows = await prisma.participationRecord.findMany({
         where: {
           organizationId: orgId,
           ...(establishmentId ? { establishmentId } : {}),
           ...(type && isParticipationType(type) ? { type } : {}),
+          AND: [collectiveReadScope(escopo)],
         },
         orderBy: { occurredAt: "desc" },
         include: {
@@ -62,11 +84,16 @@ class ParticipationController {
         include: {
           establishment: { select: { id: true, name: true } },
           recordedBy: { select: { id: true, name: true } },
-          evidences: { orderBy: { uploadedAt: "desc" } },
+          evidences: {
+            orderBy: { uploadedAt: "desc" },
+            /* O caminho interno do arquivo não sai do servidor. [C2-13] */
+            omit: { storagePath: true },
+          },
         },
       });
-      if (!participation) {
-        res.status(404).json({ message: "Registro de participação não encontrado." });
+      const escopo = await scopeOfRequest(req as AuthRequest);
+      if (!participation || collectiveView(escopo, participation.establishmentId) === "none") {
+        res.status(404).json({ message: NAO_ENCONTRADO });
         return;
       }
       res.json({ participation });
@@ -92,9 +119,28 @@ class ParticipationController {
           organizationId: orgId,
           participationId: req.params.id,
         },
-        select: { storagePath: true, fileName: true, mimeType: true },
+        select: {
+          storagePath: true,
+          fileName: true,
+          mimeType: true,
+          uploadedById: true,
+          participation: { select: { establishmentId: true } },
+        },
       });
-      if (!evidence) {
+      /*
+        O arquivo é de quem gere a unidade do registro (ou sem recorte) e de
+        quem o enviou; o de terceiro na unidade em que a pessoa só trabalha, e
+        o de fora do escopo, respondem igual a inexistente. [C2-13]
+      */
+      const escopo = await scopeOfRequest(req as AuthRequest);
+      if (
+        !evidence ||
+        !(
+          /* O arquivo segue a leitura do registro (gerida ou de trabalho). [C2-13] */
+          seesCollective(escopo, evidence.participation?.establishmentId ?? null) ||
+          evidence.uploadedById === escopo.userId
+        )
+      ) {
         res.status(404).json({ message: "Evidência não encontrada." });
         return;
       }
@@ -137,16 +183,21 @@ class ParticipationController {
         return;
       }
 
+      const escopo = await scopeOfRequest(req as AuthRequest);
       if (establishment_id) {
         const est = await new Establishment().read.one({
           id: establishment_id,
           organizationId: orgId,
           archivedAt: null,
         });
-        if (!est) {
+        if (!est || !unidadeDeGestor(escopo, establishment_id)) {
           res.status(400).json({ message: "Estabelecimento inválido." });
           return;
         }
+      } else if (!escopo.wholeOrg) {
+        /* Registro sem unidade é da central. [C2-13] */
+        res.status(400).json({ message: "Estabelecimento inválido." });
+        return;
       }
 
       if (
@@ -194,10 +245,10 @@ class ParticipationController {
         id: req.params.id,
         organizationId: orgId,
       });
-      if (!current) {
-        res.status(404).json({
-          message: "Registro de participação não encontrado.",
-        });
+      /* Editar é de quem gere a unidade do registro (ou sem recorte). [C2-13] */
+      const escopo = await scopeOfRequest(req as AuthRequest);
+      if (!current || !managesCollective(escopo, current.establishmentId)) {
+        res.status(404).json({ message: NAO_ENCONTRADO });
         return;
       }
 
@@ -210,13 +261,16 @@ class ParticipationController {
         return;
       }
 
-      if (body.establishment_id) {
-        const est = await new Establishment().read.one({
-          id: body.establishment_id as string,
-          organizationId: orgId,
-          archivedAt: null,
-        });
-        if (!est) {
+      if (body.establishment_id !== undefined) {
+        const novo = (body.establishment_id as string) || null;
+        const est = novo
+          ? await new Establishment().read.one({
+              id: novo,
+              organizationId: orgId,
+              archivedAt: null,
+            })
+          : null;
+        if ((novo && !est) || !unidadeDeGestor(escopo, novo)) {
           res.status(400).json({ message: "Estabelecimento inválido." });
           return;
         }
@@ -284,10 +338,9 @@ class ParticipationController {
         id: req.params.id,
         organizationId: orgId,
       });
-      if (!participation) {
-        res.status(404).json({
-          message: "Registro de participação não encontrado.",
-        });
+      const escopo = await scopeOfRequest(req as AuthRequest);
+      if (!participation || !managesCollective(escopo, participation.establishmentId)) {
+        res.status(404).json({ message: NAO_ENCONTRADO });
         return;
       }
 
@@ -339,7 +392,9 @@ class ParticipationController {
         validationStatus: EVIDENCE_VALIDATION_STATUSES.PENDING,
       });
 
-      res.status(201).json({ evidence });
+      /* O caminho interno do arquivo não sai do servidor. [C2-13] */
+      const { storagePath: _interno, ...publica } = evidence;
+      res.status(201).json({ evidence: publica });
     } catch (err) {
       fail(res, err);
     }

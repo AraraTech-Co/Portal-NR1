@@ -21,6 +21,14 @@ import {
 } from "../helper/ethics-access";
 import { ethicsDeadline } from "../helper/ethics-deadline";
 import type { AuthRequest } from "../types/auth";
+import {
+  actionManagerScope,
+  actionReadScope,
+  collectiveReadScope,
+  visibleUnits,
+  managedUnitFilter,
+  scopeOfRequest,
+} from "../helper/unit-scope";
 
 function fail(res: Response, err: unknown) {
   const e = err as { status?: number; message?: string };
@@ -107,6 +115,18 @@ class HomeController {
       const pode = (moduleId: string) => canReadModule(actor.permission, moduleId);
       const cuida = (moduleId: string) => canManageModule(actor.permission, moduleId);
       const veTodos = (moduleId: string) => canSeeAllInModule(actor.permission, moduleId);
+      /* Contagens de registro de terceiro: só das unidades geridas. [C2-13] */
+      const escopo = await scopeOfRequest(auth);
+      const daGestao = managedUnitFilter(escopo);
+      /*
+        Conformidade e vencimentos do coletivo: as unidades que a pessoa vê,
+        como no Painel da fiscalização. Os documentos do PGR são de todos.
+        [C2-13]
+      */
+      const unidades = visibleUnits(escopo);
+      const doRiscoNaUnidade = unidades
+        ? { hazard: { activity: { establishmentId: { in: unidades } } } }
+        : {};
 
       // ---------- o que é meu ----------
       const meu: Card[] = [];
@@ -209,7 +229,7 @@ class HomeController {
 
       if (cuida("atestados")) {
         const pendentes = await prisma.medicalCertificate.count({
-          where: { organizationId: orgId, status: "PENDING", userId: { not: userId } },
+          where: { organizationId: orgId, status: "PENDING", userId: { not: userId }, ...daGestao },
         });
         if (pendentes > 0) {
           mesa.push({
@@ -224,7 +244,7 @@ class HomeController {
 
       if (cuida("ferias")) {
         const pendentes = await prisma.leaveRequest.count({
-          where: { organizationId: orgId, status: "REQUESTED" },
+          where: { organizationId: orgId, status: "REQUESTED", ...daGestao },
         });
         if (pendentes > 0) {
           mesa.push({
@@ -239,14 +259,16 @@ class HomeController {
 
       if (cuida("acoes")) {
         const [validar, atrasadas] = await Promise.all([
+          /* Só as ações das unidades geridas. [C2-13] */
           prisma.action.count({
-            where: { organizationId: orgId, status: "WAITING_VALIDATION" },
+            where: { organizationId: orgId, status: "WAITING_VALIDATION", AND: [actionManagerScope(escopo)] },
           }),
           prisma.action.count({
             where: {
               organizationId: orgId,
               status: { in: [...EM_ABERTO] },
               dueDate: { lt: agora },
+              AND: [actionManagerScope(escopo)],
             },
           }),
         ]);
@@ -272,7 +294,7 @@ class HomeController {
 
       if (cuida("ocorrencias")) {
         const semAnalise = await prisma.occurrence.count({
-          where: { organizationId: orgId, analyzedAt: null },
+          where: { organizationId: orgId, analyzedAt: null, ...daGestao },
         });
         if (semAnalise > 0) {
           mesa.push({
@@ -457,6 +479,7 @@ class HomeController {
             where: {
               organizationId: orgId,
               archivedAt: null,
+              ...doRiscoNaUnidade,
               assessments: { none: { status: AssessmentStatus.VALIDATED } },
             },
           }),
@@ -464,6 +487,7 @@ class HomeController {
             where: {
               organizationId: orgId,
               archivedAt: null,
+              ...doRiscoNaUnidade,
               assessments: {
                 some: {
                   status: AssessmentStatus.VALIDATED,
@@ -474,7 +498,7 @@ class HomeController {
             },
           }),
           prisma.risk.count({
-            where: { organizationId: orgId, archivedAt: null, needsReassessment: true },
+            where: { organizationId: orgId, archivedAt: null, needsReassessment: true, ...doRiscoNaUnidade },
           }),
           /*
             O Início contava toda função sem ordem, inclusive as vazias; o
@@ -488,10 +512,15 @@ class HomeController {
               archivedAt: null,
               serviceOrders: { none: {} },
               employees: { some: { dismissedAt: null, user: { active: true } } },
+              ...(unidades ? { sector: { establishmentId: { in: unidades } } } : {}),
             },
           }),
           prisma.establishment.findMany({
-            where: { organizationId: orgId, archivedAt: null },
+            where: {
+              organizationId: orgId,
+              archivedAt: null,
+              ...(unidades ? { id: { in: unidades } } : {}),
+            },
             select: { id: true },
           }),
           prisma.aep.findMany({
@@ -580,7 +609,7 @@ class HomeController {
             status: AssessmentStatus.VALIDATED,
             supersededAt: null,
             expiresAt: { lte: limite },
-            risk: { archivedAt: null },
+            risk: { archivedAt: null, ...doRiscoNaUnidade },
           },
           select: { expiresAt: true },
           orderBy: { expiresAt: "asc" },
@@ -680,8 +709,9 @@ class HomeController {
         janela, e o que nunca teve simulado. [S6-B]
       */
       if (pode("emergencias")) {
+        /* Os procedimentos que a pessoa vê em Emergências. [C2-13] */
         const procedimentos = await prisma.emergencyProcedure.findMany({
-          where: { organizationId: orgId, archivedAt: null },
+          where: { organizationId: orgId, archivedAt: null, AND: [collectiveReadScope(escopo)] },
           select: {
             drillFrequencyMonths: true,
             drills: { orderBy: { performedAt: "desc" }, take: 1, select: { performedAt: true } },
@@ -752,7 +782,8 @@ class HomeController {
             prisma.riskAssessment.count({
               where: { organizationId: orgId, status: AssessmentStatus.VALIDATED },
             }),
-            prisma.action.count({ where: { organizationId: orgId } }),
+            /* As ações que a pessoa vê no Plano de ação. [C2-13] */
+            prisma.action.count({ where: { organizationId: orgId, AND: [actionReadScope(escopo)] } }),
             prisma.pgrDocument.count({ where: { organizationId: orgId } }),
             prisma.serviceOrder.count({ where: { organizationId: orgId } }),
           ]);
@@ -776,6 +807,8 @@ class HomeController {
         mine: meu,
         desk: mesa,
         compliance: conformidade,
+        /* Quantas unidades a conformidade conta; null é a empresa. [C2-13] */
+        compliance_units: unidades ? unidades.length : null,
         expiring: vencendo,
         /*
           Quando nada vence, o bloco sumia, e não dava para saber se o portal

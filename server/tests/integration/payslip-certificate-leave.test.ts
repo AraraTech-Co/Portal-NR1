@@ -1,8 +1,11 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import request from "supertest";
 import { createApp } from "../../src/app";
 import type { Express } from "express";
+import prisma from "../../src/model/prisma";
 import { holerite } from "../helpers/pdf";
+
+const ORG_ID = "00000000-0000-4000-8000-000000000001";
 
 async function login(app: Express) {
   const res = await request(app)
@@ -16,12 +19,46 @@ describe("Payslips, certificates, leaves", () => {
   let app: Express;
   let token: string;
   let userId: string;
+  let fichaCriada = "";
+  let fichaAntes: { id: string; registration: string | null; dismissedAt: Date | null } | null = null;
 
   beforeAll(async () => {
     app = createApp();
     const session = await login(app);
     token = session.token;
     userId = session.user.id;
+    /*
+      A conferência do holerite procura a matrícula no cadastro. O seed não
+      cria a ficha do admin: ela vinha do teste da ficha, quando ele rodava
+      antes. O teste garante a própria ficha e devolve como achou. [C2-9]
+    */
+    const ficha = await prisma.employeeProfile.findUnique({
+      where: { organizationId_userId: { organizationId: ORG_ID, userId } },
+      select: { id: true, registration: true, dismissedAt: true },
+    });
+    if (!ficha) {
+      fichaCriada = (
+        await prisma.employeeProfile.create({
+          data: { organizationId: ORG_ID, userId, registration: "MAT-001" },
+        })
+      ).id;
+    } else if (ficha.registration !== "MAT-001" || ficha.dismissedAt) {
+      fichaAntes = ficha;
+      await prisma.employeeProfile.update({
+        where: { id: ficha.id },
+        data: { registration: "MAT-001", dismissedAt: null },
+      });
+    }
+  });
+
+  afterAll(async () => {
+    if (fichaCriada) await prisma.employeeProfile.deleteMany({ where: { id: fichaCriada } });
+    if (fichaAntes) {
+      await prisma.employeeProfile.update({
+        where: { id: fichaAntes.id },
+        data: { registration: fichaAntes.registration, dismissedAt: fichaAntes.dismissedAt },
+      });
+    }
   });
 
   it("publishes payslip and Q&A", async () => {

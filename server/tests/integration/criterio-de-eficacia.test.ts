@@ -23,6 +23,9 @@ import {
  * Exige a organização do `scripts/seed-teste-org.ts`.
  */
 const ORG_ID = "aaaaaaaa-0001-4000-8000-000000000001";
+/** Unidade e risco do seed: a ação de quem gere a unidade tem de ser de uma. [C2-13] */
+const EST_ID = "aaaaaaaa-0001-4000-8000-000000000011";
+const RISCO_DO_SEED = "aaaaaaaa-0001-4000-8000-000000000021";
 const SENHA = "teste1234";
 const SUFIXO = Date.now().toString(36);
 const CLIENTE = join(__dirname, "..", "..", "..", "client", "src");
@@ -34,6 +37,7 @@ let supervisor: Sessao;
 let colaborador: Sessao;
 const acoes: string[] = [];
 const ocorrencias: string[] = [];
+const vinculos: string[] = [];
 
 const as = (s: Sessao) => ({ Authorization: `Bearer ${s.token}` });
 
@@ -52,10 +56,12 @@ async function acaoNoEstado(
   titulo: string,
   status: "OPEN" | "WAITING_VALIDATION" | "VALIDATED" | "CANCELLED",
   criterio: string | null,
+  riskId: string | null = null,
 ) {
   const a = await prisma.action.create({
     data: {
       organizationId: ORG_ID,
+      riskId,
       title: `${titulo} ${SUFIXO}`,
       status,
       priority: "HIGH",
@@ -93,9 +99,27 @@ beforeAll(async () => {
   sst = await entrar("teste.sst");
   supervisor = await entrar("teste.supervisor");
   colaborador = await entrar("teste.colaborador");
+  /* "Quem cuida do plano" cuida na unidade que gere: o supervisor recebe a do seed. [C2-13] */
+  const vinculo = await prisma.membership.findFirstOrThrow({
+    where: { userId: supervisor.user.id, organizationId: ORG_ID },
+    select: { id: true },
+  });
+  const ja = await prisma.managedEstablishment.findFirst({
+    where: { membershipId: vinculo.id, establishmentId: EST_ID },
+  });
+  if (!ja) {
+    vinculos.push(
+      (
+        await prisma.managedEstablishment.create({
+          data: { organizationId: ORG_ID, membershipId: vinculo.id, establishmentId: EST_ID, createdById: sst.user.id },
+        })
+      ).id,
+    );
+  }
 });
 
 afterAll(async () => {
+  await prisma.managedEstablishment.deleteMany({ where: { id: { in: vinculos } } });
   await prisma.auditEvent.deleteMany({
     where: { entityType: "Action", entityId: { in: acoes } },
   });
@@ -167,7 +191,7 @@ describe("a ação não abre sem critério [B3-4-A]", () => {
 
 describe("até a validação, o critério se completa ou corrige [B3-4-A]", () => {
   it("quem cuida do plano completa a ação aberta sem critério", async () => {
-    const id = await acaoNoEstado("Aberta sem critério", "OPEN", null);
+    const id = await acaoNoEstado("Aberta sem critério", "OPEN", null, RISCO_DO_SEED);
     const res = await patch(supervisor, id, "Ruído abaixo de 80 dB na nova medição");
     expect(res.status, JSON.stringify(res.body)).toBe(200);
     expect(res.body.action.effectivenessCriteria).toBe("Ruído abaixo de 80 dB na nova medição");
@@ -252,7 +276,7 @@ describe("a ação validada sem critério o recebe depois, com nome e data [B3-4
   });
 
   it("depois da validação, só quem valida registra — não basta cuidar do plano", async () => {
-    const id = await acaoNoEstado("Supervisor tenta", "VALIDATED", null);
+    const id = await acaoNoEstado("Supervisor tenta", "VALIDATED", null, RISCO_DO_SEED);
     const res = await patch(supervisor, id, "Do supervisor");
     expect(res.status).toBe(403);
     expect(res.body.code).toBe("NOT_A_VALIDATOR");

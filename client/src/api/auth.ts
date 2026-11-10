@@ -16,6 +16,15 @@ export type SessionUser = {
   must_change_password: boolean;
   /** Módulos visíveis: read | write (omite none / X). */
   modules: Record<string, ModuleAccessLevel>;
+  /**
+   * Módulos que a pessoa alcança só pela consulta própria (ficha ativa):
+   * holerites, férias e atestados, vendo só o que é seu. [C2-1]
+   */
+  own_modules?: string[];
+  /** Unidades sob a responsabilidade de gerente, supervisor ou ADM loja. [C2-13] */
+  managed_units?: string[];
+  /** Recortado por unidade e sem nenhuma atribuída: mostra o aviso. [C2-13] */
+  needs_units?: boolean;
   organization: { id: string; name: string };
   account: { id: string; name: string };
 };

@@ -40,7 +40,9 @@ function dias(inicio: string, fim: string): number {
  */
 export function LeavesPage() {
   const { user } = useAuth();
-  const { canManage } = useModuleAccess("ferias");
+  const { canManage, canRead } = useModuleAccess("ferias");
+  /* Só pela consulta própria: vê as suas, sem o pedido. [C2-1] */
+  const podePedir = canRead;
   const [rows, setRows] = useState<Leave[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -137,7 +139,11 @@ export function LeavesPage() {
     <div>
       <PageHeader
         title="Férias e licenças"
-        description="Peça férias, folga ou licença e acompanhe a decisão."
+        description={
+          podePedir
+            ? "Peça férias, folga ou licença e acompanhe a decisão."
+            : "Suas férias e licenças e a decisão de cada pedido."
+        }
       />
 
       {error && (
@@ -146,82 +152,82 @@ export function LeavesPage() {
         </p>
       )}
 
-      <section className="form-section">
-        <h2>Pedir</h2>
-        <form className="form-grid" onSubmit={pedir}>
-          <div className="form-grid cols-2">
-            <label className="form-field">
-              O que você quer pedir
-              <select
-                value={kind}
-                onChange={(e) => setKind(e.target.value)}
-                disabled={enviando}
-              >
-                {Object.entries(LEAVE_KIND_LABEL).map(([id, label]) => (
-                  <option key={id} value={id}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-              {/* O direito a férias fecha com 12 meses de casa (CLT art. 130):
+      {podePedir && (
+        <section className="form-section">
+          <h2>Pedir</h2>
+          <form className="form-grid" onSubmit={pedir}>
+            <div className="form-grid cols-2">
+              <label className="form-field">
+                O que você quer pedir
+                <select
+                  value={kind}
+                  onChange={(e) => setKind(e.target.value)}
+                  disabled={enviando}
+                >
+                  {Object.entries(LEAVE_KIND_LABEL).map(([id, label]) => (
+                    <option key={id} value={id}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                {/* O direito a férias fecha com 12 meses de casa (CLT art. 130):
                   a tela diz, em vez de a pessoa contar de cabeça. [S5-D] */}
-              {kind === "VACATION" && meuDireito && (
-                <span className="form-hint">
-                  {meuDireito.entitled
-                    ? "Você já completou 12 meses de casa."
-                    : meuDireito.complete_at
-                      ? `Seu período aquisitivo fecha em ${formatDay(meuDireito.complete_at)}.`
-                      : "Sem data de admissão na ficha — o RH confere."}
-                </span>
-              )}
-            </label>
-            <label className="form-field">
-              Observação (opcional)
-              <input
-                value={observacao}
-                onChange={(e) => setObservacao(e.target.value)}
-                disabled={enviando}
-                placeholder="Ex.: viagem marcada com a família"
-              />
-            </label>
-            <label className="form-field">
-              Primeiro dia
-              <input
-                type="date"
-                value={inicio}
-                onChange={(e) => setInicio(e.target.value)}
-                disabled={enviando}
-                required
-              />
-            </label>
-            <label className="form-field">
-              Último dia
-              <input
-                type="date"
-                value={fim}
-                onChange={(e) => setFim(e.target.value)}
-                disabled={enviando}
-                required
-              />
-              {dias(inicio, fim) > 0 && (
-                <span className="form-hint">
-                  {dias(inicio, fim)} dia(s).
-                </span>
-              )}
-            </label>
-          </div>
-          {erroForm && (
-            <p className="form-error" role="alert">
-              {erroForm}
-            </p>
-          )}
-          <div className="form-actions">
-            <Button type="submit" disabled={enviando}>
-              {enviando ? "Enviando…" : "Enviar pedido"}
-            </Button>
-          </div>
-        </form>
-      </section>
+                {kind === "VACATION" && meuDireito && (
+                  <span className="form-hint">
+                    {meuDireito.entitled
+                      ? "Você já completou 12 meses de casa."
+                      : meuDireito.complete_at
+                        ? `Seu período aquisitivo fecha em ${formatDay(meuDireito.complete_at)}.`
+                        : "Sem data de admissão na ficha — o RH confere."}
+                  </span>
+                )}
+              </label>
+              <label className="form-field">
+                Observação (opcional)
+                <input
+                  value={observacao}
+                  onChange={(e) => setObservacao(e.target.value)}
+                  disabled={enviando}
+                  placeholder="Ex.: viagem marcada com a família"
+                />
+              </label>
+              <label className="form-field">
+                Primeiro dia
+                <input
+                  type="date"
+                  value={inicio}
+                  onChange={(e) => setInicio(e.target.value)}
+                  disabled={enviando}
+                  required
+                />
+              </label>
+              <label className="form-field">
+                Último dia
+                <input
+                  type="date"
+                  value={fim}
+                  onChange={(e) => setFim(e.target.value)}
+                  disabled={enviando}
+                  required
+                />
+                {dias(inicio, fim) > 0 && (
+                  <span className="form-hint">{dias(inicio, fim)} dia(s).</span>
+                )}
+              </label>
+            </div>
+            {erroForm && (
+              <p className="form-error" role="alert">
+                {erroForm}
+              </p>
+            )}
+            <div className="form-actions">
+              <Button type="submit" disabled={enviando}>
+                {enviando ? "Enviando…" : "Enviar pedido"}
+              </Button>
+            </div>
+          </form>
+        </section>
+      )}
 
       {rows === null && <LoadingState />}
 
@@ -289,7 +295,10 @@ export function LeavesPage() {
                           <input
                             value={motivo[r.id] ?? ""}
                             onChange={(e) =>
-                              setMotivo((m) => ({ ...m, [r.id]: e.target.value }))
+                              setMotivo((m) => ({
+                                ...m,
+                                [r.id]: e.target.value,
+                              }))
                             }
                             placeholder="Motivo (obrigatório ao recusar)"
                           />

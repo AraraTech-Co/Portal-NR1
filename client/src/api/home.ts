@@ -24,6 +24,11 @@ export type HomeOverview = {
   desk: HomeCard[];
   /** A empresa está em dia? `null` para quem não lê o PGR. [S6-A] */
   compliance: HomeCard[] | null;
+  /**
+   * Quantas unidades a conformidade conta: `null` é a empresa inteira; para
+   * quem tem recorte, as unidades que a pessoa vê. [C2-13]
+   */
+  compliance_units: number | null;
   /** O que vence na janela de aviso. [S6-B] */
   expiring: HomeCard[];
   /** Primeiros passos, enquanto a casa não está montada. [S1-F] */

@@ -36,6 +36,16 @@ import {
 } from "../helper/action-deadline";
 import { nivelDoRisco } from "../helper/nivel-do-risco";
 import type { AuthRequest } from "../types/auth";
+import {
+  actionReadScope,
+  collectiveReadScope,
+  collectiveView,
+  managesCollective,
+  peopleInScope,
+  scopeOfRequest,
+  seesCollective,
+  type UnitScope,
+} from "../helper/unit-scope";
 
 function fail(res: Response, err: unknown) {
   const e = err as { status?: number; message?: string };
@@ -53,6 +63,50 @@ function blank(v?: string | null) {
 function ownsOrManages(req: AuthRequest, reportedById: string | null): boolean {
   if (req.actor && canManageModule(req.actor.permission, "ocorrencias")) return true;
   return reportedById === actorUserId(req);
+}
+
+/** Resposta de "não existe" — a mesma para o que está fora do escopo. [C2-13] */
+function naoEncontrada(res: Response) {
+  res.status(404).json({ message: "Ocorrência não encontrada." });
+}
+
+/**
+ * Como o ator mexe na ocorrência. Na unidade gerida (ou sem recorte), como
+ * gestor; fora dela, só na que ele mesmo registrou, como colaborador. A de
+ * terceiro na unidade em que só trabalha responde como inexistente. [C2-13]
+ */
+function editaOcorrencia(
+  req: AuthRequest,
+  escopo: UnitScope,
+  occurrence: { establishmentId: string | null; reportedById: string },
+): "gestor" | "proprio" | null {
+  if (managesCollective(escopo, occurrence.establishmentId) && ownsOrManages(req, occurrence.reportedById)) {
+    return "gestor";
+  }
+  if (occurrence.reportedById === escopo.userId) return "proprio";
+  return null;
+}
+
+/**
+ * Unidade nova da ocorrência, para quem tem recorte: a gerida (como gestor),
+ * ou também a de trabalho (como colaborador que registra). Sem unidade, só
+ * a central. Fora disso, igual a unidade inexistente. [C2-13]
+ */
+function unidadePermitida(escopo: UnitScope, establishmentId: string | null, comoColaborador: boolean): boolean {
+  if (escopo.wholeOrg) return true;
+  if (!establishmentId) return false;
+  const visao = collectiveView(escopo, establishmentId);
+  return visao === "manager" || (comoColaborador && visao === "worker");
+}
+
+/** Risco escolhido por quem tem recorte: só de unidade no escopo dele; fora, igual a inexistente. */
+async function riscoNoEscopo(escopo: UnitScope, riskId: string): Promise<boolean> {
+  if (escopo.wholeOrg) return true;
+  const risco = await prisma.risk.findFirst({
+    where: { id: riskId, organizationId: escopo.organizationId, archivedAt: null },
+    select: { hazard: { select: { activity: { select: { establishmentId: true } } } } },
+  });
+  return Boolean(risco) && collectiveView(escopo, risco!.hazard.activity.establishmentId) !== "none";
 }
 
 /**
@@ -96,11 +150,14 @@ class OccurrenceController {
       const orgId = actorOrgId(req as AuthRequest);
       const establishmentId = req.query.establishment_id as string | undefined;
       const type = req.query.type as string | undefined;
+      /* Gestor: unidades geridas e a de trabalho; colaborador: a dele; e as próprias. [C2-13] */
+      const escopo = await scopeOfRequest(req as AuthRequest);
       const rows = await prisma.occurrence.findMany({
         where: {
           organizationId: orgId,
           ...(establishmentId ? { establishmentId } : {}),
           ...(type && isOccurrenceType(type) ? { type } : {}),
+          AND: [collectiveReadScope(escopo, "reportedById")],
         },
         orderBy: { occurredAt: "desc" },
         include: {
@@ -133,11 +190,16 @@ class OccurrenceController {
           },
           reportedBy: { select: { id: true, name: true } },
           analyzedBy: { select: { id: true, name: true } },
-          evidences: { orderBy: { uploadedAt: "desc" } },
+          evidences: {
+            orderBy: { uploadedAt: "desc" },
+            /* O caminho interno do arquivo não sai do servidor. [C2-13] */
+            omit: { storagePath: true },
+          },
         },
       });
-      if (!occurrence) {
-        res.status(404).json({ message: "Ocorrência não encontrada." });
+      const escopo = await scopeOfRequest(req as AuthRequest);
+      if (!occurrence || !seesCollective(escopo, occurrence.establishmentId, occurrence.reportedById)) {
+        naoEncontrada(res);
         return;
       }
 
@@ -156,6 +218,8 @@ class OccurrenceController {
             { occurrenceId: occurrence.id },
             ...(occurrence.riskId ? [{ riskId: occurrence.riskId }] : []),
           ],
+          /* Só as ações que o ator já vê no plano. [C2-13] */
+          AND: [actionReadScope(escopo)],
         },
         orderBy: { createdAt: "desc" },
         select: {
@@ -225,19 +289,25 @@ class OccurrenceController {
         return;
       }
 
+      const escopo = await scopeOfRequest(req as AuthRequest);
       if (establishment_id) {
         const est = await new Establishment().read.one({
           id: establishment_id,
           organizationId: orgId,
           archivedAt: null,
         });
-        if (!est) {
+        /* Registra na unidade gerida ou na de trabalho; outra, igual a inexistente. [C2-13] */
+        if (!est || !unidadePermitida(escopo, establishment_id, true)) {
           res.status(400).json({ message: "Estabelecimento inválido." });
           return;
         }
       }
 
       if (risk_id) {
+        if (!(await riscoNoEscopo(escopo, risk_id))) {
+          res.status(400).json({ message: "Risco inválido." });
+          return;
+        }
         const conferido = await riskOfEstablishment(
           orgId,
           risk_id,
@@ -290,12 +360,19 @@ class OccurrenceController {
         id: req.params.id,
         organizationId: orgId,
       });
-      if (!current) {
-        res.status(404).json({ message: "Ocorrência não encontrada." });
+      const escopo = await scopeOfRequest(req as AuthRequest);
+      const como = current ? editaOcorrencia(req as AuthRequest, escopo, current) : null;
+      if (!current || !seesCollective(escopo, current.establishmentId, current.reportedById)) {
+        naoEncontrada(res);
         return;
       }
-      if (!ownsOrManages(req as AuthRequest, current.reportedById)) {
-        res.status(403).json({ message: "Só quem registrou a ocorrência pode editá-la." });
+      if (!como) {
+        /* Vê (sem recorte, ou gestor sem administrar o módulo): recusa dizendo por quê. */
+        if (managesCollective(escopo, current.establishmentId)) {
+          res.status(403).json({ message: "Só quem registrou a ocorrência pode editá-la." });
+        } else {
+          naoEncontrada(res);
+        }
         return;
       }
 
@@ -316,13 +393,25 @@ class OccurrenceController {
           organizationId: orgId,
           archivedAt: null,
         });
-        if (!est) {
+        if (!est || !unidadePermitida(escopo, body.establishment_id as string, como === "proprio")) {
           res.status(400).json({ message: "Estabelecimento inválido." });
           return;
         }
+      } else if (
+        body.establishment_id !== undefined &&
+        current.establishmentId !== null &&
+        !escopo.wholeOrg
+      ) {
+        /* Tirar a unidade leva a ocorrência para a central: só a central faz. [C2-13] */
+        res.status(400).json({ message: "Estabelecimento inválido." });
+        return;
       }
 
       if (body.risk_id) {
+        if (!(await riscoNoEscopo(escopo, body.risk_id as string))) {
+          res.status(400).json({ message: "Risco inválido." });
+          return;
+        }
         const unidade =
           body.establishment_id !== undefined
             ? ((body.establishment_id as string) || null)
@@ -331,6 +420,22 @@ class OccurrenceController {
           orgId,
           body.risk_id as string,
           unidade,
+        );
+        if (!conferido.ok) {
+          res.status(400).json({ message: conferido.message });
+          return;
+        }
+      } else if (body.risk_id === undefined && body.establishment_id && current.riskId) {
+        /*
+          Trocar só a unidade não separa a ocorrência do risco dela: o risco
+          já ligado tem de ser da unidade nova (S3-D), senão a ação aberta
+          por ela ficaria com risco de uma unidade e ocorrência de outra.
+          [C2-13]
+        */
+        const conferido = await riskOfEstablishment(
+          orgId,
+          current.riskId,
+          body.establishment_id as string,
         );
         if (!conferido.ok) {
           res.status(400).json({ message: conferido.message });
@@ -407,8 +512,9 @@ class OccurrenceController {
         id: req.params.id,
         organizationId: orgId,
       });
-      if (!current) {
-        res.status(404).json({ message: "Ocorrência não encontrada." });
+      const escopo = await scopeOfRequest(auth);
+      if (!current || !managesCollective(escopo, current.establishmentId)) {
+        naoEncontrada(res);
         return;
       }
 
@@ -482,8 +588,10 @@ class OccurrenceController {
         id: req.params.id,
         organizationId: orgId,
       });
-      if (!occurrence) {
-        res.status(404).json({ message: "Ocorrência não encontrada." });
+      /* Abrir ação é de gestor: unidade gerida ou sem recorte. [C2-13] */
+      const escopo = await scopeOfRequest(req as AuthRequest);
+      if (!occurrence || !managesCollective(escopo, occurrence.establishmentId)) {
+        naoEncontrada(res);
         return;
       }
 
@@ -516,6 +624,15 @@ class OccurrenceController {
       */
       if (!assignee_id) {
         res.status(400).json({ message: "Informe quem é o responsável pela ação." });
+        return;
+      }
+      /*
+        O responsável é pessoa da empresa com acesso ativo e, para quem tem
+        recorte, ele mesmo ou alguém das unidades geridas — a mesma lista do
+        seletor. Fora disso, igual a inexistente. [C2-13]
+      */
+      if (!(await peopleInScope(escopo, [assignee_id]))) {
+        res.status(400).json({ message: "Responsável não é da organização." });
         return;
       }
       if (!due_date) {
@@ -627,12 +744,17 @@ class OccurrenceController {
         id: req.params.id,
         organizationId: orgId,
       });
-      if (!occurrence) {
-        res.status(404).json({ message: "Ocorrência não encontrada." });
+      const escopo = await scopeOfRequest(req as AuthRequest);
+      if (!occurrence || !seesCollective(escopo, occurrence.establishmentId, occurrence.reportedById)) {
+        naoEncontrada(res);
         return;
       }
-      if (!ownsOrManages(req as AuthRequest, occurrence.reportedById)) {
-        res.status(403).json({ message: "Só quem registrou a ocorrência anexa evidência." });
+      if (!editaOcorrencia(req as AuthRequest, escopo, occurrence)) {
+        if (managesCollective(escopo, occurrence.establishmentId)) {
+          res.status(403).json({ message: "Só quem registrou a ocorrência anexa evidência." });
+        } else {
+          naoEncontrada(res);
+        }
         return;
       }
 
@@ -682,7 +804,9 @@ class OccurrenceController {
         validationStatus: EVIDENCE_VALIDATION_STATUSES.PENDING,
       });
 
-      res.status(201).json({ evidence });
+      /* O caminho interno do arquivo não sai do servidor. [C2-13] */
+      const { storagePath: _interno, ...publica } = evidence;
+      res.status(201).json({ evidence: publica });
     } catch (err) {
       fail(res, err);
     }

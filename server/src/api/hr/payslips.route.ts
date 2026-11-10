@@ -1,13 +1,15 @@
 import { Router } from "express";
 import payslips from "../../controller/PayslipController";
-import { moduleRead, moduleWrite } from "./middleware";
+import { moduleOwn, moduleRead, moduleWrite } from "./middleware";
 
 const read = moduleRead("holerites");
+/** Ver e baixar o próprio holerite, qualquer que seja o papel. [C2-1] */
+const own = moduleOwn("holerites");
 const writeRh = moduleWrite("holerites");
 
 const router = Router();
 
-router.get("/api/payslips", read, (req, res) => payslips.list(req, res));
+router.get("/api/payslips", own, (req, res) => payslips.list(req, res));
 router.get("/api/payslips/recipients", writeRh, (req, res) =>
   payslips.listRecipients(req, res),
 );
@@ -22,12 +24,12 @@ router.post("/api/payslips/lote/previa", writeRh, (req, res) =>
 router.post("/api/payslips/lote", writeRh, (req, res) =>
   payslips.publishBatch(req, res),
 );
-router.get("/api/payslips/:id", read, (req, res) => payslips.get(req, res));
+router.get("/api/payslips/:id", own, (req, res) => payslips.get(req, res));
 /** A versão que foi substituída, para o trabalhador e para a prova. [S5-F] */
-router.get("/api/payslips/:id/versoes/:versionId/file", read, (req, res) =>
+router.get("/api/payslips/:id/versoes/:versionId/file", own, (req, res) =>
   payslips.downloadVersion(req, res),
 );
-router.get("/api/payslips/:id/file", read, (req, res) =>
+router.get("/api/payslips/:id/file", own, (req, res) =>
   payslips.download(req, res),
 );
 router.post("/api/payslips/:id/questions", read, (req, res) =>

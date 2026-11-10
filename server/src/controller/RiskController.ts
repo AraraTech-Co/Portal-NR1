@@ -24,6 +24,13 @@ import {
 } from "../helper/action-deadline";
 import { nivelDoRisco } from "../helper/nivel-do-risco";
 import type { AuthRequest } from "../types/auth";
+import {
+  actionReadScope,
+  collectiveReadScope,
+  collectiveView,
+  peopleInScope,
+  scopeOfRequest,
+} from "../helper/unit-scope";
 
 function fail(res: Response, err: unknown) {
   const e = err as { status?: number; message?: string };
@@ -377,6 +384,12 @@ class RiskController {
   async riskHistory(req: Request, res: Response) {
     try {
       const orgId = actorOrgId(req as AuthRequest);
+      /*
+        O risco é do inventário, que todos leem; as ações e as ocorrências
+        dele seguem o recorte das telas delas. [C2-13]
+      */
+      const escopo = await scopeOfRequest(req as AuthRequest);
+      const acoesVisiveis = actionReadScope(escopo);
       const risk = await prisma.risk.findFirst({
         where: { id: req.params.id, organizationId: orgId },
         include: {
@@ -399,6 +412,7 @@ class RiskController {
             orderBy: { createdAt: "desc" },
             include: {
               actions: {
+                where: acoesVisiveis,
                 orderBy: { createdAt: "desc" },
                 select: {
                   id: true,
@@ -412,6 +426,7 @@ class RiskController {
             },
           },
           actions: {
+            where: acoesVisiveis,
             orderBy: { createdAt: "desc" },
             select: {
               id: true,
@@ -450,7 +465,11 @@ class RiskController {
         risco, no perigo e na atividade. [B3-4-C]
       */
       const ocorrencias = await prisma.occurrence.findMany({
-        where: { organizationId: orgId, riskId: risk.id },
+        where: {
+          organizationId: orgId,
+          riskId: risk.id,
+          AND: [collectiveReadScope(escopo, "reportedById")],
+        },
         select: { id: true, description: true },
       });
       const changes = await prisma.auditEvent.findMany({
@@ -485,7 +504,17 @@ class RiskController {
         quando a trilha não a tem. [B4-A]
       */
       const descricaoDa = new Map(ocorrencias.map((o) => [o.id, o.description]));
-      const mudancas = changes.map(({ entityId, ...c }) => {
+      /*
+        A abertura de ação é gravada na trilha do próprio risco, com título
+        e responsável. As ações do risco são da unidade dele: quem não vê a
+        unidade não recebe essas linhas. [C2-13]
+      */
+      const veAUnidade =
+        collectiveView(escopo, risk.hazard.activity.establishmentId) !== "none";
+      const visiveis = changes.filter(
+        (c) => veAUnidade || c.entityId !== risk.id || !c.action.startsWith("action."),
+      );
+      const mudancas = visiveis.map(({ entityId, ...c }) => {
         if (c.action !== "occurrence.create") return c;
         const depois = (c.after ?? {}) as Record<string, unknown>;
         if (depois.description || !descricaoDa.has(entityId)) return c;
@@ -848,6 +877,11 @@ class RiskController {
         where.risk = { hazard: { activity: { establishmentId } } };
       }
       /*
+        Unidades geridas e a de trabalho, mais as ações que a pessoa executa;
+        ação sem unidade (manual), só a central e quem executa. [C2-13]
+      */
+      where.AND = [actionReadScope(await scopeOfRequest(req as AuthRequest))];
+      /*
         "Quem faz não valida" é uma das travas do portal e não aparecia em
         tela nenhuma: o nome de quem validou estava gravado e nunca era
         lido. [B2-4-D]
@@ -945,21 +979,28 @@ class RiskController {
         });
         return;
       }
-      const responsavel = await prisma.membership.findFirst({
-        where: { userId: assignee_id, organizationId: orgId, suspendedAt: null },
-        select: { accessExpiresAt: true, user: { select: { active: true } } },
-      });
-      if (!responsavel || !responsavel.user.active) {
+      /*
+        Para quem tem recorte, o responsável sai das unidades geridas (ou é a
+        própria pessoa) — a mesma lista do seletor; fora dela, igual a quem não
+        é da empresa. [C2-13]
+      */
+      const escopo = await scopeOfRequest(req as AuthRequest);
+      if (!(await peopleInScope(escopo, [assignee_id]))) {
         res.status(400).json({ message: "Responsável não é da organização." });
         return;
       }
+      /*
+        Ação sem risco (como a aberta pelo achado do simulado) não tem
+        unidade: fica com a central, com quem a executa e com quem a abriu.
+        Abrir continua possível para quem já podia. [C2-13]
+      */
       if (risk_id) {
-        const risk = await new Risk().read.one({
-          id: risk_id,
-          organizationId: orgId,
-          archivedAt: null,
+        const risk = await prisma.risk.findFirst({
+          where: { id: risk_id, organizationId: orgId, archivedAt: null },
+          select: { id: true, hazard: { select: { activity: { select: { establishmentId: true } } } } },
         });
-        if (!risk) {
+        const visao = risk ? collectiveView(escopo, risk.hazard.activity.establishmentId) : "none";
+        if (!risk || (visao !== "whole" && visao !== "manager")) {
           res.status(400).json({ message: "Risco inválido." });
           return;
         }

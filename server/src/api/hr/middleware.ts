@@ -8,6 +8,14 @@ export function moduleRead(moduleId: string) {
   return verifyModule(moduleId, "read");
 }
 
+/**
+ * Consulta própria: leitura no módulo, ou ficha ativa para ver só o que é
+ * seu. Só em GET; o controlador filtra pela titularidade. [C2-1]
+ */
+export function moduleOwn(moduleId: string) {
+  return verifyModule(moduleId, "own");
+}
+
 /** Escrita (L/E) no módulo. */
 export function moduleWrite(moduleId: string) {
   return verifyModule(moduleId, "write");

@@ -14,7 +14,9 @@ import {
   resolveAccountAccess,
 } from "../helper/account-access";
 import { effectivePermission } from "../helper/auth";
-import { modulesForRole } from "../helper/module-access";
+import { modulesForRole, ownConsultationOnly } from "../helper/module-access";
+import { hasActiveProfile } from "../helper/active-profile";
+import { unitScopeOf } from "../helper/unit-scope";
 import type { AuthRequest } from "../types/auth";
 import { AuthAttemptKind } from "@prisma/client";
 import {
@@ -38,7 +40,28 @@ import {
 /** Senhas provisórias da carga inicial — forçam troca no próximo acesso. */
 const PROVISIONAL_PASSWORDS = new Set(["123456"]);
 
-function publicUser(actor: NonNullable<AuthRequest["actor"]>) {
+/**
+ * Módulos que a pessoa alcança só pela consulta própria (ficha ativa, papel
+ * sem o módulo): o menu mostra a tela, e ela vê só o que é seu. [C2-1]
+ */
+async function consultaPropria(
+  permission: string,
+  organizationId: string,
+  userId: string,
+): Promise<string[]> {
+  return ownConsultationOnly(permission, await hasActiveProfile(organizationId, userId));
+}
+
+/**
+ * Recorte por unidade da sessão: as unidades geridas e se falta atribuir
+ * alguma (o aviso para regularizar o vínculo). [C2-13]
+ */
+async function recorteDaSessao(permission: string, organizationId: string, userId: string) {
+  const escopo = await unitScopeOf({ permission, organizationId, userId });
+  return { managed_units: escopo.managed, needs_units: escopo.needsUnits };
+}
+
+async function publicUser(actor: NonNullable<AuthRequest["actor"]>) {
   return {
     id: actor.userId,
     login: actor.login,
@@ -49,6 +72,8 @@ function publicUser(actor: NonNullable<AuthRequest["actor"]>) {
     permission: actor.permission,
     must_change_password: actor.mustChangePassword,
     modules: modulesForRole(actor.permission),
+    own_modules: await consultaPropria(actor.permission, actor.organizationId, actor.userId),
+    ...(await recorteDaSessao(actor.permission, actor.organizationId, actor.userId)),
     organization: {
       id: actor.organizationId,
       name: actor.organizationName,
@@ -60,7 +85,7 @@ function publicUser(actor: NonNullable<AuthRequest["actor"]>) {
   };
 }
 
-function sessionUserFromAccess(
+async function sessionUserFromAccess(
   access: NonNullable<Awaited<ReturnType<typeof resolveAccountAccess>>>,
 ) {
   const permission = effectivePermission(access.orgRole);
@@ -74,6 +99,8 @@ function sessionUserFromAccess(
     permission,
     must_change_password: access.user.mustChangePassword,
     modules: modulesForRole(permission),
+    own_modules: await consultaPropria(permission, access.organizationId, access.user.id),
+    ...(await recorteDaSessao(permission, access.organizationId, access.user.id)),
     organization: {
       id: access.organizationId,
       name: access.organizationName,
@@ -274,7 +301,7 @@ class AuthController {
       expiresAt: tokenExpiresAt(),
     });
 
-    const sessionUser = sessionUserFromAccess({
+    const sessionUser = await sessionUserFromAccess({
       ...access,
       user: { ...access.user, mustChangePassword: mustChange },
     });
@@ -310,7 +337,7 @@ class AuthController {
     const accounts = await listAccessibleAccounts(authReq.actor.userId);
 
     res.json({
-      user: publicUser(authReq.actor),
+      user: await publicUser(authReq.actor),
       accounts,
     });
   }
@@ -390,7 +417,7 @@ class AuthController {
     }
 
     res.json({
-      user: sessionUserFromAccess({
+      user: await sessionUserFromAccess({
         ...access,
         user: { ...access.user, mustChangePassword: false },
       }),
@@ -445,7 +472,7 @@ class AuthController {
 
     res.json({
       token: rawToken,
-      user: sessionUserFromAccess(access),
+      user: await sessionUserFromAccess(access),
       accounts,
     });
   }

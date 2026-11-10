@@ -157,6 +157,7 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   "membership.role_changed": "Papel de uma pessoa alterado",
   "user.password_reset": "Senha redefinida",
   "user.password_reset_refused": "Redefinição de senha recusada: conta usada em outra empresa",
+  "managed_units.set": "Unidades sob responsabilidade definidas",
   "user.first_access": "Conta ativada pelo primeiro acesso",
   "user.first_access_reopened": "Primeiro acesso reaberto",
   "user.legacy_classified": "Conta antiga classificada",

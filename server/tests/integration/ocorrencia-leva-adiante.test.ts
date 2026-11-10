@@ -119,6 +119,12 @@ describe("ações vinculadas deixam de ficar vazias [B3-4-C]", () => {
         title: `Trocar a placa ${SUFIXO}`,
         assignee_id: supervisor.user.id,
         due_date: PRAZO,
+        /*
+          O risco é o primeiro da organização, e o nível dele depende do que
+          outros arquivos avaliaram antes. Com justificativa, o prazo vale em
+          qualquer nível: o assunto aqui é o vínculo, não o limite. [CB-72] [C2-9]
+        */
+        deadline_justification: "prazo do teste",
       });
     expect(res.status, JSON.stringify(res.body)).toBe(201);
     criadas.push(res.body.action.id);
