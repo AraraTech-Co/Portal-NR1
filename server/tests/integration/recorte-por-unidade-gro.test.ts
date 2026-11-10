@@ -1011,9 +1011,31 @@ describe("conformidade e vencimentos do Início nas unidades visíveis [C2-13]",
       // A central conta a empresa inteira (canário).
       const central = ok(await request(app).get("/api/inicio").set(as(master.token)), 200);
       expect(central.compliance_units, "a central conta a empresa").toBeNull();
-      expect(cartaoDoInicio(central, "riscos_sem_avaliacao")).toBeGreaterThan(cartaoDoInicio(inicio, "riscos_sem_avaliacao"));
-      expect(cartaoDoInicio(central, "sem_emergencia")).toBeGreaterThan(0);
-      expect(cartaoDoInicio(central, "avaliacoes")).toBeGreaterThan(cartaoDoInicio(inicio, "avaliacoes"));
+      /*
+        Comparada com a contagem da empresa, não com a do gestor: num banco
+        novo a empresa pode ter só as pendências de Rio Claro. [C2-9]
+      */
+      expect(cartaoDoInicio(central, "riscos_sem_avaliacao")).toBe(
+        await prisma.risk.count({
+          where: { organizationId: ORG_ID, archivedAt: null, assessments: { none: { status: "VALIDATED" } } },
+        }),
+      );
+      expect(cartaoDoInicio(central, "sem_emergencia")).toBe(
+        await prisma.establishment.count({
+          where: { organizationId: ORG_ID, archivedAt: null, emergencyPlans: { none: { archivedAt: null } } },
+        }),
+      );
+      const daEmpresa = await prisma.riskAssessment.count({
+        where: {
+          organizationId: ORG_ID,
+          status: "VALIDATED",
+          supersededAt: null,
+          expiresAt: { lte: new Date(Date.now() + 60 * 86_400_000) },
+          risk: { archivedAt: null },
+        },
+      });
+      expect(daEmpresa, "a de Barueri está na conta da empresa").toBeGreaterThan(cartaoDoInicio(inicio, "avaliacoes"));
+      expect(cartaoDoInicio(central, "avaliacoes")).toBe(daEmpresa);
     } finally {
       await prisma.riskAssessment.deleteMany({ where: { id: avaliacaoB.id } });
     }
