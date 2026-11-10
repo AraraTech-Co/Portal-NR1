@@ -97,6 +97,7 @@ const ficha = (userId: string) =>
   });
 
 beforeAll(async () => {
+  process.env.LOGIN_ORG_ID = ORG_ID;
   app = createApp();
   rh = await entrar("teste.rh", ["teste", "1234"].join(""));
   filialA = await filial("A");
@@ -116,6 +117,7 @@ afterAll(async () => {
   await prisma.jobRole.deleteMany({ where: { sector: { establishmentId: { in: unidades } } } });
   await prisma.sector.deleteMany({ where: { establishmentId: { in: unidades } } });
   await prisma.establishment.deleteMany({ where: { id: { in: unidades } } });
+  delete process.env.LOGIN_ORG_ID;
 });
 
 describe("o banco grava a filial e a chave da matrícula [C3-2]", () => {
@@ -191,7 +193,9 @@ describe("a chave da matrícula apara como o servidor [C3-2]", () => {
       where: { login },
       data: { passwordHash: await bcrypt.hash(SENHA, 4), activatedAt: new Date() },
     });
-    const porNumero = await request(app).post("/api/auth").send({ login: `5${NUM}`, password: SENHA });
+    const porNumero = await request(app)
+      .post("/api/auth")
+      .send({ login: `5${NUM}`, password: SENHA, establishment_id: filialA.id });
     expect(porNumero.status, "entra pelo número sem o espaço").toBe(200);
     expect(porNumero.body.user.login).toBe(login);
 

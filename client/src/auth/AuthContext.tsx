@@ -25,7 +25,7 @@ type AuthState = {
   /** Contas que a pessoa alcança — a sessão já as trazia. [S1-K] */
   accounts: AccessibleAccount[];
   booting: boolean;
-  login: (loginId: string, password: string) => Promise<void>;
+  login: (loginId: string, password: string, establishmentId: string) => Promise<void>;
   logout: () => Promise<void>;
   setUser: (user: SessionUser | null) => void;
   /** Trocar a conta ativa de qualquer tela. [S1-K] */
@@ -83,8 +83,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("storage", trocou);
   }, []);
 
-  const login = useCallback(async (loginId: string, password: string) => {
-    const data = await apiLogin(loginId, password);
+  const login = useCallback(async (loginId: string, password: string, establishmentId: string) => {
+    const data = await apiLogin(loginId, password, establishmentId);
     setUser(data.user);
     setAccounts(data.accounts ?? []);
   }, []);

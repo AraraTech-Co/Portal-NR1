@@ -25,6 +25,7 @@ import {
   IP_WINDOW_MS,
   LOCK_MS,
   accountKey,
+  canonicalRegistration,
   clearFailures,
   clientIp,
   identifierKey,
@@ -36,6 +37,14 @@ import {
   releaseAttempt,
   reserveAttempt,
 } from "../helper/auth-attempts";
+import { filialDoLogin, loginEstablishments, loginOrganizationId } from "../helper/login-org";
+import { randomBytes } from "crypto";
+
+/**
+ * Hash de uma senha que ninguém conhece, com o mesmo custo das senhas reais
+ * (10). Serve só para gastar o mesmo tempo quando não há quem comparar. [C3-2b]
+ */
+const HASH_FIXO = bcrypt.hashSync(randomBytes(24).toString("base64url"), 10);
 
 /** Senhas provisórias da carga inicial — forçam troca no próximo acesso. */
 const PROVISIONAL_PASSWORDS = new Set(["123456"]);
@@ -61,6 +70,16 @@ async function recorteDaSessao(permission: string, organizationId: string, userI
   return { managed_units: escopo.managed, needs_units: escopo.needsUnits };
 }
 
+/**
+ * Aviso ao Master quando a tela de login não sabe de qual empresa mostrar as
+ * filiais (mais de uma empresa ativa e sem LOGIN_ORG_ID): a tela fica só
+ * com "Externo" e ninguém entra pela matrícula. [C3-2b] (R5)
+ */
+async function avisoDoLogin(permission: string) {
+  if (permission !== "master") return {};
+  return { login_without_establishments: (await loginOrganizationId()) === null };
+}
+
 async function publicUser(actor: NonNullable<AuthRequest["actor"]>) {
   return {
     id: actor.userId,
@@ -74,6 +93,7 @@ async function publicUser(actor: NonNullable<AuthRequest["actor"]>) {
     modules: modulesForRole(actor.permission),
     own_modules: await consultaPropria(actor.permission, actor.organizationId, actor.userId),
     ...(await recorteDaSessao(actor.permission, actor.organizationId, actor.userId)),
+    ...(await avisoDoLogin(actor.permission)),
     organization: {
       id: actor.organizationId,
       name: actor.organizationName,
@@ -101,6 +121,7 @@ async function sessionUserFromAccess(
     modules: modulesForRole(permission),
     own_modules: await consultaPropria(permission, access.organizationId, access.user.id),
     ...(await recorteDaSessao(permission, access.organizationId, access.user.id)),
+    ...(await avisoDoLogin(permission)),
     organization: {
       id: access.organizationId,
       name: access.organizationName,
@@ -129,11 +150,23 @@ class AuthController {
    * POST /api/auth — login.
    * Contas disponíveis = memberships + todas as contas das empresas onde é MASTER.
    */
+  /**
+   * As filiais da tela de login, sem sessão. Não recebe parâmetro: a
+   * empresa é resolvida no servidor. Só id e nome, de filial ativa e não
+   * arquivada; sem contagem de pessoas. "Externo" é a tela que acrescenta.
+   * [C3-2b] (R4)
+   */
+  async filiais(_req: Request, res: Response) {
+    res.json({ establishments: await loginEstablishments() });
+  }
+
   async signin(req: Request, res: Response) {
-    const { login, password, account_id } = req.body as {
+    const { login, password, account_id, establishment_id } = req.body as {
       login?: string;
       password?: string;
       account_id?: string;
+      /** A filial escolhida na tela; vazio ou "externo" é Externo. [C3-2b] */
+      establishment_id?: string;
     };
 
     if (!login?.trim() || !password) {
@@ -148,7 +181,8 @@ class AuthController {
       pode haver mais de um candidato — quem decide é a senha. A resposta é
       a mesma para nenhum, um ou vários candidatos. [B2-1-F]
     */
-    const candidatos = await users.custom.read.candidatesForLogin(login);
+    const filial = await filialDoLogin(establishment_id);
+    const candidatos = await users.custom.read.candidatesForLogin(login, filial);
 
     /*
       Limite de tentativas. Quando o que foi digitado aponta para UMA conta,
@@ -159,7 +193,17 @@ class AuthController {
     */
     const ip = clientIp(req);
     const umaSo = candidatos.length === 1 ? candidatos[0] : null;
-    const chaveDaConta = umaSo ? accountKey(umaSo.id) : identifierKey(login);
+    /*
+      Com filial escolhida, a chave sem conta única é a filial com a
+      matrícula canônica, e não o texto: senão travar "000153" numa filial
+      errada mudaria a resposta na certa e revelaria onde a matrícula
+      existe. [C3-2b] (R2)
+    */
+    const chaveDaConta = umaSo
+      ? accountKey(umaSo.id)
+      : filial.kind === "externo"
+        ? identifierKey(login)
+        : identifierKey(`filial:${filial.id}:${canonicalRegistration(login)}`);
     const chaveDoIp = ipKey(ip);
     const tentativa = {
       kind: AuthAttemptKind.LOGIN,
@@ -184,8 +228,10 @@ class AuthController {
     }
 
     let user: (typeof candidatos)[number] | null = null;
+    let comparou = false;
     for (const candidato of candidatos) {
       if (!candidato.active) continue;
+      comparou = true;
       if (await users.custom.auth.verifyPassword(candidato, password)) {
         if (user) {
           // Duas pessoas com a mesma matrícula e a mesma senha: não há como
@@ -203,6 +249,12 @@ class AuthController {
         user = candidato;
       }
     }
+    /*
+      Ninguém chegou à comparação (filial errada, número que não existe,
+      conta inativa): compara com um hash fixo de mesmo custo, uma vez,
+      para o tempo de resposta não dizer se a pessoa existe. [C3-2b] (R1)
+    */
+    if (!comparou) await bcrypt.compare(password, HASH_FIXO);
     if (!user) {
       const [bloqueouConta, bloqueouIp] = await Promise.all([
         lockIfAtLimit(chaveDaConta, ACCOUNT_MAX_FAILURES),

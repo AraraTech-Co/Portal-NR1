@@ -3,6 +3,8 @@ import { Link, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
 import { Button } from "@/components/Button";
 import { CANAL_BASE } from "@/lib/canal";
+import { EXTERNO } from "@/api/auth";
+import { lembrarFilial, useFiliaisDoLogin } from "@/lib/filial-do-login";
 import "./login.css";
 
 const MIN_SPEED = 18;
@@ -30,6 +32,12 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  /*
+    A filial vem primeiro, sempre: a mesma matrícula existe em CNPJs
+    diferentes do grupo. Quem não tem ficha escolhe "Externo". [C3-2b]
+  */
+  const { filiais, carregando, escolhida, setEscolhida } = useFiliaisDoLogin(true);
+  const externo = escolhida === EXTERNO;
   /* Recado de quem acabou de criar a senha no primeiro acesso. [C1-7] */
   const aviso = (useLocation().state as { aviso?: string } | null)?.aviso ?? null;
 
@@ -180,7 +188,8 @@ export function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      await login(loginId, password);
+      await login(loginId, password, escolhida);
+      lembrarFilial(escolhida);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha no login");
     } finally {
@@ -195,8 +204,8 @@ export function LoginPage() {
         <h1 className="login-brand">Portal NR-1</h1>
         <p className="login-lead muted">
           {/* Dizia só "login ou e-mail", e quem entrou pela planilha não tem
-              esse login de cor. [B2-1-F] */}
-          Entre com a sua matrícula, o seu CPF, o seu login ou o seu e-mail.
+              esse login de cor. [B2-1-F] A filial vem antes. [C3-2b] */}
+          Escolha onde você trabalha e entre com a sua matrícula ou o seu CPF.
         </p>
         {aviso && (
           <p className="login-notice" role="status">
@@ -205,9 +214,33 @@ export function LoginPage() {
         )}
         <form className="login-form" onSubmit={onSubmit}>
           <label className="login-field">
+            Onde você trabalha
+            <select
+              value={escolhida}
+              onChange={(e) => setEscolhida(e.target.value)}
+              disabled={carregando}
+              required
+            >
+              <option value="" disabled>
+                {carregando ? "Carregando…" : "Escolha a filial"}
+              </option>
+              {filiais.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
+              <option value={EXTERNO}>Externo</option>
+            </select>
+            <span className="muted">
+              {externo
+                ? "Externo é para quem não tem ficha numa filial, como a administração central."
+                : "A mesma matrícula pode existir em outra filial: escolha a sua."}
+            </span>
+          </label>
+          <label className="login-field">
             {/* Dizia "Login ou e-mail", e quem entrou pela planilha precisava
                 decorar um nome.sobrenome que nunca viu. [B2-1-F] */}
-            Matrícula, CPF, login ou e-mail
+            {externo ? "Login, e-mail ou CPF" : "Matrícula ou CPF"}
             <input
               value={loginId}
               onChange={(e) => setLoginId(e.target.value)}
@@ -226,7 +259,7 @@ export function LoginPage() {
             />
           </label>
           {error && <p className="login-error">{error}</p>}
-          <Button type="submit" disabled={loading || booting}>
+          <Button type="submit" disabled={loading || booting || !escolhida}>
             {loading ? "Entrando…" : "Entrar"}
           </Button>
         </form>

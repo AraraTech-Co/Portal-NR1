@@ -28,6 +28,15 @@ const NEGADO =
 
 const as = (token: string) => ({ Authorization: `Bearer ${token}` });
 
+/*
+  A filial vem primeiro na entrada e no primeiro acesso (C3-2b). As pessoas
+  deste arquivo ficam numa filial própria; matrícula e CPF vão com ela, e o
+  login (nome.sobrenome) vai por "Externo".
+*/
+const ORG_ID = "aaaaaaaa-0001-4000-8000-000000000001";
+let FILIAL = "";
+const filialDe = (id: string) => (/^[a-z]/i.test(id) && id.includes(".") ? "externo" : FILIAL);
+
 let app: Express;
 let rh: { token: string };
 let seq = 0;
@@ -62,6 +71,7 @@ async function pessoaNova(): Promise<Pessoa> {
           registration: matricula,
           tax_id: cpf,
           birth_date: "1990-03-15",
+          establishment_id: FILIAL,
         },
       ],
     });
@@ -75,7 +85,7 @@ async function pessoaNova(): Promise<Pessoa> {
 const conferir = (dados: { matricula: string; cpf: string; nascimento: string }, ip?: string) => {
   const r = request(app).post("/api/auth/primeiro-acesso");
   if (ip) r.set("X-Forwarded-For", ip);
-  return r.send(dados);
+  return r.send({ establishment_id: FILIAL, ...dados });
 };
 
 const criarSenha = (token: string, senha = SENHA_NOVA) =>
@@ -86,10 +96,14 @@ const criarSenha = (token: string, senha = SENHA_NOVA) =>
 const entrar = (login: string, password: string, ip?: string) => {
   const r = request(app).post("/api/auth");
   if (ip) r.set("X-Forwarded-For", ip);
-  return r.send({ login, password });
+  return r.send({ login, password, establishment_id: filialDe(login) });
 };
 
 beforeAll(async () => {
+  process.env.LOGIN_ORG_ID = ORG_ID;
+  FILIAL = (
+    await prisma.establishment.create({ data: { organizationId: ORG_ID, name: `Filial primeiro acesso ${SUFIXO}` } })
+  ).id;
   app = createApp();
   const res = await request(app).post("/api/auth").send({ login: "teste.rh", password: SENHA });
   expect(res.status).toBe(200);
@@ -103,6 +117,8 @@ afterEach(() => {
 afterAll(async () => {
   await prisma.user.deleteMany({ where: { name: { contains: `Primeira Pessoa` } } });
   await prisma.authLockout.deleteMany({});
+  await prisma.establishment.delete({ where: { id: FILIAL } });
+  delete process.env.LOGIN_ORG_ID;
 });
 
 describe("primeiro acesso [C1-7]", () => {

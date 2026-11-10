@@ -6,6 +6,12 @@ import firstAccess from "../controller/FirstAccessController";
 const router = Router();
 
 router.post("/api/auth", (req, res) => authController.signin(req, res));
+/** As filiais da tela de login: pública e sem parâmetro. [C3-2b] */
+router.get("/api/auth/filiais", (req, res) =>
+  authController.filiais(req, res).catch(() => {
+    res.status(500).json({ message: "Erro interno." });
+  }),
+);
 router.get("/api/auth", verify("user"), (req, res) =>
   authController.get(req, res),
 );

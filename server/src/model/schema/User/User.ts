@@ -4,6 +4,7 @@ import Model from "../Model";
 import { IUser } from "./IUser";
 import { classifyLoginIdentifier } from "../../../helper/auth";
 import { canonicalRegistration } from "../../../helper/auth-attempts";
+import type { FilialDoLogin } from "../../../helper/login-org";
 
 
 export class User extends Model<IUser> {
@@ -33,34 +34,46 @@ export class User extends Model<IUser> {
     },
     read: {
       /**
-       * Quem pode ser a pessoa que digitou aquilo. [B2-1-F]
+       * Quem pode ser a pessoa que digitou aquilo, conforme a filial
+       * escolhida na tela. [B2-1-F] [C3-2b]
        *
-       * Login e e-mail são únicos no portal inteiro e dão no máximo uma
-       * pessoa. Matrícula e CPF são únicos DENTRO de uma empresa: a
-       * matrícula 19 existe em várias, e é por isso que isto devolve uma
-       * lista. Quem decide qual é a senha — nenhuma resposta muda conforme
-       * o número de candidatos.
+       * - Uma filial: matrícula ou CPF de ficha daquela filial. Login e
+       *   e-mail não (vão por "Externo").
+       * - "Externo": login, e-mail ou CPF. Matrícula é recusada pelo
+       *   formato do que foi digitado, sem consultar o banco.
+       * - Filial inválida: ninguém.
+       *
+       * Quem decide entre vários é a senha; nenhuma resposta muda conforme o
+       * número de candidatos.
        */
-      candidatesForLogin: async (raw: string): Promise<IUser[]> => {
+      candidatesForLogin: async (raw: string, filial: FilialDoLogin): Promise<IUser[]> => {
         const id = classifyLoginIdentifier(raw);
+        if (filial.kind === "invalida") return [];
+
+        if (filial.kind === "filial") {
+          if (id.kind === "email") return [];
+          if (id.kind === "cpf") {
+            return this.custom.read.byProfileField({ taxId: id.value, establishmentId: filial.id });
+          }
+          // Matrícula na filial, pela forma canônica gravada pelo banco:
+          // "74", "074" e "000074" dão na mesma. [C3-1] [C3-2]
+          return this.custom.read.byProfileField({
+            registrationKey: canonicalRegistration(id.value),
+            establishmentId: filial.id,
+          });
+        }
 
         if (id.kind === "email") {
           const porEmail = await this.read.one({ email: id.value });
           return porEmail ? [porEmail] : [];
         }
-
         if (id.kind === "cpf") {
           return this.custom.read.byProfileField({ taxId: id.value });
         }
-
+        // Só dígitos e não é CPF: é matrícula, e matrícula pede a filial.
+        if (/^\d+$/.test(id.value)) return [];
         const porLogin = await this.read.one({ login: id.value });
-        if (porLogin) return [porLogin];
-        // Não é login de ninguém: pode ser matrícula. A ficha guarda a
-        // forma canônica (sem zeros à esquerda, em maiúsculas), gravada pelo
-        // banco; "74", "074" e "000074" dão na mesma. [C3-1] [C3-2]
-        return this.custom.read.byProfileField({
-          registrationKey: canonicalRegistration(id.value),
-        });
+        return porLogin ? [porLogin] : [];
       },
 
       /** Pessoas com este campo na ficha, em qualquer empresa. [B2-1-F] */

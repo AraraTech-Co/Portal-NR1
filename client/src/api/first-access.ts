@@ -6,7 +6,13 @@ import { request } from "./client";
  * Etapa 1: matrícula, CPF e nascimento conferem → uma ficha de ativação de
  * uso único, que vale 10 minutos. Etapa 2: com ela, a pessoa cria a senha.
  */
-export function verifyFirstAccess(input: { matricula: string; cpf: string; nascimento: string }) {
+export function verifyFirstAccess(input: {
+  matricula: string;
+  cpf: string;
+  nascimento: string;
+  /** A filial escolhida, como no login. [C3-2b] */
+  establishment_id: string;
+}) {
   return request<{ token: string; expires_in: number }>("/api/auth/primeiro-acesso", {
     method: "POST",
     body: JSON.stringify(input),

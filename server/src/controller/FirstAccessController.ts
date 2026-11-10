@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { AuthAttemptKind } from "@prisma/client";
 import { Request, Response } from "express";
 import prisma from "../model/prisma";
+import { filialDoLogin } from "../helper/login-org";
 import { writeAudit } from "../helper/audit";
 import { accessEnded } from "../helper/access-period";
 import { isValidCpf, normalizeCpf } from "../helper/cpf";
@@ -87,10 +88,12 @@ function senhaRecusada(senha: unknown, confirmacao: unknown): string | null {
 class FirstAccessController {
   /** Etapa 1: confere matrícula + CPF + nascimento e emite a ficha. */
   async verify(req: Request, res: Response) {
-    const { matricula, cpf, nascimento } = req.body as {
+    const { matricula, cpf, nascimento, establishment_id } = req.body as {
       matricula?: unknown;
       cpf?: unknown;
       nascimento?: unknown;
+      /** A filial escolhida na tela, como no login. [C3-2b] */
+      establishment_id?: unknown;
     };
     if (
       typeof matricula !== "string" ||
@@ -105,7 +108,16 @@ class FirstAccessController {
     }
 
     const ip = clientIp(req);
-    const chave = firstAccessKey(matricula);
+    /*
+      A filial vem primeiro, como no login. Ela só restringe a busca da
+      ficha; a trava é da matrícula naquela filial, para errar numa filial
+      não travar a mesma matrícula de outra pessoa em outra. "Externo" não
+      tem primeiro acesso: quem entra assim não tem ficha. [C3-2b]
+    */
+    const filial = await filialDoLogin(establishment_id);
+    const chave = firstAccessKey(
+      filial.kind === "externo" ? matricula : `filial:${filial.id}:${canonicalRegistration(matricula)}`,
+    );
     const chaveDoIp = ipKey(ip);
     const tentativa = {
       kind: AuthAttemptKind.FIRST_ACCESS,
@@ -144,7 +156,7 @@ class FirstAccessController {
       nascidoEm = null;
     }
     const cpfLimpo = normalizeCpf(cpf);
-    if (!nascidoEm || !isValidCpf(cpfLimpo)) {
+    if (!nascidoEm || !isValidCpf(cpfLimpo) || filial.kind !== "filial") {
       await falhou(null);
       return;
     }
@@ -156,7 +168,12 @@ class FirstAccessController {
       é, e o caminho é o RH.
     */
     const fichas = await prisma.employeeProfile.findMany({
-      where: { taxId: cpfLimpo, dismissedAt: null, organization: { active: true } },
+      where: {
+        taxId: cpfLimpo,
+        establishmentId: filial.id,
+        dismissedAt: null,
+        organization: { active: true },
+      },
       select: {
         organizationId: true,
         registration: true,

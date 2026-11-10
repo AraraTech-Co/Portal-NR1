@@ -53,6 +53,17 @@ export function AppShell() {
               atribuir, você vê só os seus próprios registros.
             </p>
           )}
+          {/*
+            Mais de uma empresa ativa e sem LOGIN_ORG_ID: a tela de login
+            mostra só "Externo", e ninguém entra pela matrícula. [C3-2b]
+          */}
+          {user?.login_without_establishments && (
+            <p className="readonly-banner" role="alert">
+              A tela de entrada não está mostrando as filiais: há mais de uma empresa ativa e o
+              servidor não sabe qual mostrar. Até configurar, só quem entra por "Externo" consegue
+              entrar. Avise o suporte da Arara.
+            </p>
+          )}
           <Outlet />
         </main>
       </div>
