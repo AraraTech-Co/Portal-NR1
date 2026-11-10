@@ -128,6 +128,43 @@ describe("o trabalhador entra pelo que ele sabe de cor [B2-1-F]", () => {
     expect(res.status).toBe(401);
   });
 
+  it("zero à esquerda da matrícula não muda quem entra [C3-1]", async () => {
+    // Números curtos e inéditos: nunca formam CPF (11 dígitos).
+    const n = 1_000_000 + (Date.now() % 8_000_000);
+    const comZeros = `000${n}`;
+    const semZeros = String(n + 1);
+    const senha = ["senha", "zeros", SUFIXO].join("-");
+
+    const criar = await importar([
+      { name: `Lima Zeros ${SUFIXO}`, registration: comZeros },
+      { name: `Rocha Zeros ${SUFIXO}`, registration: semZeros },
+    ]);
+    expect(criar.status, JSON.stringify(criar.body)).toBe(201);
+    const [a, b] = criar.body.results as { status: string; login: string }[];
+    expect([a.status, b.status]).toEqual(["created", "created"]);
+    for (const login of [a.login, b.login]) {
+      await prisma.user.update({
+        where: { login },
+        data: { passwordHash: await bcrypt.hash(senha, 4), activatedAt: new Date() },
+      });
+    }
+
+    // Cadastrada com zeros, digitada sem eles ou com outra quantidade.
+    for (const digitado of [String(n), `0${n}`, comZeros, `00000${n}`]) {
+      const res = await entrar(digitado, senha);
+      expect(res.status, `matrícula ${digitado}`).toBe(200);
+      expect(res.body.user.login).toBe(a.login);
+    }
+    // Cadastrada sem zeros, digitada com eles.
+    const res = await entrar(`00${semZeros}`, senha);
+    expect(res.status, "zeros só no que foi digitado").toBe(200);
+    expect(res.body.user.login).toBe(b.login);
+
+    // Outro número continua outro número: os zeros só saem da frente.
+    expect((await entrar(`${n}0`, senha)).status).toBe(401);
+    expect((await entrar(`${comZeros}`, "senha-errada-mesmo")).status).toBe(401);
+  });
+
   it("número que não é matrícula de ninguém é recusado", async () => {
     const res = await entrar("99999999", "qualquer-coisa");
     expect(res.status).toBe(401);

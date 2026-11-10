@@ -3,6 +3,10 @@ import prisma from "../../prisma";
 import Model from "../Model";
 import { IUser } from "./IUser";
 import { classifyLoginIdentifier } from "../../../helper/auth";
+import { canonicalRegistration } from "../../../helper/auth-attempts";
+
+/** Matrícula mais longa que o login procura com zeros à esquerda. */
+const MAX_REGISTRATION_LENGTH = 20;
 
 export class User extends Model<IUser> {
   constructor() {
@@ -53,7 +57,17 @@ export class User extends Model<IUser> {
 
         const porLogin = await this.read.one({ login: id.value });
         if (porLogin) return [porLogin];
-        // Não é login de ninguém: pode ser matrícula.
+        // Não é login de ninguém: pode ser matrícula. Numérica, vale com
+        // qualquer quantidade de zeros à esquerda, como no primeiro acesso
+        // e no holerite. [C3-1]
+        const canonica = canonicalRegistration(id.value);
+        if (/^\d+$/.test(canonica)) {
+          const formas = new Set([id.value, canonica]);
+          for (let s = `0${canonica}`; s.length <= MAX_REGISTRATION_LENGTH; s = `0${s}`) {
+            formas.add(s);
+          }
+          return this.custom.read.byProfileField({ registration: { in: [...formas] } });
+        }
         return this.custom.read.byProfileField({
           registration: { equals: id.value, mode: "insensitive" },
         });
