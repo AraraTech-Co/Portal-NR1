@@ -33,7 +33,8 @@ function tom(s: ActivationSituation): "success" | "info" | "warning" | "danger" 
 /**
  * Painel de ativação das contas: quem já entrou, quem aguarda o primeiro
  * acesso, quem está sem dados, bloqueado, com prazo vencido, e as contas
- * antigas ainda não classificadas. Master, Dono e RH agem; o gerente só vê.
+ * antigas ainda não classificadas. Master, Dono e RH agem; o gerente só vê,
+ * e só as unidades que gere. [C3-5]
  * [C1-7]
  */
 export function ActivationPanelPage() {
@@ -152,7 +153,12 @@ export function ActivationPanelPage() {
                   </option>
                 ))}
               </select>
-              {!podeAgir && <span className="muted">Só leitura: as ações são de Master, Dono e RH.</span>}
+              {/* Quem só lê é o gerente, e ele vê só as unidades que gere. [C3-5] */}
+              {!podeAgir && (
+                <span className="muted">
+                  Só leitura, das unidades que você gere: as ações são de Master, Dono e RH.
+                </span>
+              )}
             </div>
           </>
         )

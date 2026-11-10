@@ -11,12 +11,15 @@ import {
   firstAccessKey,
 } from "../helper/auth-attempts";
 import type { AuthRequest } from "../types/auth";
+import { scopeOfRequest } from "../helper/unit-scope";
 
 /**
  * Painel de ativação das contas e as ações sobre ele. [C1-7]
  *
  * Quem vê: Master, Dono, RH e — só lendo — o gerente, cada um na própria
  * empresa (módulo `ativacao`). Quem age: Master, Dono e RH, conferido aqui.
+ * O gerente vê só as unidades que gere e a própria conta (decisão 5, 10/11);
+ * quem cuida da empresa inteira continua vendo todos. [C3-5]
  *
  * Uma situação por pessoa, nesta ordem: Bloqueado · Ativo · Legado não
  * classificado · Sem dados para o primeiro acesso · Prazo vencido ·
@@ -151,8 +154,32 @@ class AccountActivationController {
     try {
       const auth = req as AuthRequest;
       const orgId = actorOrgId(auth);
+      /*
+        O recorte da C2-13: o gerente vê as pessoas cuja ficha é de uma
+        unidade que ele gere, e a própria conta. Sem unidade atribuída, só a
+        própria. Quem está sem ficha ou sem unidade fica com a central. [C3-5]
+      */
+      const escopo = await scopeOfRequest(auth);
+      const noRecorte = escopo.wholeOrg
+        ? {}
+        : {
+            user: {
+              OR: [
+                { id: escopo.userId },
+                ...(escopo.managed.length
+                  ? [
+                      {
+                        employeeProfiles: {
+                          some: { organizationId: orgId, establishmentId: { in: escopo.managed } },
+                        },
+                      },
+                    ]
+                  : []),
+              ],
+            },
+          };
       const membros = await prisma.membership.findMany({
-        where: { organizationId: orgId, role: { not: Role.FISCAL } },
+        where: { organizationId: orgId, role: { not: Role.FISCAL }, ...noRecorte },
         select: {
           role: true,
           suspendedAt: true,
