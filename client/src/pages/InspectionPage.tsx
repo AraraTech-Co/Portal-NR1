@@ -220,7 +220,8 @@ export function InspectionPage() {
   }
   if (!data) return null;
 
-  const cnpj = formatCnpj(data.organization.taxId);
+  const emNomeDe = data.employer ?? data.organization;
+  const cnpj = formatCnpj(emNomeDe.taxId);
   const pendentes = data.totals.items_pending;
 
   return (
@@ -232,7 +233,7 @@ export function InspectionPage() {
 
       <section className="insp-summary">
         <div>
-          <h2>{data.organization.name}</h2>
+          <h2>{emNomeDe.name}</h2>
           <p className="muted">
             {cnpj ? `CNPJ ${cnpj} · ` : ""}
             Responsável: {data.organization.responsibleName ?? "não cadastrado"}

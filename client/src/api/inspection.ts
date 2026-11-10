@@ -32,6 +32,8 @@ export type InspectionOverview = {
     assessmentReviewMonths: number;
     hasSstCertification: boolean;
   };
+  /** Filtrado por uma filial com razão social, ela; senão, a empresa. [C3-4] */
+  employer?: { name: string; taxId: string | null };
   establishments: { id: string; name: string; address: string | null; taxId: string | null }[];
   establishment_id: string | null;
   /** O painel traz nome por nome (quem responde pelo PGR e a fiscalização). */

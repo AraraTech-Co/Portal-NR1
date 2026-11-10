@@ -35,6 +35,9 @@ export function EstablishmentCard({
   const [name, setName] = useState(establishment.name);
   const [cnpj, setCnpj] = useState(formatCnpj(establishment.taxId) ?? "");
   const [address, setAddress] = useState(establishment.address ?? "");
+  /* Os documentos da filial saem com a razão social dela. [C3-4] */
+  const [legalName, setLegalName] = useState(establishment.legalName ?? "");
+  const [payrollCode, setPayrollCode] = useState(establishment.payrollCode ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,6 +45,8 @@ export function EstablishmentCard({
     setName(establishment.name);
     setCnpj(formatCnpj(establishment.taxId) ?? "");
     setAddress(establishment.address ?? "");
+    setLegalName(establishment.legalName ?? "");
+    setPayrollCode(establishment.payrollCode ?? "");
     setError(null);
     setEditing(true);
   }
@@ -57,6 +62,12 @@ export function EstablishmentCard({
         // CNPJ só vai quando mudou: o que veio da carga pode estar fora do padrão.
         ...(cnpj.trim() !== originalCnpj ? { tax_id: cnpj.trim() || null } : {}),
         ...(address.trim() !== (establishment.address ?? "") ? { address: address.trim() || null } : {}),
+        ...(legalName.trim() !== (establishment.legalName ?? "")
+          ? { legal_name: legalName.trim() || null }
+          : {}),
+        ...(payrollCode.trim() !== (establishment.payrollCode ?? "")
+          ? { payroll_code: payrollCode.trim() || null }
+          : {}),
       });
       setEditing(false);
       await onChanged();
@@ -84,7 +95,7 @@ export function EstablishmentCard({
       {editing && (
         <Dialog
           title={`Editar ${establishment.name}`}
-          description="O endereço vai no PGR e na ordem de serviço."
+          description="O endereço vai no PGR e na ordem de serviço. Com razão social e CNPJ, os documentos desta filial saem em nome dela."
           onClose={() => setEditing(false)}
         >
           <form className="form-grid" onSubmit={onSave}>
@@ -95,6 +106,29 @@ export function EstablishmentCard({
             <label className="form-field">
               CNPJ
               <input value={cnpj} onChange={(e) => setCnpj(e.target.value)} inputMode="numeric" placeholder="00.000.000/0000-00" />
+            </label>
+            <label className="form-field">
+              Razão social
+              <input
+                value={legalName}
+                onChange={(e) => setLegalName(e.target.value)}
+                maxLength={200}
+                placeholder="Como no cartão CNPJ desta filial"
+              />
+              <span className="form-hint">
+                Em branco, o PGR e a ordem de serviço desta filial saem com o
+                nome da empresa. Exige o CNPJ da filial.
+              </span>
+            </label>
+            <label className="form-field">
+              Código da folha
+              <input
+                value={payrollCode}
+                onChange={(e) => setPayrollCode(e.target.value)}
+                maxLength={20}
+                placeholder="0682"
+              />
+              <span className="form-hint">O número que a folha de pagamento imprime para esta filial.</span>
             </label>
             <label className="form-field">
               Endereço
@@ -114,12 +148,20 @@ export function EstablishmentCard({
       )}
       <dl className="op-facts">
         <div>
+          <dt>Razão social</dt>
+          <dd>{establishment.legalName ?? <span className="muted">não informada — documentos em nome da empresa</span>}</dd>
+        </div>
+        <div>
           <dt>CNPJ</dt>
           <dd>{formatCnpj(establishment.taxId) ?? <span className="muted">não informado</span>}</dd>
         </div>
         <div>
           <dt>Endereço</dt>
           <dd>{establishment.address ?? <span className="muted">não informado</span>}</dd>
+        </div>
+        <div>
+          <dt>Código da folha</dt>
+          <dd>{establishment.payrollCode ?? <span className="muted">não informado</span>}</dd>
         </div>
       </dl>
       {error && <p className="form-error" role="alert">{error}</p>}

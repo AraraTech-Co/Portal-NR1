@@ -86,6 +86,8 @@ export type ServiceOrderFull = {
     sector: { name: string; establishment: { id: string; name: string } };
   };
   organization: { name: string; taxId: string | null };
+  /** Em nome de quem saiu: a filial com razão social, ou a empresa. [C3-4] */
+  employer?: { name: string; taxId: string | null };
   my_ack_at: string | null;
   is_current: boolean;
   current_version: number;

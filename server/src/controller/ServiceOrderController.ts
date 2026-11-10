@@ -9,6 +9,7 @@ import { mudancasDesdeAEmissao } from "../helper/ordem-desatualizada";
 import { gravarPapel, PAPEL_SELECT, PapelInvalido } from "../helper/papel-anexado";
 import { sendPrivateFile } from "../helper/send-private-file";
 import type { AuthRequest } from "../types/auth";
+import { empregadorDe, empregadorGravado } from "../helper/empregador";
 
 function fail(res: Response, err: unknown) {
   const e = err as { status?: number; message?: string };
@@ -277,6 +278,8 @@ class ServiceOrderController {
       res.json({
         service_order: {
           ...rest,
+          /* Em nome de quem saiu: o retrato da emissão; antes dele, a empresa. [C3-4] */
+          employer: empregadorGravado(rest, rest.organization),
           my_ack_at: acks[0]?.acknowledgedAt ?? null,
           is_current: maisNova?.id === order.id,
           current_version: maisNova?.version ?? order.version,
@@ -454,6 +457,15 @@ class ServiceOrderController {
       }
 
       const { role, content } = await buildServiceOrderContent(orgId, jobRoleId);
+      /*
+        A ordem é da função, e a função é de uma filial: sai em nome dela,
+        retratado na emissão. [C3-4]
+      */
+      const filialDaFuncao = await prisma.jobRole.findFirst({
+        where: { id: jobRoleId, organizationId: orgId },
+        select: { sector: { select: { establishment: { select: { legalName: true, taxId: true } } } } },
+      });
+      const empregador = empregadorDe(org, filialDaFuncao?.sector.establishment);
 
       const ultima = await prisma.serviceOrder.findFirst({
         where: { organizationId: orgId, jobRoleId },
@@ -474,6 +486,8 @@ class ServiceOrderController {
           responsibleRole: texto(body.responsible_role) ?? org.responsibleRole,
           responsibleRegistration:
             texto(body.responsible_registration) ?? org.responsibleRegistration,
+          employerName: empregador.name,
+          employerTaxId: empregador.taxId,
         },
       });
 
