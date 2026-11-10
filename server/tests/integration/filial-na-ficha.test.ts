@@ -5,6 +5,7 @@ import type { Express } from "express";
 import { AccountRole, Role } from "@prisma/client";
 import { createApp } from "../../src/app";
 import prisma from "../../src/model/prisma";
+import { canonicalRegistration } from "../../src/helper/auth-attempts";
 
 /**
  * Filial na ficha e matrícula única por filial. [C3-2]
@@ -143,6 +144,69 @@ describe("o banco grava a filial e a chave da matrícula [C3-2]", () => {
       select: { establishmentId: true },
     });
     expect(trocada.establishmentId).toBe(filialB.id);
+  });
+});
+
+describe("a chave da matrícula apara como o servidor [C3-2]", () => {
+  it("banco e servidor aparam as pontas do mesmo jeito, caractere a caractere", async () => {
+    /*
+      Cada caractere do plano básico, nas duas pontas de "074": o banco
+      apara exatamente o que o `trim` do JavaScript apara. Pega o espaço
+      duro do Excel e qualquer outro que um lado apare e o outro não.
+    */
+    const entradas: string[] = [];
+    for (let c = 1; c <= 0xffff; c++) {
+      if (c >= 0xd800 && c <= 0xdfff) continue;
+      const ch = String.fromCharCode(c);
+      entradas.push(`${ch}074${ch}`);
+    }
+    const linhas = await prisma.$queryRaw<{ i: bigint; aparada: string }[]>`
+      SELECT i, nr1_trim_like_js(x) AS aparada
+        FROM unnest(${entradas}::text[]) WITH ORDINALITY AS t(x, i)`;
+    const divergentes = linhas
+      .filter((l) => l.aparada !== entradas[Number(l.i) - 1].trim())
+      .map((l) => entradas[Number(l.i) - 1].codePointAt(0)!.toString(16));
+    expect(linhas).toHaveLength(entradas.length);
+    expect(divergentes, "caracteres que banco e servidor aparam diferente").toEqual([]);
+
+    // E a chave inteira coincide para todo caractere que o trim tira.
+    const brancos = entradas.filter((e) => e.trim() === "074");
+    expect(brancos.length).toBeGreaterThan(20);
+    const chaves = await prisma.$queryRaw<{ chave: string }[]>`
+      SELECT nr1_registration_key(x) AS chave FROM unnest(${brancos}::text[]) AS t(x)`;
+    expect(new Set(chaves.map((c) => c.chave))).toEqual(new Set([canonicalRegistration("074")]));
+  });
+
+  it("matrícula colada com espaço duro entra pelo número e não duplica na filial", async () => {
+    const NBSP = "\u00a0";
+    const importar = (linhas: Record<string, unknown>[]) =>
+      request(app).post("/api/pessoas-acessos/importar").set(as(rh.token)).send({ people: linhas });
+    const res = await importar([
+      { name: `C32 Planilha ${SUFIXO} nbsp`, registration: `${NBSP}05${NUM}`, job_role_id: filialA.jobRoleId },
+    ]);
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(res.body.results[0].status).toBe("created");
+    const login = res.body.results[0].login as string;
+    await prisma.user.update({
+      where: { login },
+      data: { passwordHash: await bcrypt.hash(SENHA, 4), activatedAt: new Date() },
+    });
+    const porNumero = await request(app).post("/api/auth").send({ login: `5${NUM}`, password: SENHA });
+    expect(porNumero.status, "entra pelo número sem o espaço").toBe(200);
+    expect(porNumero.body.user.login).toBe(login);
+
+    // Escrita direta no banco, sem o trim da aplicação: o gatilho apara igual.
+    const outro = await membro("nbsp-dup");
+    await expect(
+      prisma.employeeProfile.create({
+        data: {
+          organizationId: ORG_ID,
+          userId: outro.id,
+          jobRoleId: filialA.jobRoleId,
+          registration: `${NBSP}5${NUM}${NBSP}`,
+        },
+      }),
+    ).rejects.toMatchObject({ code: "P2002" });
   });
 });
 
