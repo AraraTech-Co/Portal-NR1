@@ -412,6 +412,11 @@ model Establishment {
   organizationId String
   name           String
   taxId          String?
+  /// Razão social da filial: com ela (e o CNPJ), os documentos da filial
+  /// saem em nome dela; sem ela, em nome da empresa. [C3-4]
+  legalName      String?
+  /// Código da folha (0682, 0683): o que a folha imprime antes da razão social. [C3-4]
+  payrollCode    String?
   address        String?
   archivedAt     DateTime?
   createdAt      DateTime  @default(now())
@@ -992,6 +997,10 @@ model PgrDocument {
   responsibleName         String
   responsibleRole         String?
   responsibleRegistration String?
+  /// Quem emite, como saiu no papel: razão social e CNPJ da filial ou da
+  /// empresa no instante da emissão. Nulo no que foi emitido antes. [C3-4]
+  employerName            String?
+  employerTaxId           String?
   /// Aceite eletrônico registrado no momento da emissão.
   signatureStatement String
   createdAt       DateTime        @default(now())
@@ -1031,6 +1040,10 @@ model ServiceOrder {
   responsibleName         String
   responsibleRole         String?
   responsibleRegistration String?
+  /// Quem emite, como saiu no papel: razão social e CNPJ da filial ou da
+  /// empresa no instante da emissão. Nulo no que foi emitido antes. [C3-4]
+  employerName            String?
+  employerTaxId           String?
   createdAt      DateTime @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)

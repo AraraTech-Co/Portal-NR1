@@ -345,7 +345,9 @@ export function DocumentViewPage() {
   if (!doc) return <LoadingState label="Carregando documento…" />;
 
   const typeLabel = PGR_TYPE_LABEL[doc.type] ?? doc.type;
-  const cnpj = formatCnpj(doc.organization.taxId);
+  /* Em nome de quem saiu: a filial ou a empresa. [C3-4] */
+  const emNomeDe = doc.employer ?? doc.organization;
+  const cnpj = formatCnpj(emNomeDe.taxId);
 
   return (
     <div className="doc-view">
@@ -383,7 +385,7 @@ export function DocumentViewPage() {
             <div>
               <dt>Organização</dt>
               <dd>
-                {doc.organization.name}
+                {emNomeDe.name}
                 {cnpj && <span className="doc-sub">CNPJ {cnpj}</span>}
               </dd>
             </div>

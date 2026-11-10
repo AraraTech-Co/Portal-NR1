@@ -12,6 +12,7 @@ import {
   ACTION_STATUS_LABEL,
   PARTICIPATION_TYPE_LABEL,
 } from "../helper/rotulos";
+import { empregadorDe } from "../helper/empregador";
 
 /**
  * Quem vê o painel nome por nome: quem responde pelo PGR e a fiscalização.
@@ -842,6 +843,19 @@ class InspectionController {
           assessmentReviewMonths: org.assessmentReviewMonths,
           hasSstCertification: org.hasSstCertification,
         },
+        /*
+          Filtrado por uma filial, o painel sai em nome dela; sem filtro, da
+          empresa. [C3-4]
+        */
+        employer: empregadorDe(
+          org,
+          establishmentId
+            ? await prisma.establishment.findFirst({
+                where: { id: establishmentId, organizationId: orgId },
+                select: { legalName: true, taxId: true },
+              })
+            : null,
+        ),
         establishments,
         establishment_id: establishmentId,
         /// O cliente esconde o histórico e a lista de ciência quando é `false`.

@@ -5,6 +5,7 @@ import { Establishment } from "../model/schema/Establishment/Establishment";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { REQUIRED_PGR_DOCUMENTS } from "../helper/compliance";
 import { writeAudit } from "../helper/audit";
+import { empregadorDe, empregadorGravado } from "../helper/empregador";
 import { isPgrDocumentType } from "../constants";
 import type { AuthRequest } from "../types/auth";
 
@@ -349,6 +350,8 @@ class DocumentController {
       res.json({
         document: {
           ...doc,
+          /* Em nome de quem saiu: o retrato da emissão; antes dele, a empresa. [C3-4] */
+          employer: empregadorGravado(doc, doc.organization),
           is_current: atual,
           current_version: maisNovo?.version ?? doc.version,
           changes_since: mudancas,
@@ -422,6 +425,7 @@ class DocumentController {
         return;
       }
 
+      let filialDoDocumento: { legalName: string | null; taxId: string | null } | null = null;
       if (establishment_id) {
         const est = await new Establishment().read.one({
           id: establishment_id,
@@ -432,7 +436,10 @@ class DocumentController {
           res.status(400).json({ message: "Estabelecimento inválido." });
           return;
         }
+        filialDoDocumento = est;
       }
+      /* Em nome de quem sai, retratado na emissão: não muda depois. [C3-4] */
+      const empregador = empregadorDe(org, filialDoDocumento);
 
       let content: unknown;
       if (type === PgrDocumentType.INVENTORY) {
@@ -478,6 +485,8 @@ class DocumentController {
           version,
           content: content as never,
           issuedById: userId,
+          employerName: empregador.name,
+          employerTaxId: empregador.taxId,
           responsibleName,
           responsibleRole:
             responsible_role?.trim() ||

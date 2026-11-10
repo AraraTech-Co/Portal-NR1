@@ -5,6 +5,10 @@ export type Establishment = {
   id: string;
   name: string;
   taxId: string | null;
+  /** Razão social da filial: os documentos dela saem em nome dela. [C3-4] */
+  legalName?: string | null;
+  /** Código da folha, como 0682. [C3-4] */
+  payrollCode?: string | null;
   address: string | null;
   archivedAt: string | null;
 };
@@ -110,7 +114,13 @@ export async function createActivity(input: {
 
 export async function updateEstablishment(
   id: string,
-  input: { name?: string; tax_id?: string | null; address?: string | null },
+  input: {
+    name?: string;
+    tax_id?: string | null;
+    address?: string | null;
+    legal_name?: string | null;
+    payroll_code?: string | null;
+  },
 ) {
   return request<{ establishment: Establishment }>(`/api/establishments/${id}`, {
     method: "PATCH",

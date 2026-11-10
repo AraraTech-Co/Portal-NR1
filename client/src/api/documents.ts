@@ -143,6 +143,8 @@ export type PgrDocumentFull = PgrDocument & {
   issuedBy: { id: string; name: string };
   establishment: { id: string; name: string } | null;
   organization: { name: string; taxId: string | null };
+  /** Em nome de quem saiu: a filial com razão social, ou a empresa. [C3-4] */
+  employer?: { name: string; taxId: string | null };
 };
 
 export async function fetchPgrDocument(id: string) {

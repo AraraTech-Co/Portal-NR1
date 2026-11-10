@@ -19,6 +19,9 @@ export const FIELD_LABEL: Record<string, string> = {
   name: "nome",
   description: "descrição",
   address: "endereço",
+  /** Da filial: os documentos dela saem com a razão social. [C3-4] */
+  legalName: "razão social",
+  payrollCode: "código da folha",
   taxId: "CNPJ",
   archivedAt: "arquivado em",
   job_role_ids: "funções",

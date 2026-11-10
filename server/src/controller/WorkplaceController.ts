@@ -224,26 +224,73 @@ class WorkplaceController {
         res.status(404).json({ message: "Estabelecimento não encontrado." });
         return;
       }
-      const { name, tax_id, address } = req.body as {
+      const { name, tax_id, address, legal_name, payroll_code } = req.body as {
         name?: string;
         tax_id?: string | null;
         address?: string | null;
+        legal_name?: string | null;
+        payroll_code?: string | null;
       };
       if (name !== undefined && !name.trim()) {
         res.status(400).json({ message: "O nome não pode ficar vazio." });
+        return;
+      }
+      /*
+        Razão social e código da folha da filial: os documentos da filial
+        saem em nome dela. A razão só vale com o CNPJ da própria filial, para
+        nunca sair a razão de uma com o CNPJ de outra. [C3-4]
+      */
+      for (const [campo, valor] of [["legal_name", legal_name], ["payroll_code", payroll_code]] as const) {
+        if (valor !== undefined && valor !== null && typeof valor !== "string") {
+          res.status(400).json({ message: `${campo} deve ser texto.` });
+          return;
+        }
+      }
+      const taxId = tax_id !== undefined ? cnpjOrNull(tax_id) : existing.taxId;
+      const legalName = legal_name !== undefined ? textOrNull(legal_name) : existing.legalName;
+      if (legalName && legalName.length > 200) {
+        res.status(400).json({ message: "A razão social passa de 200 caracteres." });
+        return;
+      }
+      if (legalName && !taxId) {
+        res.status(400).json({
+          message: "Para gravar a razão social, informe também o CNPJ da filial.",
+        });
+        return;
+      }
+      const payrollCode = payroll_code !== undefined ? textOrNull(payroll_code) : undefined;
+      if (payrollCode && !/^[0-9A-Za-z.-]{1,20}$/.test(payrollCode)) {
+        res.status(400).json({
+          message:
+            "Código da folha inválido: use só letras, números, ponto e hífen, até 20 caracteres (como 0682).",
+        });
         return;
       }
       const row = await new Establishment().update.one(
         { id, organizationId: orgId },
         {
           ...(name !== undefined ? { name: name.trim() } : {}),
-          ...(tax_id !== undefined ? { taxId: cnpjOrNull(tax_id) } : {}),
+          ...(tax_id !== undefined ? { taxId } : {}),
           ...(address !== undefined ? { address: textOrNull(address) } : {}),
+          ...(legal_name !== undefined ? { legalName } : {}),
+          ...(payrollCode !== undefined ? { payrollCode } : {}),
         },
       );
       await audit(req, "establishment.update", "Establishment", id,
-        { name: existing.name, taxId: existing.taxId, address: existing.address },
-        { name: row?.name, taxId: row?.taxId, address: row?.address });
+        {
+          name: existing.name,
+          taxId: existing.taxId,
+          address: existing.address,
+          legalName: existing.legalName,
+          payrollCode: existing.payrollCode,
+        },
+        {
+          name: row?.name,
+          taxId: row?.taxId,
+          address: row?.address,
+          legalName: row?.legalName,
+          payrollCode: row?.payrollCode,
+        });
       res.json({ establishment: row });
     } catch (err) {
       fail(res, err);

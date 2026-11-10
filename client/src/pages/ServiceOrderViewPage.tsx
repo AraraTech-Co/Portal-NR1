@@ -96,7 +96,7 @@ function Acknowledgements({
       </h2>
       <p className="so-annex-id">
         {order.jobRole.name} · v{order.version} · emitida em{" "}
-        {formatDateTime(order.issuedAt)} · {order.organization.name}
+        {formatDateTime(order.issuedAt)} · {(order.employer ?? order.organization).name}
       </p>
       {rows.length === 0 ? (
         <p className="doc-empty">Nenhum trabalhador ativo nesta função.</p>
@@ -154,7 +154,7 @@ function Receipt({
       <dl className="so-receipt-facts">
         <div>
           <dt>Empresa</dt>
-          <dd>{order.organization.name}</dd>
+          <dd>{(order.employer ?? order.organization).name}</dd>
         </div>
         <div>
           <dt>Função</dt>
@@ -297,7 +297,8 @@ export function ServiceOrderViewPage() {
   }
   if (!order) return <LoadingState label="Carregando ordem de serviço…" />;
 
-  const cnpj = formatCnpj(order.organization.taxId);
+  /* Em nome de quem saiu: a filial da função ou a empresa. [C3-4] */
+  const cnpj = formatCnpj((order.employer ?? order.organization).taxId);
   const { content } = order;
 
   const comprovantes = comComprovantes ? (acks ?? []) : [];
@@ -340,7 +341,7 @@ export function ServiceOrderViewPage() {
             <div>
               <dt>Organização</dt>
               <dd>
-                {order.organization.name}
+                {(order.employer ?? order.organization).name}
                 {cnpj && <span className="doc-sub">CNPJ {cnpj}</span>}
               </dd>
             </div>
