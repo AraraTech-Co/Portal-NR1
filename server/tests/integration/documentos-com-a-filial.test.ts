@@ -103,11 +103,15 @@ async function filialComRisco(nome: string, cnpj: string | null) {
 const editarFilial = (id: string, body: Record<string, unknown>) =>
   request(app).patch(`/api/establishments/${id}`).set(as(sst)).send(body);
 
-const emitirPgr = (establishment_id: string | null) =>
-  request(app)
+/* Status conferido aqui: um 407 do proxy local aparece como 407, não como TypeError. */
+const emitirPgr = async (establishment_id: string | null) => {
+  const res = await request(app)
     .post("/api/pgr-documents")
     .set(as(sst))
     .send({ type: "INVENTORY", establishment_id, responsible_name: "Eng. Filial" });
+  expect(res.status, `emitir o PGR: ${JSON.stringify(res.body).slice(0, 200)}`).toBe(201);
+  return res;
+};
 
 const lerPgr = async (id: string) =>
   (await request(app).get(`/api/pgr-documents/${id}`).set(as(sst))).body.document;

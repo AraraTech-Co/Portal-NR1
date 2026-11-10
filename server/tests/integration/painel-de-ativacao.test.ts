@@ -8,7 +8,7 @@ import { accountKey } from "../../src/helper/auth-attempts";
 /**
  * Painel de ativação e as ações sobre ele. [C1-7]
  *
- * Master, Dono e RH veem e agem; o gerente só vê, a empresa toda; os outros
+ * Master, Dono e RH veem e agem; o gerente só vê, na unidade dele [C3-5]; os outros
  * não veem. Uma situação por pessoa. "Reabrir primeiro acesso" só vale para
  * conta nunca ativada e já elegível; conta antiga precisa de classificação
  * com justificativa antes, e "nunca entrou" é recusado quando a trilha
@@ -95,7 +95,8 @@ afterAll(async () => {
 });
 
 describe("quem vê o painel [C1-7]", () => {
-  it("RH vê e age; gerente só vê, a empresa toda; colaborador não vê", async () => {
+  /* O gerente vê só a unidade que gere: `ativacao-na-unidade.test.ts`. [C3-5] */
+  it("RH vê e age; gerente só vê; colaborador não vê", async () => {
     const doRh = await painel(rh.token);
     expect(doRh.status).toBe(200);
     expect(doRh.body.can_act).toBe(true);
@@ -104,7 +105,6 @@ describe("quem vê o painel [C1-7]", () => {
     const doGerente = await painel(gerente.token);
     expect(doGerente.status).toBe(200);
     expect(doGerente.body.can_act).toBe(false);
-    expect(doGerente.body.people.length).toBe(doRh.body.people.length);
 
     expect((await painel(colaborador.token)).status).toBe(403);
 
