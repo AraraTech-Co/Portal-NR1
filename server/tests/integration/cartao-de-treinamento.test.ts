@@ -95,10 +95,22 @@ beforeAll(async () => {
   });
   curso = t.id;
 
-  // Duas pessoas na função, as duas ativas.
+  /*
+    Duas pessoas na função, as duas ativas e com ficha: a função vai na
+    ficha, e sem ela a pessoa não entra na conta. Antes pegava as duas
+    primeiras do banco, que no seed limpo não têm ficha. [C2-9]
+  */
   const membros = await prisma.membership.findMany({
-    where: { organizationId: ORG_ID, suspendedAt: null, user: { active: true } },
+    where: {
+      organizationId: ORG_ID,
+      suspendedAt: null,
+      user: {
+        active: true,
+        employeeProfiles: { some: { organizationId: ORG_ID, dismissedAt: null } },
+      },
+    },
     select: { userId: true },
+    orderBy: { user: { login: "asc" } },
     take: 2,
   });
   expect(membros.length, "duas pessoas no banco local").toBe(2);
