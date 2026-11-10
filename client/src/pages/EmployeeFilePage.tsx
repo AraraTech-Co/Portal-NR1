@@ -10,7 +10,7 @@ import {
   type EmployeeFile,
 } from "@/api/people";
 import { fetchContractorList } from "@/api/contractors";
-import { fetchJobRoles, type JobRole } from "@/api/operation";
+import { fetchEstablishments, fetchJobRoles, type Establishment, type JobRole } from "@/api/operation";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
 import { LoadingState } from "@/components/LoadingState";
@@ -179,6 +179,8 @@ function CadastroEditor({
     profile.admittedAt ? String(profile.admittedAt).slice(0, 10) : "",
   );
   const [funcoes, setFuncoes] = useState<JobRole[]>([]);
+  const [filiais, setFiliais] = useState<Establishment[]>([]);
+  const [filialId, setFilialId] = useState(profile.establishment?.id ?? "");
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -187,7 +189,14 @@ function CadastroEditor({
     fetchJobRoles()
       .then((d) => setFuncoes(d.job_roles))
       .catch(() => setFuncoes([]));
+    fetchEstablishments()
+      .then((d) => setFiliais(d.establishments.filter((f) => !f.archivedAt)))
+      .catch(() => setFiliais([]));
   }, [aberto]);
+
+  /* Com função, a filial é a dela; sem função, a escolhida aqui. [C3-2] */
+  const funcaoEscolhida = funcoes.find((f) => f.id === jobRoleId);
+  const filialDaFuncao = funcaoEscolhida?.establishment ?? null;
 
   async function salvar(e: FormEvent) {
     e.preventDefault();
@@ -204,6 +213,9 @@ function CadastroEditor({
           : {}),
         phone: phone.trim(),
         job_role_id: jobRoleId || null,
+        ...(!jobRoleId && filialId && filialId !== profile.establishment?.id
+          ? { establishment_id: filialId }
+          : {}),
         admitted_at: admittedAt || null,
       });
       setAberto(false);
@@ -283,6 +295,26 @@ function CadastroEditor({
           </select>
           <span className="form-hint">
             É da função que saem os perigos e a ordem de serviço da pessoa.
+          </span>
+        </label>
+        <label className="form-field">
+          Filial
+          {jobRoleId ? (
+            <input value={filialDaFuncao?.name ?? ""} disabled readOnly />
+          ) : (
+            <select value={filialId} onChange={(e) => setFilialId(e.target.value)}>
+              <option value="">Escolha a filial</option>
+              {filiais.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
+            </select>
+          )}
+          <span className="form-hint">
+            {jobRoleId
+              ? "Com função, a filial é a da função."
+              : "A matrícula é única dentro da filial."}
           </span>
         </label>
         <label className="form-field">
@@ -495,7 +527,9 @@ export function EmployeeFilePage() {
         description={
           profile.jobRole
             ? `${profile.jobRole.name} · ${profile.jobRole.sector.name} · ${profile.jobRole.sector.establishment.name}`
-            : "Sem função atribuída"
+            : profile.establishment
+              ? `Sem função atribuída · ${profile.establishment.name}`
+              : "Sem função atribuída · sem filial"
         }
       />
 

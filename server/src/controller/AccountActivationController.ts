@@ -172,9 +172,7 @@ class AccountActivationController {
                   taxId: true,
                   birthDate: true,
                   dismissedAt: true,
-                  jobRole: {
-                    select: { sector: { select: { establishment: { select: { id: true, name: true } } } } },
-                  },
+                  establishment: { select: { id: true, name: true } },
                 },
               },
             },
@@ -239,7 +237,7 @@ class AccountActivationController {
           else if (faltam.length > 0) situation = "MISSING_DATA";
           else if (!u.firstAccessUntil || u.firstAccessUntil <= agora) situation = "WINDOW_EXPIRED";
           else situation = "AWAITING";
-          const unidade = ficha?.jobRole?.sector?.establishment ?? null;
+          const unidade = ficha?.establishment ?? null;
           return {
             userId: u.id,
             name: u.name,

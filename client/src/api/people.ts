@@ -16,6 +16,8 @@ export type EmployeeRow = {
   user: { id: string; name: string; login: string; email: string | null };
   jobRole: { id: string; name: string } | null;
   contractor: { id: string; name: string } | null;
+  /** Filial (CNPJ) da pessoa: a da função ou, sem função, a escolhida. [C3-2] */
+  establishment?: { id: string; name: string } | null;
 };
 
 /** Vínculo da pessoa com a empresa (NR-1 1.5.8). [S1-G] */
@@ -79,6 +81,8 @@ export function updateEmployeeProfile(
     birth_date?: string | null;
     phone?: string;
     job_role_id?: string | null;
+    /** Só para quem fica sem função; com função, vale a filial dela. [C3-2] */
+    establishment_id?: string;
     admitted_at?: string | null;
   },
 ) {

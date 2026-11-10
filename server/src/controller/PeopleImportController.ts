@@ -12,7 +12,7 @@ import {
   loginCandidateFromName,
 } from "../helper/login-name";
 import { randomBytes } from "crypto";
-import { FIRST_ACCESS_WINDOW_DAYS } from "../helper/auth-attempts";
+import { FIRST_ACCESS_WINDOW_DAYS, canonicalRegistration } from "../helper/auth-attempts";
 import { parseBirthDate } from "../helper/birth-date";
 import type { AuthRequest } from "../types/auth";
 
@@ -30,6 +30,8 @@ type Entrada = {
   tax_id?: unknown;
   email?: unknown;
   job_role_id?: unknown;
+  /** Filial, quando a linha não tem função. [C3-2] */
+  establishment_id?: unknown;
   admitted_at?: unknown;
   /** Nascimento: um dos três dados do primeiro acesso. [C1-7] */
   birth_date?: unknown;
@@ -95,6 +97,7 @@ class PeopleImportController {
     atual: {
       taxId: string | null;
       registration: string | null;
+      establishmentId: string | null;
       jobRoleId: string | null;
       admittedAt: Date | null;
       birthDate: Date | null;
@@ -102,6 +105,7 @@ class PeopleImportController {
     daPlanilha: {
       taxId: string | null;
       matricula: string | null;
+      establishmentId: string | null;
       jobRoleId: string | null;
       admittedAt: Date | null;
       birthDate: Date | null;
@@ -132,10 +136,17 @@ class PeopleImportController {
       }
     }
     if (!atual.registration && daPlanilha.matricula) {
+      /*
+        A matrícula é única por filial (C3-2): a de outra pessoa conta só na
+        filial que esta ficha terá. Sem filial conhecida, conta a empresa.
+      */
+      const filialFinal =
+        atual.establishmentId ?? (atual.jobRoleId ? null : daPlanilha.establishmentId);
       const deOutro = await prisma.employeeProfile.findFirst({
         where: {
           organizationId: orgId,
-          registration: daPlanilha.matricula,
+          ...(filialFinal ? { establishmentId: filialFinal } : {}),
+          registrationKey: canonicalRegistration(daPlanilha.matricula),
           id: { not: profileId },
         },
         select: { id: true },
@@ -148,6 +159,11 @@ class PeopleImportController {
     if (!atual.jobRoleId && daPlanilha.jobRoleId) {
       dados.jobRoleId = daPlanilha.jobRoleId;
       mudou.push("função");
+    }
+    /* Ficha sem filial e sem função: a filial da linha completa. [C3-2] */
+    if (!atual.establishmentId && !atual.jobRoleId && !dados.jobRoleId && daPlanilha.establishmentId) {
+      dados.establishmentId = daPlanilha.establishmentId;
+      mudou.push("filial");
     }
     if (!atual.admittedAt && daPlanilha.admittedAt) {
       dados.admittedAt = daPlanilha.admittedAt;
@@ -198,7 +214,7 @@ class PeopleImportController {
       const [funcoes, contratadas] = await Promise.all([
         prisma.jobRole.findMany({
           where: { organizationId: orgId, archivedAt: null },
-          select: { id: true },
+          select: { id: true, sector: { select: { establishmentId: true } } },
         }),
         prisma.contractor.findMany({
           where: { organizationId: orgId, archivedAt: null },
@@ -206,6 +222,15 @@ class PeopleImportController {
         }),
       ]);
       const funcaoValida = new Set(funcoes.map((f) => f.id));
+      /* Filial de cada função: a ficha nasce na filial da função. [C3-2] */
+      const filialDaFuncao = new Map(funcoes.map((f) => [f.id, f.sector.establishmentId]));
+      const filiaisAtivas = await prisma.establishment.findMany({
+        where: { organizationId: orgId, archivedAt: null },
+        select: { id: true },
+      });
+      const filialValida = new Set(filiaisAtivas.map((f) => f.id));
+      /* Uma filial só na empresa: é a de todos. */
+      const filialUnica = filiaisAtivas.length === 1 ? filiaisAtivas[0].id : null;
       const contratadaValida = new Set(contratadas.map((c) => c.id));
 
       const resultados: Resultado[] = [];
@@ -258,6 +283,22 @@ class PeopleImportController {
           if (jobRoleId && !funcaoValida.has(jobRoleId)) {
             throw new Error("Função não existe nesta empresa.");
           }
+          /*
+            Filial da linha: a da função; sem função, a informada; sem as
+            duas, a única da empresa, se houver uma só. A coluna da filial na
+            tela vem na C3-3. [C3-2]
+          */
+          const filialInformada = texto(linha.establishment_id);
+          if (filialInformada && !filialValida.has(filialInformada)) {
+            throw new Error("Filial não existe nesta empresa.");
+          }
+          if (jobRoleId && filialInformada && filialDaFuncao.get(jobRoleId) !== filialInformada) {
+            throw new Error("A função escolhida é de outra filial.");
+          }
+          const filial = jobRoleId
+            ? filialDaFuncao.get(jobRoleId) ?? null
+            : filialInformada ?? filialUnica;
+          const chave = matricula ? canonicalRegistration(matricula) : null;
 
           const bond = (texto(linha.bond) ?? WorkerBond.EMPLOYEE) as WorkerBond;
           if (!Object.values(WorkerBond).includes(bond)) {
@@ -292,7 +333,7 @@ class PeopleImportController {
 
           // Repetido dentro da própria planilha.
           if (taxId && cpfsDaLeva.has(taxId)) throw new Error("CPF repetido na planilha.");
-          if (matricula && matriculasDaLeva.has(matricula)) {
+          if (chave && matriculasDaLeva.has(`${filial ?? "-"}:${chave}`)) {
             throw new Error("Matrícula repetida na planilha.");
           }
           if (email && emailsDaLeva.has(email)) throw new Error("E-mail repetido na planilha.");
@@ -302,6 +343,7 @@ class PeopleImportController {
             id: true,
             taxId: true,
             registration: true,
+            establishmentId: true,
             jobRoleId: true,
             admittedAt: true,
             birthDate: true,
@@ -314,11 +356,27 @@ class PeopleImportController {
                   select: campos,
                 })
               : null,
-            matricula
-              ? prisma.employeeProfile.findFirst({
-                  where: { organizationId: orgId, registration: matricula },
-                  select: campos,
-                })
+            /*
+              A mesma matrícula existe em filiais diferentes (C3-2): procura
+              na filial da linha e nas fichas ainda sem filial (a pessoa pode
+              ter entrado antes sem função). Sem filial na linha, procura na
+              empresa. Só vale se achar uma ficha: com duas, não dá para
+              saber qual.
+            */
+            chave
+              ? prisma.employeeProfile
+                  .findMany({
+                    where: {
+                      organizationId: orgId,
+                      registrationKey: chave,
+                      ...(filial
+                        ? { OR: [{ establishmentId: filial }, { establishmentId: null }] }
+                        : {}),
+                    },
+                    select: campos,
+                    take: 2,
+                  })
+                  .then((achadas) => (achadas.length === 1 ? achadas[0] : null))
               : null,
             email
               ? prisma.employeeProfile.findFirst({
@@ -339,7 +397,7 @@ class PeopleImportController {
               orgId,
               profileId: jaExiste.id,
               atual: jaExiste,
-              daPlanilha: { taxId, matricula, jobRoleId, admittedAt, birthDate },
+              daPlanilha: { taxId, matricula, establishmentId: filial, jobRoleId, admittedAt, birthDate },
               simulacao,
             });
             registro.login = jaExiste.user.login;
@@ -366,7 +424,7 @@ class PeopleImportController {
           }
 
           if (taxId) cpfsDaLeva.add(taxId);
-          if (matricula) matriculasDaLeva.add(matricula);
+          if (chave) matriculasDaLeva.add(`${filial ?? "-"}:${chave}`);
           if (email) emailsDaLeva.add(email);
 
           const base = matricula
@@ -417,6 +475,7 @@ class PeopleImportController {
                 registration: matricula,
                 taxId,
                 jobRoleId,
+                establishmentId: filial,
                 admittedAt,
                 birthDate,
                 bond,
