@@ -39,6 +39,8 @@ export type ImportRow = {
   bond?: string;
   contractor_id?: string;
   org_role?: string;
+  /** A filial da linha; obrigatória com mais de uma na empresa. [C3-3] */
+  establishment_id?: string;
 };
 
 export type ImportResult = {
@@ -51,6 +53,8 @@ export type ImportResult = {
   login?: string;
   /** Conta nova aguardando o primeiro acesso: nenhuma senha sai daqui. [C1-7] */
   awaiting_first_access?: boolean;
+  /** A filial em que a linha cai. [C3-3] */
+  establishment?: { id: string; name: string } | null;
 };
 
 export type ImportReport = {

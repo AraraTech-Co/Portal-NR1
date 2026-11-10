@@ -56,6 +56,8 @@ async function pessoa(dados = true): Promise<string> {
     .send({
       people: [
         {
+          /* A organização de teste tem mais de uma filial. [C3-3] */
+          establishment_id: "aaaaaaaa-0001-4000-8000-000000000011",
           name: `Painel Pessoa ${seq} ${SUFIXO}`,
           registration: `PA${seq}${SUFIXO}`.slice(0, 18),
           ...(dados

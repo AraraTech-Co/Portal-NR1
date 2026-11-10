@@ -30,11 +30,13 @@ async function entrar(login: string) {
   return res.body.token as string;
 }
 
+/** A filial do seed: a organização de teste tem mais de uma, e a linha sem função diz qual; com função, vale a dela. [C3-3] */
+const FILIAL_DO_SEED = "aaaaaaaa-0001-4000-8000-000000000011";
 async function importar(people: Record<string, unknown>[], apply = true) {
   const res = await request(app)
     .post("/api/pessoas-acessos/importar")
     .set(as(master))
-    .send({ people, apply });
+    .send({ people: people.map((p) => (p.job_role_id ? p : { establishment_id: FILIAL_DO_SEED, ...p })), apply });
   // 200 na prévia, 201 quando grava.
   expect([200, 201], JSON.stringify(res.body)).toContain(res.status);
   return res.body as {

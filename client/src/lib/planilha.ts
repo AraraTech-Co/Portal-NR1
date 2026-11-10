@@ -19,6 +19,8 @@ export type LinhaDaPlanilha = {
   bond?: string;
   org_role?: string;
   contractor_id?: string;
+  /** A filial da linha, resolvida pelo nome ou pelo CNPJ. [C3-3] */
+  establishment_id?: string;
 };
 
 type LinhaLocal = LinhaDaPlanilha & { establishment?: string };
@@ -26,8 +28,11 @@ type LinhaLocal = LinhaDaPlanilha & { establishment?: string };
 export type FuncaoDaEmpresa = {
   id: string;
   name: string;
-  establishment?: { name: string } | null;
+  establishment?: { id?: string; name: string } | null;
 };
+
+/** As filiais ativas da empresa, como vêm de `/api/establishments`. [C3-3] */
+export type FilialDaEmpresa = { id: string; name: string; taxId: string | null };
 
 export type Lido = { rows: LinhaDaPlanilha[]; problems: string[] };
 
@@ -40,9 +45,6 @@ export type RotulosDaPlanilha = {
 /** A mesma regra do servidor: o que não cabe num nome. [B2-1-L] */
 const CPF_SOLTO = /\d{3}[.\s]?\d{3}[.\s]?\d{3}[-.\s]?\d{2}/;
 const DATA_SOLTA = /\d{2}\/\d{2}\/\d{4}|\d{4}-\d{2}-\d{2}/;
-
-/** A unidade não vai para o servidor: serve para achar a função certa. [CB-6] */
-
 
 /**
  * Os cabeçalhos que o portal reconhece.
@@ -59,7 +61,7 @@ export const CABECALHO_OFICIAL = [
   "cpf",
   "email",
   "funcao",
-  "unidade",
+  "filial",
   "admissao",
   "vinculo",
   "empresa contratada",
@@ -87,7 +89,9 @@ const COLUNAS: Record<string, keyof LinhaLocal> = {
   "empresa contratada": "contractor_id",
   empresa: "contractor_id",
   contratada: "contractor_id",
-  /// Desempata função de mesmo nome em duas unidades. [CB-6]
+  /// A filial da pessoa, pelo nome ou pelo CNPJ. [C3-3]
+  /// "unidade" é o nome antigo, das planilhas montadas antes. [CB-6]
+  filial: "establishment",
   unidade: "establishment",
   estabelecimento: "establishment",
 };
@@ -113,6 +117,19 @@ function semAcento(texto: string): string {
   return texto.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 }
 
+/** Pelo CNPJ (só os 14 dígitos contam) ou pelo nome, sem acento. [C3-3] */
+function acharFilial(
+  texto: string,
+  filiais: FilialDaEmpresa[],
+): FilialDaEmpresa | undefined {
+  const digitos = texto.replace(/\D/g, "");
+  if (digitos.length === 14) {
+    const porCnpj = filiais.find((f) => (f.taxId ?? "").replace(/\D/g, "") === digitos);
+    if (porCnpj) return porCnpj;
+  }
+  return filiais.find((f) => semAcento(f.name) === semAcento(texto));
+}
+
 function separador(linha: string): string {
   if (linha.includes("\t")) return "\t";
   if (linha.includes(";")) return ";";
@@ -125,12 +142,17 @@ function separador(linha: string): string {
  * Lê a planilha colada. O vínculo e a função chegam por nome na planilha e
  * saem daqui como código e id — quem monta a planilha escreve "Vendedor",
  * não um uuid. [S1-A]
+ *
+ * A filial chega pelo nome ou pelo CNPJ e sai como id; com mais de uma
+ * filial na empresa, é obrigatória. Sem a lista de filiais, a coluna só
+ * desempata a função pelo nome, como antes. [C3-3]
  */
 export function lerLinhas(
   texto: string,
   funcoes: FuncaoDaEmpresa[],
   empresas: { id: string; name: string }[],
   rotulos: RotulosDaPlanilha,
+  filiais: FilialDaEmpresa[] = [],
 ): Lido {
   const linhas = texto
     .split(/\r?\n/)
@@ -242,11 +264,33 @@ export function lerLinhas(
       );
       continue;
     }
+    const unidade = (row as LinhaLocal).establishment;
+    delete (row as LinhaLocal).establishment;
+    let filial: FilialDaEmpresa | undefined;
+    if (unidade && filiais.length > 0) {
+      filial = acharFilial(unidade, filiais);
+      if (!filial) {
+        problems.push(`Linha ${numero}: filial "${unidade}" não existe nesta empresa.`);
+        continue;
+      }
+      row.establishment_id = filial.id;
+    } else if (!unidade && filiais.length > 1) {
+      problems.push(
+        `Linha ${numero}: informe a filial — a empresa tem mais de uma. Use o nome ou o CNPJ da filial.`,
+      );
+      continue;
+    }
     if (row.job_role_id) {
       const nomeDaFuncao = row.job_role_id;
       let candidatas = porNome.get(semAcento(nomeDaFuncao)) ?? [];
-      const unidade = (row as LinhaLocal).establishment;
-      if (unidade) {
+      if (filial) {
+        const daFilial = filial;
+        candidatas = candidatas.filter((f) =>
+          f.establishment?.id
+            ? f.establishment.id === daFilial.id
+            : semAcento(f.establishment?.name ?? "") === semAcento(daFilial.name),
+        );
+      } else if (unidade) {
         candidatas = candidatas.filter(
           (f) => semAcento(f.establishment?.name ?? "") === semAcento(unidade),
         );
@@ -254,7 +298,7 @@ export function lerLinhas(
       if (candidatas.length === 0) {
         problems.push(
           unidade
-            ? `Linha ${numero}: função "${nomeDaFuncao}" não existe na unidade "${unidade}".`
+            ? `Linha ${numero}: função "${nomeDaFuncao}" não existe na filial "${unidade}".`
             : `Linha ${numero}: função "${nomeDaFuncao}" não existe.`,
         );
         delete row.job_role_id;
@@ -265,14 +309,13 @@ export function lerLinhas(
         problems.push(
           `Linha ${numero}: a função "${nomeDaFuncao}" existe em ${unidades.join(
             " e ",
-          )}. Acrescente a coluna "unidade" para dizer qual.`,
+          )}. Acrescente a coluna "filial" para dizer qual.`,
         );
         delete row.job_role_id;
       } else {
         row.job_role_id = candidatas[0]!.id;
       }
     }
-    delete (row as LinhaLocal).establishment;
     /*
       O papel chegava só como código interno, e a explicação nem o
       mencionava: a planilha passa a aceitar "Supervisor" como aceita

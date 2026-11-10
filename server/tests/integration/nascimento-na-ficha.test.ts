@@ -31,8 +31,13 @@ const entrar = async (login: string) => {
   return res.body as { token: string };
 };
 
+/** A filial do seed: a organização de teste tem mais de uma, e a linha sem função diz qual; com função, vale a dela. [C3-3] */
+const FILIAL_DO_SEED = "aaaaaaaa-0001-4000-8000-000000000011";
 const importar = (people: Record<string, unknown>[]) =>
-  request(app).post("/api/pessoas-acessos/importar").set(as(rh.token)).send({ people });
+  request(app)
+    .post("/api/pessoas-acessos/importar")
+    .set(as(rh.token))
+    .send({ people: people.map((p) => (p.job_role_id ? p : { establishment_id: FILIAL_DO_SEED, ...p })) });
 
 beforeAll(async () => {
   app = createApp();
