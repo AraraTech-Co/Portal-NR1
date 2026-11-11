@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { carregarOUltimo } from "@/lib/ultimo-pedido";
 import { Link } from "react-router-dom";
 import {
   AUDIT_ACTION_LABEL,
@@ -194,17 +195,28 @@ export function InspectionPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  /*
+    Só a resposta do último filtro vale: trocar de filial depressa disparava
+    dois pedidos, e o que voltava por último ganhava — o painel mostrava o
+    nome e o CNPJ de uma filial com a outra escolhida.
+  */
+  const carregar = useMemo(
+    () =>
+      carregarOUltimo((filial: string) => fetchInspection(filial || undefined), {
+        ok: (valor) => {
+          setData(valor);
+          setError(null);
+        },
+        erro: (err) => setError(err instanceof Error ? err.message : "Falha ao carregar"),
+        fim: () => setLoading(false),
+      }),
+    [],
+  );
+
   const load = useCallback(async () => {
     setLoading(true);
-    try {
-      setData(await fetchInspection(establishmentId || undefined));
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao carregar");
-    } finally {
-      setLoading(false);
-    }
-  }, [establishmentId]);
+    await carregar(establishmentId);
+  }, [carregar, establishmentId]);
 
   useEffect(() => {
     void load();
