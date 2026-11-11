@@ -195,3 +195,21 @@
   padding-inline: 0.4rem;
   line-height: 1;
 }
+
+/* Conflito da cópia entre filiais: a caixa ao lado do texto, alinhada no topo. [C3-8] */
+.op-copy-conflict {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.op-copy-conflict:last-of-type {
+  border-bottom: none;
+}
+
+.op-copy-conflict input {
+  margin-top: 0.2rem;
+  flex: none;
+}

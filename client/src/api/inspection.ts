@@ -165,6 +165,8 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   "user.legacy_classified": "Conta antiga classificada",
   /* A central deu unidade a um registro do histórico sem unidade. [C3-7] */
   "history.classify": "Registro antigo classificado numa unidade",
+  /* Estrutura copiada de outra filial. [C3-8] */
+  "establishment.copy": "Estrutura copiada de outra filial",
   "consulta.view": "Consulta abriu uma tela",
   /*
     Faltavam rótulo: o convite, a planilha e o que entrou depois. O Histórico

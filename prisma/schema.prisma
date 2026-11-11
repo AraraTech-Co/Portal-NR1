@@ -51,6 +51,8 @@ model User {
   tokens                  Token[]
   emailVerificationTokens EmailVerificationToken[]
   hazardsCreated        Hazard[]         @relation("HazardCreatedBy")
+  /// Cópias entre filiais feitas pela pessoa. [C3-8]
+  establishmentCopies   EstablishmentCopy[] @relation("EstablishmentCopyAuthor")
   assessmentsMade   RiskAssessment[] @relation("AssessmentAssessor")
   assessmentsValid  RiskAssessment[] @relation("AssessmentValidator")
   actionsAssigned   Action[]         @relation("ActionAssignee")
@@ -182,6 +184,8 @@ model Organization {
   memberships     Membership[]
   accounts        Account[]
   establishments  Establishment[]
+  /// Cópias entre filiais. [C3-8]
+  establishmentCopies EstablishmentCopy[]
   sectors         Sector[]
   jobRoles        JobRole[]
   activities      Activity[]
@@ -450,6 +454,9 @@ model Establishment {
   employeeProfiles    EmployeeProfile[]
   /// Ações do simulado desta unidade. [C3-6]
   actions             Action[]
+  /// Cópias entre filiais em que esta foi a origem ou o destino. [C3-8]
+  copiesFrom          EstablishmentCopy[] @relation("CopySource")
+  copiesTo            EstablishmentCopy[] @relation("CopyTarget")
 
   @@index([organizationId, archivedAt])
 }
@@ -466,6 +473,11 @@ model Sector {
   archivedAt      DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+  /// De onde veio, quando copiado de outra filial: procedência, sem chave
+  /// estrangeira (a origem pode ser arquivada). Nulo no que não foi copiado. [C3-8]
+  copiedFromId String?
+  /// Quando foi copiado. `updatedAt` depois disto = o destino mexeu. [C3-8]
+  copiedAt     DateTime?
 
   organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   establishment Establishment @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
@@ -475,6 +487,9 @@ model Sector {
 
   @@index([organizationId, archivedAt])
   @@index([establishmentId])
+
+  /// A mesma origem não é copiada duas vezes para o mesmo lugar. [C3-8]
+  @@unique([establishmentId, copiedFromId])
 }
 
 model JobRole {
@@ -488,6 +503,11 @@ model JobRole {
   archivedAt     DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
+  /// De onde veio, quando copiado de outra filial: procedência, sem chave
+  /// estrangeira (a origem pode ser arquivada). Nulo no que não foi copiado. [C3-8]
+  copiedFromId String?
+  /// Quando foi copiado. `updatedAt` depois disto = o destino mexeu. [C3-8]
+  copiedAt     DateTime?
 
   organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   sector       Sector            @relation(fields: [sectorId], references: [id], onDelete: Cascade)
@@ -499,6 +519,9 @@ model JobRole {
   @@index([organizationId, archivedAt])
   @@index([sectorId])
   @@index([sectorId, position])
+
+  /// A mesma origem não é copiada duas vezes para o mesmo lugar. [C3-8]
+  @@unique([sectorId, copiedFromId])
 }
 
 model Activity {
@@ -511,6 +534,11 @@ model Activity {
   archivedAt      DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+  /// De onde veio, quando copiado de outra filial: procedência, sem chave
+  /// estrangeira (a origem pode ser arquivada). Nulo no que não foi copiado. [C3-8]
+  copiedFromId String?
+  /// Quando foi copiado. `updatedAt` depois disto = o destino mexeu. [C3-8]
+  copiedAt     DateTime?
 
   organization  Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   establishment Establishment     @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
@@ -522,6 +550,9 @@ model Activity {
 
   @@index([organizationId, archivedAt])
   @@index([sectorId])
+
+  /// A mesma origem não é copiada duas vezes para o mesmo lugar. [C3-8]
+  @@unique([sectorId, copiedFromId])
 }
 
 /// N:N — uma função realiza várias atividades; uma atividade envolve várias funções.
@@ -599,6 +630,11 @@ model Hazard {
   archivedAt     DateTime?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+  /// De onde veio, quando copiado de outra filial: procedência, sem chave
+  /// estrangeira (a origem pode ser arquivada). Nulo no que não foi copiado. [C3-8]
+  copiedFromId String?
+  /// Quando foi copiado. `updatedAt` depois disto = o destino mexeu. [C3-8]
+  copiedAt     DateTime?
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   activity     Activity     @relation(fields: [activityId], references: [id], onDelete: Cascade)
@@ -608,6 +644,9 @@ model Hazard {
 
   @@index([organizationId, archivedAt])
   @@index([activityId])
+
+  /// A mesma origem não é copiada duas vezes para o mesmo lugar. [C3-8]
+  @@unique([activityId, copiedFromId])
 }
 
 model Risk {
@@ -621,6 +660,11 @@ model Risk {
   archivedAt         DateTime?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
+  /// De onde veio, quando copiado de outra filial: procedência, sem chave
+  /// estrangeira (a origem pode ser arquivada). Nulo no que não foi copiado. [C3-8]
+  copiedFromId String?
+  /// Quando foi copiado. `updatedAt` depois disto = o destino mexeu. [C3-8]
+  copiedAt     DateTime?
 
   organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   hazard       Hazard           @relation(fields: [hazardId], references: [id], onDelete: Cascade)
@@ -631,6 +675,9 @@ model Risk {
 
   @@index([organizationId, archivedAt])
   @@index([hazardId])
+
+  /// A mesma origem não é copiada duas vezes para o mesmo lugar. [C3-8]
+  @@unique([hazardId, copiedFromId])
 }
 
 /// Metodologia de avaliação. NÃO se presume matriz 5x5 como regra legal:
@@ -705,6 +752,11 @@ model RiskAssessment {
   supersededAt          DateTime?
   createdAt             DateTime         @default(now())
   updatedAt             DateTime         @updatedAt
+  /// De onde veio, quando copiado de outra filial: procedência, sem chave
+  /// estrangeira (a origem pode ser arquivada). Nulo no que não foi copiado. [C3-8]
+  copiedFromId String?
+  /// Quando foi copiado. `updatedAt` depois disto = o destino mexeu. [C3-8]
+  copiedAt     DateTime?
 
   organization       Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   risk               Risk                   @relation(fields: [riskId], references: [id], onDelete: Cascade)
@@ -716,6 +768,9 @@ model RiskAssessment {
 
   @@index([organizationId])
   @@index([riskId, status])
+
+  /// A mesma origem não é copiada duas vezes para o mesmo lugar. [C3-8]
+  @@unique([riskId, copiedFromId])
 }
 
 enum ControlType {
@@ -746,6 +801,11 @@ model ControlMeasure {
   archivedAt          DateTime?
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
+  /// De onde veio, quando copiado de outra filial: procedência, sem chave
+  /// estrangeira (a origem pode ser arquivada). Nulo no que não foi copiado. [C3-8]
+  copiedFromId String?
+  /// Quando foi copiado. `updatedAt` depois disto = o destino mexeu. [C3-8]
+  copiedAt     DateTime?
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   risk         Risk         @relation(fields: [riskId], references: [id], onDelete: Cascade)
@@ -753,6 +813,9 @@ model ControlMeasure {
 
   @@index([organizationId, archivedAt])
   @@index([riskId])
+
+  /// A mesma origem não é copiada duas vezes para o mesmo lugar. [C3-8]
+  @@unique([riskId, copiedFromId])
 }
 
 // ============================================================
@@ -1833,6 +1896,9 @@ enum NotificationKind {
   /// A denúncia identificada foi encerrada: quem relatou vê o resultado e
   /// dá ciência. [C1-5]
   ETHICS_REPORT_CLOSED
+  /// Avaliações copiadas de outra filial aguardam a validação de quem não
+  /// copiou. [C3-8]
+  UNIT_COPY_AWAITING_VALIDATION
 }
 
 model Notification {
@@ -2318,6 +2384,13 @@ model JobRoleRequirement {
   trainingId     String?
   validityMonths Int?
   createdAt      DateTime        @default(now())
+  /// De onde veio, quando copiado de outra filial: procedência, sem chave
+  /// estrangeira (a origem pode ser arquivada). Nulo no que não foi copiado. [C3-8]
+  copiedFromId String?
+  /// Quando foi copiado. `updatedAt` depois disto = o destino mexeu. [C3-8]
+  copiedAt     DateTime?
+  /// Para a cópia entre filiais saber se o destino mexeu. [C3-8]
+  updatedAt    DateTime  @default(now()) @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   jobRole      JobRole      @relation(fields: [jobRoleId], references: [id], onDelete: Cascade)
@@ -2325,6 +2398,9 @@ model JobRoleRequirement {
   certificates WorkerCertificate[]
 
   @@index([organizationId, jobRoleId])
+
+  /// A mesma origem não é copiada duas vezes para o mesmo lugar. [C3-8]
+  @@unique([jobRoleId, copiedFromId])
 }
 
 model WorkerCertificate {
@@ -2753,4 +2829,25 @@ model ManagedEstablishment {
 
   @@unique([membershipId, establishmentId])
   @@index([organizationId, establishmentId])
+}
+
+/// Uma cópia entre filiais: origem, destino, quem, quando e quantos itens
+/// por nível. [C3-8]
+model EstablishmentCopy {
+  id                    String   @id @default(uuid())
+  organizationId        String
+  sourceEstablishmentId String
+  targetEstablishmentId String
+  copiedById            String
+  /// Por nível: { criados, atualizados }.
+  counts                Json
+  createdAt             DateTime @default(now())
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  source       Establishment @relation("CopySource", fields: [sourceEstablishmentId], references: [id], onDelete: Cascade)
+  target       Establishment @relation("CopyTarget", fields: [targetEstablishmentId], references: [id], onDelete: Cascade)
+  copiedBy     User          @relation("EstablishmentCopyAuthor", fields: [copiedById], references: [id])
+
+  @@index([organizationId, createdAt])
+  @@index([targetEstablishmentId])
 }

@@ -128,3 +128,13 @@ export function canValidateAction(permission: string | undefined): boolean {
     permission === "user" ? "colaborador" : (permission ?? ""),
   );
 }
+
+/**
+ * Copiar setores, funções, atividades, perigos, riscos e medidas de uma
+ * filial para outra: o SST e o Master (resposta C, 10/11). O Dono não. [C3-8]
+ */
+const UNIT_COPY_ROLES: readonly string[] = ["master", "sst"];
+
+export function canCopyBetweenUnits(permission: string | undefined): boolean {
+  return UNIT_COPY_ROLES.includes(permission ?? "");
+}
