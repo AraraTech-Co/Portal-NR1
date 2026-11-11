@@ -37,6 +37,19 @@ inputs:
 runs:
   using: composite
   steps:
+    # Primeiro passo: sem a empresa da tela de login, ninguém com ficha
+    # entra. Para antes de qualquer ssh ou scp, sem tocar no servidor.
+    - name: Conferir a empresa da tela de login
+      shell: bash
+      env:
+        NR1_LOGIN_ORG_ID: ${{ inputs.nr1_login_org_id }}
+      run: |
+        set -euo pipefail
+        if ! [[ "$NR1_LOGIN_ORG_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+          echo "::error::Defina a variável NR1_LOGIN_ORG_ID (environment americana) com o id da empresa da tela de login."
+          exit 1
+        fi
+
     - name: SSH config
       shell: bash
       env:
@@ -95,12 +108,6 @@ runs:
         DOCKER_NETWORK: ${{ inputs.docker_network }}
       run: |
         set -euo pipefail
-        # Sem a empresa da tela de login, ninguém com ficha entra: para
-        # antes de mexer no container que está no ar.
-        if ! [[ "$NR1_LOGIN_ORG_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
-          echo "::error::Defina a variável NR1_LOGIN_ORG_ID (environment americana) com o id da empresa da tela de login."
-          exit 1
-        fi
         ssh standalone \
           REMOTE_DIR="$REMOTE_DIR" \
           NR1_IMAGE="$NR1_IMAGE" \
