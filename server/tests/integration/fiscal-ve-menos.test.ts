@@ -29,6 +29,8 @@ let fiscal: string;
 let rh: string;
 /** Um documento que o fiscal lia: geral, sem dono. */
 let docGeral = "";
+/** Um documento de uma pessoa. Os dois são do próprio teste, não do seed. */
+let docPessoal = "";
 /** Uma pessoa desligada com motivo — o motivo é o que não pode vazar. */
 let desligadoId = "";
 let desligadoPerfil = "";
@@ -43,13 +45,6 @@ beforeAll(async () => {
   app = createApp();
   fiscal = await entrar("teste.fiscal");
   rh = await entrar("teste.rh");
-
-  const geral = await prisma.hrDocument.findFirst({
-    where: { organizationId: ORG_ID, targetUserId: null },
-    select: { id: true },
-  });
-  expect(geral, "um documento geral do RH no seed").toBeTruthy();
-  docGeral = geral!.id;
 
   /*
     Sem alguém desligado com motivo, a conferência do motivo passaria por
@@ -79,9 +74,36 @@ beforeAll(async () => {
     },
   });
   desligadoPerfil = perfil.id;
+
+  /*
+    Os documentos do RH que o fiscal tenta abrir são criados aqui: num
+    banco novo, o seed não tem documento de pessoa, e o teste dependia do
+    que outros arquivos deixavam para trás.
+  */
+  const publicadoPor = await prisma.user.findUniqueOrThrow({
+    where: { login: "teste.rh" },
+    select: { id: true },
+  });
+  const documento = (titulo: string, targetUserId: string | null) =>
+    prisma.hrDocument.create({
+      data: {
+        organizationId: ORG_ID,
+        title: `${titulo} ${SUFIXO}`,
+        storagePath: `teste/fiscal-ve-menos-${SUFIXO}.pdf`,
+        fileName: "documento.pdf",
+        mimeType: "application/pdf",
+        sizeBytes: 1,
+        publishedById: publicadoPor.id,
+        targetUserId,
+      },
+      select: { id: true },
+    });
+  docGeral = (await documento("Regulamento interno", null)).id;
+  docPessoal = (await documento("Advertência", desligadoId)).id;
 });
 
 afterAll(async () => {
+  await prisma.hrDocument.deleteMany({ where: { id: { in: [docGeral, docPessoal].filter(Boolean) } } });
   await prisma.employeeProfile.deleteMany({ where: { id: desligadoPerfil } });
   await prisma.membership.deleteMany({ where: { userId: desligadoId } });
   await prisma.user.deleteMany({ where: { id: desligadoId } });
@@ -110,12 +132,7 @@ describe("a pasta do RH não é do fiscal [CB-43]", () => {
   });
 
   it("nem o documento geral, nem o de uma pessoa, abrem", async () => {
-    const pessoal = await prisma.hrDocument.findFirst({
-      where: { organizationId: ORG_ID, targetUserId: { not: null } },
-      select: { id: true },
-    });
-    expect(pessoal, "um documento de pessoa no seed").toBeTruthy();
-    for (const id of [docGeral, pessoal!.id]) {
+    for (const id of [docGeral, docPessoal]) {
       const res = await request(app).get(`/api/hr-documents/${id}`).set(as(fiscal));
       expect(res.status, JSON.stringify(res.body)).toBe(403);
     }
