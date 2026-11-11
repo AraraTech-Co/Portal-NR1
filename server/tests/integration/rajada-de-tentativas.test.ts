@@ -94,20 +94,41 @@ afterAll(async () => {
 describe("rajada simultânea [C1-7]", () => {
   it("primeiro acesso: 30 ao mesmo tempo, só 5 conferem a ficha, e a certa no fim não recebe ficha", async () => {
     const p = await pessoaNova(1);
-    /* Conta as consultas da ficha, chamando a original de verdade. */
+    /*
+      Conta as consultas da ficha, chamando a original de verdade. O espião
+      vê toda leitura de fichas do processo; a conferência do primeiro
+      acesso é a que procura este CPF nesta filial. As outras ficam
+      registradas, com a origem, para dizer de onde vieram se aparecerem.
+    */
     const consultaOriginal = prisma.employeeProfile.findMany.bind(prisma.employeeProfile);
+    const outras: string[] = [];
     const conferencias = vi
       .spyOn(prisma.employeeProfile, "findMany")
-      .mockImplementation(((args: never) => consultaOriginal(args)) as never);
+      .mockImplementation(((args: { where?: Record<string, unknown> }) => {
+        const w = args?.where ?? {};
+        if (!(w.taxId === p.cpf && w.establishmentId === FILIAL)) {
+          const origem = (new Error().stack ?? "")
+            .split("\n")
+            .find((l) => l.includes("/src/") && !l.includes("node_modules"));
+          outras.push(`${Object.keys(w).join(",")} @ ${origem?.trim() ?? "?"}`);
+        }
+        return consultaOriginal(args as never);
+      }) as never);
+    const daConferencia = () =>
+      conferencias.mock.calls.filter(([args]) => {
+        const w = (args as { where?: Record<string, unknown> })?.where ?? {};
+        return w.taxId === p.cpf && w.establishmentId === FILIAL;
+      }).length;
 
     // Canário: a contagem enxerga a conferência do servidor.
     const canario = await request(app)
       .post("/api/auth/primeiro-acesso")
       .send({ matricula: p.matricula, cpf: p.cpf, nascimento: "1901-01-01", establishment_id: FILIAL });
     expect(canario.status, "o canário chega à recusa normal").toBe(400);
-    expect(conferencias.mock.calls.length, "a contagem vê a conferência").toBe(1);
+    expect(daConferencia(), "a contagem vê a conferência").toBe(1);
     await prisma.authLockout.deleteMany({});
     conferencias.mockClear();
+    outras.length = 0;
 
     const datas = Array.from({ length: RAJADA - 1 }, (_, i) => `19${50 + i}-01-01`).concat(["1990-03-15"]);
     const respostas = await Promise.all(
@@ -116,7 +137,15 @@ describe("rajada simultânea [C1-7]", () => {
       ),
     );
 
-    expect(conferencias.mock.calls.length, "conferências na rajada").toBeLessThanOrEqual(5);
+    const total = conferencias.mock.calls.length;
+    /* Leitura de ficha que não é a conferência caiu na rajada: diz qual. */
+    if (outras.length > 0) {
+      console.warn(`[rajada] ${outras.length} leitura(s) de ficha fora da conferência: ${JSON.stringify(outras)}`);
+    }
+    expect(
+      daConferencia(),
+      `conferências na rajada (leituras de ficha no processo: ${total}; outras: ${JSON.stringify(outras)})`,
+    ).toBeLessThanOrEqual(5);
     expect(respostas.filter((r) => r.status === 500).length, "nenhum erro interno").toBe(0);
     // A certa só leva ficha se estiver entre as 5 primeiras a chegar.
     const comFicha = respostas.filter((r) => r.body?.token).length;
