@@ -7,7 +7,14 @@ import { mudancasDesdeAEmissao } from "../helper/ordem-desatualizada";
 import { formatCalendarDay } from "../helper/calendar-day";
 import { canSeeAllInModule, isReadOnlyRole } from "../helper/module-access";
 import type { AuthRequest } from "../types/auth";
-import { NOT_FOUND_BODY, actionReadScope, scopeOfRequest, visibleUnits } from "../helper/unit-scope";
+import {
+  NOT_FOUND_BODY,
+  actionInUnits,
+  actionReadScope,
+  actionWithoutUnit,
+  scopeOfRequest,
+  visibleUnits,
+} from "../helper/unit-scope";
 import {
   ACTION_STATUS_LABEL,
   PARTICIPATION_TYPE_LABEL,
@@ -248,8 +255,13 @@ class InspectionController {
           where: {
             organizationId: orgId,
             AND: [
+              /*
+                Filtrado por unidade: as ações dela, pela regra do recorte, e
+                as sem unidade nenhuma, como a central vê. A do simulado de
+                outra unidade fica fora. [C3-6]
+              */
               ...(establishmentId
-                ? [{ OR: [{ risk: { hazard: { activity: { establishmentId } } } }, { riskId: null }] }]
+                ? [{ OR: [actionInUnits([establishmentId]), actionWithoutUnit()] }]
                 : []),
               /* As ações que a pessoa vê no Plano de ação. */
               actionReadScope(escopo),

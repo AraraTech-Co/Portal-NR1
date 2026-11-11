@@ -275,6 +275,22 @@ export function actionInUnits(unidades: string[]): Record<string, unknown> {
   };
 }
 
+/**
+ * Filtro Prisma das ações sem unidade nenhuma pela regra de `actionUnitOf`:
+ * sem risco, sem ocorrência e sem mudança com unidade, e sem a unidade do
+ * simulado. São as da central. [C3-6]
+ */
+export function actionWithoutUnit(): Record<string, unknown> {
+  return {
+    riskId: null,
+    establishmentId: null,
+    AND: [
+      { OR: [{ occurrenceId: null }, { occurrence: { establishmentId: null } }] },
+      { OR: [{ changeEventId: null }, { changeEvent: { establishmentId: null } }] },
+    ],
+  };
+}
+
 /** Quem executa a ação: o responsável; sem ele, quem abriu. Vê e executa a sua sempre. */
 export function executesAction(scope: UnitScope, action: { assigneeId: string | null; createdById: string }): boolean {
   return (action.assigneeId || action.createdById) === scope.userId;

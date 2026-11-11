@@ -5,6 +5,7 @@ import { Establishment } from "../model/schema/Establishment/Establishment";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { REQUIRED_PGR_DOCUMENTS } from "../helper/compliance";
 import { writeAudit } from "../helper/audit";
+import { actionInUnits } from "../helper/unit-scope";
 import { empregadorDe, empregadorGravado } from "../helper/empregador";
 import { isPgrDocumentType } from "../constants";
 import type { AuthRequest } from "../types/auth";
@@ -108,13 +109,14 @@ async function buildActionPlanSnapshot(
       organizationId,
       /*
         O plano por unidade levava junto toda ação sem risco da organização:
-        o documento de uma unidade descrevia ação de outra. Ação sem risco
-        não pertence a unidade nenhuma e fica no documento da organização.
-        [S2-F] [S6-D]
+        o documento de uma unidade descrevia ação de outra. [S2-F] [S6-D]
+
+        O plano da unidade leva as ações dela pela mesma regra do recorte:
+        a do risco e, sem risco, a da ocorrência, a da mudança e a do
+        simulado. A ação sem unidade nenhuma fica no documento da
+        organização. O PGR já emitido não muda: é retrato. [C3-6]
       */
-      ...(establishmentId
-        ? { risk: { hazard: { activity: { establishmentId } } } }
-        : {}),
+      ...(establishmentId ? actionInUnits([establishmentId]) : {}),
     },
     include: {
       risk: true,
