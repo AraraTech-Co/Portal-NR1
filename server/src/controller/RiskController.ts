@@ -874,7 +874,11 @@ class RiskController {
       // Plano de ação só filtrava por situação: não dava para ver uma
       // unidade de cada vez. [S6-D] [CB-24]
       if (establishmentId) {
-        where.risk = { hazard: { activity: { establishmentId } } };
+        /* A do risco e, sem risco, a do simulado gravada na ação. [C3-6] */
+        where.OR = [
+          { risk: { hazard: { activity: { establishmentId } } } },
+          { riskId: null, establishmentId },
+        ];
       }
       /*
         Unidades geridas e a de trabalho, mais as ações que a pessoa executa;
@@ -894,6 +898,8 @@ class RiskController {
           validatedBy: { select: { id: true, name: true } },
           /* Critério registrado depois da validação: quem e quando. [B3-4-A] */
           effectivenessCriteriaLateBy: { select: { id: true, name: true } },
+          /* A unidade gravada na ação do simulado. [C3-6] */
+          establishment: { select: { id: true, name: true } },
           risk: {
             select: {
               description: true,
@@ -912,11 +918,12 @@ class RiskController {
         },
       });
       res.json({
-        actions: rows.map(({ risk, ...a }) => ({
+        actions: rows.map(({ risk, establishment, ...a }) => ({
           ...a,
           risk_description: risk?.description ?? null,
           /// O detalhe da ação não dizia de que unidade ela é. [CB-24]
-          establishment: risk?.hazard.activity.establishment ?? null,
+          /// Sem risco, a do simulado. [C3-6]
+          establishment: risk?.hazard.activity.establishment ?? establishment ?? null,
           activity: risk?.hazard.activity.name ?? null,
         })),
       });
@@ -939,7 +946,10 @@ class RiskController {
         due_date,
         deadline_justification,
         effectiveness_criteria,
+        drill_id,
       } = req.body as {
+        /** Simulado de onde a ação nasce: a ação fica com a unidade dele. [C3-6] */
+        drill_id?: string;
         title?: string;
         description?: string;
         risk_id?: string;
@@ -989,11 +999,7 @@ class RiskController {
         res.status(400).json({ message: "Responsável não é da organização." });
         return;
       }
-      /*
-        Ação sem risco (como a aberta pelo achado do simulado) não tem
-        unidade: fica com a central, com quem a executa e com quem a abriu.
-        Abrir continua possível para quem já podia. [C2-13]
-      */
+      let unidadeDoRisco: string | null = null;
       if (risk_id) {
         const risk = await prisma.risk.findFirst({
           where: { id: risk_id, organizationId: orgId, archivedAt: null },
@@ -1004,6 +1010,39 @@ class RiskController {
           res.status(400).json({ message: "Risco inválido." });
           return;
         }
+        unidadeDoRisco = risk.hazard.activity.establishmentId;
+      }
+      /*
+        Ação sem risco e sem simulado não tem unidade: fica com a central, com
+        quem a executa e com quem a abriu. Abrir continua possível para quem
+        já podia. [C2-13]
+
+        A aberta pelo achado do simulado guarda o simulado e a unidade dele:
+        o gestor da unidade a vê e age nela. Só abre pelo simulado quem gere
+        a unidade (ou a central); fora disso, igual a simulado que não existe.
+        [C3-6]
+      */
+      let unidadeDoSimulado: string | null = null;
+      if (drill_id !== undefined && drill_id !== null) {
+        const drill =
+          typeof drill_id === "string"
+            ? await prisma.emergencyDrill.findFirst({
+                where: { id: drill_id, procedure: { organizationId: orgId } },
+                select: { procedure: { select: { establishmentId: true } } },
+              })
+            : null;
+        const visao = drill ? collectiveView(escopo, drill.procedure.establishmentId) : "none";
+        /*
+          Com o risco junto, a unidade da ação é a do risco: um simulado de
+          outra unidade gravaria uma unidade que contradiz a efetiva. [C3-6]
+        */
+        const divergeDoRisco =
+          Boolean(risk_id) && unidadeDoRisco !== drill?.procedure.establishmentId;
+        if (!drill || (visao !== "whole" && visao !== "manager") || divergeDoRisco) {
+          res.status(400).json({ message: "Simulado inválido." });
+          return;
+        }
+        unidadeDoSimulado = drill.procedure.establishmentId;
       }
       if (control_id) {
         const control = await new ControlMeasure().read.one({
@@ -1071,9 +1110,12 @@ class RiskController {
         riskLevelAtOpening: nivel,
         effectivenessCriteria: criterio,
         createdById: userId,
+        drillId: unidadeDoSimulado ? drill_id! : null,
+        establishmentId: unidadeDoSimulado,
       });
       await audit(req, "action.create", "Risk", risk_id ?? row.id, null, {
         title: row.title,
+        ...(row.drillId ? { drillId: row.drillId } : {}),
         priority: row.priority,
         dueDate: row.dueDate,
         deadlineJustification: row.deadlineJustification,

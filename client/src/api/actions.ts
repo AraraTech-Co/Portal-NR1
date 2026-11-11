@@ -27,6 +27,8 @@ export type ActionRow = {
   assignee?: { id: string; name: string } | null;
   /** De que unidade é a ação, pelo risco a que ela se liga. [S6-D] [CB-24] */
   establishment?: { id: string; name: string } | null;
+  /** Simulado de onde a ação nasceu: a unidade é a dele. [C3-6] */
+  drillId?: string | null;
   activity?: string | null;
   risk_description?: string | null;
   createdAt: string;
@@ -110,6 +112,8 @@ export async function createActionFromFinding(input: {
   priority: string;
   /** Obrigatório: a ação não abre sem ele. [B3-4-A] */
   effectiveness_criteria: string;
+  /** O simulado do achado: a ação fica com a unidade dele. [C3-6] */
+  drill_id?: string;
 }) {
   return request<{ action: { id: string; title: string } }>("/api/actions", {
     method: "POST",
