@@ -138,6 +138,7 @@ jobs:
           nr1_database_url: ${{ secrets.NR1_DATABASE_URL }}
           nr1_auth_secret: ${{ secrets.NR1_AUTH_SECRET }}
           nr1_public_url: ${{ vars.NR1_PUBLIC_URL }}
+          nr1_login_org_id: ${{ vars.NR1_LOGIN_ORG_ID }}
           nr1_host_port: ${{ vars.NR1_HOST_PORT || '10000' }}
           docker_network: ${{ vars.DOCKER_NETWORK || 'sgc-network' }}
           dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}

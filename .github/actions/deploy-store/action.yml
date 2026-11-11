@@ -19,6 +19,10 @@ inputs:
     required: true
   nr1_public_url:
     required: true
+  # Empresa da tela de login: o id da Americana. Sem ele, com mais de uma
+  # empresa ativa, a tela só oferece "Externo". [C3-2] [R5]
+  nr1_login_org_id:
+    required: true
   nr1_host_port:
     required: false
     default: "10000"
@@ -86,16 +90,24 @@ runs:
         NR1_DATABASE_URL: ${{ inputs.nr1_database_url }}
         NR1_AUTH_SECRET: ${{ inputs.nr1_auth_secret }}
         NR1_PUBLIC_URL: ${{ inputs.nr1_public_url }}
+        NR1_LOGIN_ORG_ID: ${{ inputs.nr1_login_org_id }}
         NR1_HOST_PORT: ${{ inputs.nr1_host_port }}
         DOCKER_NETWORK: ${{ inputs.docker_network }}
       run: |
         set -euo pipefail
+        # Sem a empresa da tela de login, ninguém com ficha entra: para
+        # antes de mexer no container que está no ar.
+        if ! [[ "$NR1_LOGIN_ORG_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+          echo "::error::Defina a variável NR1_LOGIN_ORG_ID (environment americana) com o id da empresa da tela de login."
+          exit 1
+        fi
         ssh standalone \
           REMOTE_DIR="$REMOTE_DIR" \
           NR1_IMAGE="$NR1_IMAGE" \
           NR1_DATABASE_URL="$NR1_DATABASE_URL" \
           NR1_AUTH_SECRET="$NR1_AUTH_SECRET" \
           NR1_PUBLIC_URL="$NR1_PUBLIC_URL" \
+          NR1_LOGIN_ORG_ID="$NR1_LOGIN_ORG_ID" \
           NR1_HOST_PORT="$NR1_HOST_PORT" \
           DOCKER_NETWORK="$DOCKER_NETWORK" \
           bash -s <<'REMOTE'
@@ -108,6 +120,7 @@ runs:
           printf 'NR1_DATABASE_URL=%s\n' "$NR1_DATABASE_URL"
           printf 'NR1_AUTH_SECRET=%s\n' "$NR1_AUTH_SECRET"
           printf 'NR1_PUBLIC_URL=%s\n' "$NR1_PUBLIC_URL"
+          printf 'NR1_LOGIN_ORG_ID=%s\n' "$NR1_LOGIN_ORG_ID"
           printf 'NR1_HOST_PORT=%s\n' "$NR1_HOST_PORT"
           printf 'DOCKER_NETWORK=%s\n' "$DOCKER_NETWORK"
         } > "$ENV_FILE"
