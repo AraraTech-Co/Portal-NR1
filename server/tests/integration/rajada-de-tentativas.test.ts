@@ -4,6 +4,8 @@ import request from "supertest";
 import type { Express } from "express";
 import { createApp } from "../../src/app";
 import prisma from "../../src/model/prisma";
+import { canonicalRegistration, firstAccessKey } from "../../src/helper/auth-attempts";
+import { FIRST_ACCESS_DENIED } from "../../src/controller/FirstAccessController";
 
 /**
  * O limite de 5 erros vale também contra rajada. [C1-7]
@@ -92,7 +94,14 @@ afterAll(async () => {
 });
 
 describe("rajada simultânea [C1-7]", () => {
-  it("primeiro acesso: 30 ao mesmo tempo, só 5 conferem a ficha, e a certa no fim não recebe ficha", async () => {
+  /*
+    A rajada é só de datas erradas, e a certa vem depois, sozinha. Com a
+    certa no meio da rajada, a ordem de chegada decidia o resultado: quando
+    ela era atendida entre as 5 primeiras, o acerto zerava a trava e as
+    erradas ainda na fila ganhavam mais 5 vagas. Zerar no acerto é a regra
+    (teste abaixo); o que se mede aqui é a trava contra a rajada.
+  */
+  it("primeiro acesso: 29 erradas ao mesmo tempo, só 5 conferem a ficha, e a certa depois fica travada", async () => {
     const p = await pessoaNova(1);
     /*
       Conta as consultas da ficha, chamando a original de verdade. O espião
@@ -130,7 +139,7 @@ describe("rajada simultânea [C1-7]", () => {
     conferencias.mockClear();
     outras.length = 0;
 
-    const datas = Array.from({ length: RAJADA - 1 }, (_, i) => `19${50 + i}-01-01`).concat(["1990-03-15"]);
+    const datas = Array.from({ length: RAJADA - 1 }, (_, i) => `19${50 + i}-01-01`);
     const respostas = await Promise.all(
       datas.map((nascimento) =>
         request(app).post("/api/auth/primeiro-acesso").send({ matricula: p.matricula, cpf: p.cpf, nascimento, establishment_id: FILIAL }),
@@ -146,11 +155,42 @@ describe("rajada simultânea [C1-7]", () => {
       daConferencia(),
       `conferências na rajada (leituras de ficha no processo: ${total}; outras: ${JSON.stringify(outras)})`,
     ).toBeLessThanOrEqual(5);
+    expect(daConferencia(), "a rajada chega à conferência: as 5 vagas são usadas").toBe(5);
     expect(respostas.filter((r) => r.status === 500).length, "nenhum erro interno").toBe(0);
-    // A certa só leva ficha se estiver entre as 5 primeiras a chegar.
-    const comFicha = respostas.filter((r) => r.body?.token).length;
-    expect(comFicha).toBeLessThanOrEqual(1);
-    expect(await prisma.activationToken.count({ where: { userId: p.userId } })).toBe(comFicha);
+    expect(respostas.every((r) => !r.body?.token), "nenhuma errada leva ficha").toBe(true);
+
+    /* A certa, depois da rajada: travada, com a mesma resposta de dado errado. */
+    const certa = await request(app)
+      .post("/api/auth/primeiro-acesso")
+      .send({ matricula: p.matricula, cpf: p.cpf, nascimento: "1990-03-15", establishment_id: FILIAL });
+    expect(certa.status, JSON.stringify(certa.body)).toBe(400);
+    expect(certa.body).toMatchObject({ message: FIRST_ACCESS_DENIED });
+    expect(certa.body.token).toBeUndefined();
+    expect(daConferencia(), "travada, a certa nem chega a conferir").toBe(5);
+    expect(await prisma.activationToken.count({ where: { userId: p.userId } })).toBe(0);
+  });
+
+  it("primeiro acesso: o acerto zera a trava, e a errada seguinte conta de novo a partir de 1", async () => {
+    await prisma.authLockout.deleteMany({});
+    const p = await pessoaNova(5);
+    const chave = firstAccessKey(`filial:${FILIAL}:${canonicalRegistration(p.matricula)}`);
+    const tentar = (nascimento: string) =>
+      request(app)
+        .post("/api/auth/primeiro-acesso")
+        .send({ matricula: p.matricula, cpf: p.cpf, nascimento, establishment_id: FILIAL });
+
+    for (const nascimento of ["1951-01-01", "1952-01-01", "1953-01-01"]) {
+      expect((await tentar(nascimento)).status).toBe(400);
+    }
+    expect((await prisma.authLockout.findUnique({ where: { key: chave } }))?.failures).toBe(3);
+
+    const certa = await tentar("1990-03-15");
+    expect(certa.status, JSON.stringify(certa.body)).toBe(200);
+    expect(certa.body.token).toBeTruthy();
+    expect(await prisma.authLockout.findUnique({ where: { key: chave } }), "o acerto zera a trava").toBeNull();
+
+    expect((await tentar("1954-01-01")).status).toBe(400);
+    expect((await prisma.authLockout.findUnique({ where: { key: chave } }))?.failures).toBe(1);
   });
 
   it("login: 30 senhas ao mesmo tempo na mesma conta, só 5 chegam ao bcrypt", async () => {
