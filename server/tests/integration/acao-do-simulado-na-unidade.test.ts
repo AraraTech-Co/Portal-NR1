@@ -28,6 +28,9 @@ const outra = { orgId: "" };
 let loja = "";
 let ag = "";
 let simuladoDaLoja = "";
+let simuladoDaAg = "";
+let riscoDaLoja = "";
+let riscoDaAg = "";
 let simuladoDeOutraEmpresa = "";
 const id: Record<string, string> = {};
 const token: Record<string, string> = {};
@@ -63,6 +66,29 @@ async function pessoa(nome: string, role: Role, filial: string | null, gere: str
   const res = await request(app).post("/api/auth").send({ login, password: SENHA });
   expect(res.status, `login de ${login}`).toBe(200);
   token[nome] = res.body.token;
+}
+
+/** Um risco numa unidade: setor → atividade → perigo → risco. */
+async function risco(establishmentId: string, criadoPor: string) {
+  const setor = await prisma.sector.create({
+    data: { organizationId: empresa.orgId, establishmentId, name: `Setor ${establishmentId.slice(0, 4)}` },
+  });
+  const atividade = await prisma.activity.create({
+    data: { organizationId: empresa.orgId, establishmentId, sectorId: setor.id, name: "Repor estoque" },
+  });
+  const perigo = await prisma.hazard.create({
+    data: {
+      organizationId: empresa.orgId,
+      activityId: atividade.id,
+      description: "Queda de caixa",
+      createdById: criadoPor,
+    },
+  });
+  return (
+    await prisma.risk.create({
+      data: { organizationId: empresa.orgId, hazardId: perigo.id, description: "Lesão no pé" },
+    })
+  ).id;
 }
 
 async function simulado(orgId: string, establishmentId: string, criadoPor: string) {
@@ -119,7 +145,12 @@ beforeAll(async () => {
   await pessoa("Lia", Role.GERENTE, loja, [loja]);
   await pessoa("Hugo", Role.GERENTE, ag, [ag]);
   await pessoa("Ana", Role.COLABORADOR, loja);
+  /* O Ivo trabalha na AG, mas gere só a Loja: na AG ele é trabalhador. */
+  await pessoa("Ivo", Role.GERENTE, ag, [loja]);
   simuladoDaLoja = await simulado(empresa.orgId, loja, id.Gil);
+  simuladoDaAg = await simulado(empresa.orgId, ag, id.Hugo);
+  riscoDaLoja = await risco(loja, id.Sara);
+  riscoDaAg = await risco(ag, id.Sara);
 
   const alheia = await prisma.organization.create({ data: { name: `C36 Alheia ${SUFIXO}` } });
   outra.orgId = alheia.id;
@@ -133,6 +164,10 @@ afterAll(async () => {
     await prisma.notification.deleteMany({ where: { organizationId: orgId } });
     await prisma.auditEvent.deleteMany({ where: { organizationId: orgId } });
     await prisma.action.deleteMany({ where: { organizationId: orgId } });
+    await prisma.risk.deleteMany({ where: { organizationId: orgId } });
+    await prisma.hazard.deleteMany({ where: { organizationId: orgId } });
+    await prisma.activity.deleteMany({ where: { organizationId: orgId } });
+    await prisma.sector.deleteMany({ where: { organizationId: orgId } });
     await prisma.emergencyDrill.deleteMany({ where: { procedure: { organizationId: orgId } } });
     await prisma.emergencyProcedure.deleteMany({ where: { organizationId: orgId } });
     await prisma.employeeProfile.deleteMany({ where: { organizationId: orgId } });
@@ -201,6 +236,30 @@ describe("a ação do simulado é da unidade do simulado [C3-6]", () => {
     const res = await abrir("Hugo", { drill_id: simuladoDaLoja, assignee_id: id.Hugo });
     expect(res.status).toBe(400);
     expect(res.body.message).toBe("Simulado inválido.");
+  });
+
+  it("quem só trabalha na unidade do simulado, sem geri-la, não abre ação por ele", async () => {
+    const antes = await prisma.action.count({ where: { organizationId: empresa.orgId } });
+    const res = await abrir("Ivo", { drill_id: simuladoDaAg, assignee_id: id.Ivo });
+    expect(res.status, JSON.stringify(res.body)).toBe(400);
+    expect(res.body.message).toBe("Simulado inválido.");
+    expect(await prisma.action.count({ where: { organizationId: empresa.orgId } }), "nenhuma ação criada").toBe(antes);
+    const naQueGere = await abrir("Ivo", { drill_id: simuladoDaLoja });
+    expect(naQueGere.status, "na Loja, que ele gere, abre").toBe(201);
+  });
+
+  it("risco e simulado juntos: só da mesma unidade", async () => {
+    const divergente = await abrir("Sara", { drill_id: simuladoDaLoja, risk_id: riscoDaAg });
+    expect(divergente.status, JSON.stringify(divergente.body)).toBe(400);
+    expect(divergente.body.message).toBe("Simulado inválido.");
+
+    const mesma = await abrir("Sara", { drill_id: simuladoDaLoja, risk_id: riscoDaLoja });
+    expect(mesma.status, JSON.stringify(mesma.body)).toBe(201);
+    const gravada = await prisma.action.findUniqueOrThrow({
+      where: { id: mesma.body.action.id },
+      select: { establishmentId: true, drillId: true, riskId: true },
+    });
+    expect(gravada).toEqual({ establishmentId: loja, drillId: simuladoDaLoja, riskId: riscoDaLoja });
   });
 
   it("simulado de outra empresa ou que não existe é recusado", async () => {

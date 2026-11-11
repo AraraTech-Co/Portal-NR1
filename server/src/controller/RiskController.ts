@@ -999,6 +999,19 @@ class RiskController {
         res.status(400).json({ message: "Responsável não é da organização." });
         return;
       }
+      let unidadeDoRisco: string | null = null;
+      if (risk_id) {
+        const risk = await prisma.risk.findFirst({
+          where: { id: risk_id, organizationId: orgId, archivedAt: null },
+          select: { id: true, hazard: { select: { activity: { select: { establishmentId: true } } } } },
+        });
+        const visao = risk ? collectiveView(escopo, risk.hazard.activity.establishmentId) : "none";
+        if (!risk || (visao !== "whole" && visao !== "manager")) {
+          res.status(400).json({ message: "Risco inválido." });
+          return;
+        }
+        unidadeDoRisco = risk.hazard.activity.establishmentId;
+      }
       /*
         Ação sem risco e sem simulado não tem unidade: fica com a central, com
         quem a executa e com quem a abriu. Abrir continua possível para quem
@@ -1019,22 +1032,17 @@ class RiskController {
               })
             : null;
         const visao = drill ? collectiveView(escopo, drill.procedure.establishmentId) : "none";
-        if (!drill || (visao !== "whole" && visao !== "manager")) {
+        /*
+          Com o risco junto, a unidade da ação é a do risco: um simulado de
+          outra unidade gravaria uma unidade que contradiz a efetiva. [C3-6]
+        */
+        const divergeDoRisco =
+          Boolean(risk_id) && unidadeDoRisco !== drill?.procedure.establishmentId;
+        if (!drill || (visao !== "whole" && visao !== "manager") || divergeDoRisco) {
           res.status(400).json({ message: "Simulado inválido." });
           return;
         }
         unidadeDoSimulado = drill.procedure.establishmentId;
-      }
-      if (risk_id) {
-        const risk = await prisma.risk.findFirst({
-          where: { id: risk_id, organizationId: orgId, archivedAt: null },
-          select: { id: true, hazard: { select: { activity: { select: { establishmentId: true } } } } },
-        });
-        const visao = risk ? collectiveView(escopo, risk.hazard.activity.establishmentId) : "none";
-        if (!risk || (visao !== "whole" && visao !== "manager")) {
-          res.status(400).json({ message: "Risco inválido." });
-          return;
-        }
       }
       if (control_id) {
         const control = await new ControlMeasure().read.one({
