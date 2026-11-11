@@ -1,11 +1,13 @@
-import { describe, expect, it, beforeAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import { createApp } from "../../src/app";
 import type { Express } from "express";
 import { REQUIRED_PGR_DOCUMENTS } from "../../src/helper/compliance";
+import prisma from "../../src/model/prisma";
 
 const RISK_ID = "00000000-0000-4000-8000-000000000015";
 const EST_ID = "00000000-0000-4000-8000-000000000010";
+const ORG_ID = "00000000-0000-4000-8000-000000000001";
 
 async function login(app: Express, loginId: string) {
   const res = await request(app)
@@ -29,9 +31,36 @@ describe("PGR documents + inventory + change events", () => {
   let app: Express;
   let token: string;
 
+  /*
+    O plano de ação não é emitido vazio: o teste abre a própria ação no
+    risco do seed. Num banco novo, o seed não tem ação, e o teste dependia
+    do que outros arquivos deixavam para trás.
+  */
+  let acaoDoTeste = "";
+
   beforeAll(async () => {
     app = createApp();
     token = await login(app, "admin");
+    const admin = await prisma.user.findUniqueOrThrow({ where: { login: "admin" }, select: { id: true } });
+    acaoDoTeste = (
+      await prisma.action.create({
+        data: {
+          organizationId: ORG_ID,
+          title: `Ação do teste de documentos ${Date.now().toString(36)}`,
+          sourceType: "RISK",
+          riskId: RISK_ID,
+          assigneeId: admin.id,
+          createdById: admin.id,
+          dueDate: new Date(Date.now() + 7 * 24 * 3600_000),
+          effectivenessCriteria: "Conferido na próxima inspeção.",
+        },
+        select: { id: true },
+      })
+    ).id;
+  });
+
+  afterAll(async () => {
+    if (acaoDoTeste) await prisma.action.deleteMany({ where: { id: acaoDoTeste } });
   });
 
   it("returns live inventory projection", async () => {
