@@ -19,10 +19,13 @@ inputs:
     required: true
   nr1_public_url:
     required: true
-  # Empresa da tela de login: o id da Americana. Sem ele, com mais de uma
-  # empresa ativa, a tela só oferece "Externo". [C3-2] [R5]
+  # Empresa da tela de login. Opcional: sem ele, a tela mostra as filiais
+  # da única empresa ativa do banco (o caso da Americana, uma empresa com
+  # filiais). Com mais de uma empresa ativa, sem ele a tela só oferece
+  # "Externo", e o Início do Master avisa. [C3-2]
   nr1_login_org_id:
-    required: true
+    required: false
+    default: ""
   nr1_host_port:
     required: false
     default: "10000"
@@ -37,16 +40,21 @@ inputs:
 runs:
   using: composite
   steps:
-    # Primeiro passo: sem a empresa da tela de login, ninguém com ficha
-    # entra. Para antes de qualquer ssh ou scp, sem tocar no servidor.
+    # Primeiro passo: a empresa da tela de login é opcional, mas, se vier,
+    # tem de ser um id. Um valor errado para antes de qualquer ssh ou scp,
+    # sem tocar no servidor.
     - name: Conferir a empresa da tela de login
       shell: bash
       env:
         NR1_LOGIN_ORG_ID: ${{ inputs.nr1_login_org_id }}
       run: |
         set -euo pipefail
+        if [ -z "$NR1_LOGIN_ORG_ID" ]; then
+          echo "::notice::Sem NR1_LOGIN_ORG_ID: a tela de login mostra as filiais da única empresa ativa."
+          exit 0
+        fi
         if ! [[ "$NR1_LOGIN_ORG_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
-          echo "::error::Defina a variável NR1_LOGIN_ORG_ID (environment americana) com o id da empresa da tela de login."
+          echo "::error::NR1_LOGIN_ORG_ID (environment americana) precisa ser o id da empresa, ou ficar vazia."
           exit 1
         fi
 
