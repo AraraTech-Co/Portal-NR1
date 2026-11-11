@@ -448,6 +448,8 @@ model Establishment {
   occupationalExams   OccupationalExam[]
   /// Fichas das pessoas desta filial. [C3-2]
   employeeProfiles    EmployeeProfile[]
+  /// Ações do simulado desta unidade. [C3-6]
+  actions             Action[]
 
   @@index([organizationId, archivedAt])
 }
@@ -794,6 +796,11 @@ model Action {
   changeEventId  String?
   controlId      String?
   occurrenceId   String?
+  /// Simulado de onde a ação nasceu (achado do simulado). [C3-6]
+  drillId        String?
+  /// Unidade da ação sem risco, sem ocorrência e sem mudança: a do simulado.
+  /// Nula na ação antiga, que fica com a central. [C3-6]
+  establishmentId String?
   priority       ActionPriority   @default(MEDIUM)
   status         ActionStatus     @default(OPEN)
   assigneeId     String?
@@ -828,6 +835,8 @@ model Action {
   changeEvent  ChangeEvent?    @relation(fields: [changeEventId], references: [id])
   control      ControlMeasure? @relation(fields: [controlId], references: [id])
   occurrence   Occurrence?     @relation(fields: [occurrenceId], references: [id])
+  drill         EmergencyDrill? @relation(fields: [drillId], references: [id], onDelete: SetNull)
+  establishment Establishment?  @relation(fields: [establishmentId], references: [id], onDelete: SetNull)
   assignee     User?           @relation("ActionAssignee", fields: [assigneeId], references: [id])
   createdBy    User            @relation("ActionCreatedBy", fields: [createdById], references: [id])
   validatedBy  User?           @relation("ActionValidator", fields: [validatedById], references: [id])
@@ -837,6 +846,7 @@ model Action {
   @@index([organizationId, status])
   @@index([assigneeId, status])
   @@index([riskId])
+  @@index([organizationId, establishmentId])
 }
 
 enum EvidenceType {
@@ -1378,6 +1388,8 @@ model EmergencyDrill {
   procedure  EmergencyProcedure @relation(fields: [procedureId], references: [id], onDelete: Cascade)
   recordedBy User               @relation("DrillRecorder", fields: [recordedById], references: [id])
   evidences  Evidence[]
+  /// Ações abertas pelos achados deste simulado. [C3-6]
+  actions    Action[]
 
   @@index([procedureId, performedAt])
 }

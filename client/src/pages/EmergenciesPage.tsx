@@ -233,6 +233,8 @@ export function EmergenciesPage() {
         due_date: prazoDaAcao,
         priority: prioridadeDaAcao,
         effectiveness_criteria: criterioDaAcao.trim(),
+        /* A ação fica com a unidade do simulado. [C3-6] */
+        drill_id: acaoDoAchado.drillId,
       });
       setAcaoDoAchado(null);
       setOQueSeraFeito("");

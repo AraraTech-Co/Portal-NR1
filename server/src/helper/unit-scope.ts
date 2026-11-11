@@ -224,7 +224,8 @@ export function seesCollective(
 
 /**
  * Unidade da ação do plano: a do risco (perigo → atividade); sem risco, a da
- * ocorrência; sem as duas, a da mudança. Sem nenhuma, é da central.
+ * ocorrência; sem as duas, a da mudança; sem as três, a gravada na ação (a
+ * do simulado de onde ela nasceu [C3-6]). Sem nenhuma, é da central.
  */
 export const ACTION_UNIT_SELECT = {
   riskId: true,
@@ -233,18 +234,20 @@ export const ACTION_UNIT_SELECT = {
   risk: { select: { hazard: { select: { activity: { select: { establishmentId: true } } } } } },
   occurrence: { select: { establishmentId: true } },
   changeEvent: { select: { establishmentId: true } },
+  establishmentId: true,
 } as const;
 
 type ActionUnitRow = {
   risk: { hazard: { activity: { establishmentId: string } } } | null;
   occurrence: { establishmentId: string | null } | null;
   changeEvent: { establishmentId: string | null } | null;
+  establishmentId?: string | null;
 };
 
 export function actionUnitOf(action: ActionUnitRow): string | null {
   if (action.risk) return action.risk.hazard.activity.establishmentId;
   if (action.occurrence?.establishmentId) return action.occurrence.establishmentId;
-  return action.changeEvent?.establishmentId ?? null;
+  return action.changeEvent?.establishmentId ?? action.establishmentId ?? null;
 }
 
 /** Filtro Prisma das ações destas unidades, na mesma precedência de `actionUnitOf`. */
@@ -258,6 +261,15 @@ export function actionInUnits(unidades: string[]): Record<string, unknown> {
         riskId: null,
         OR: [{ occurrenceId: null }, { occurrence: { establishmentId: null } }],
         changeEvent: { establishmentId: em },
+      },
+      /* A do simulado: sem risco, ocorrência nem mudança com unidade. [C3-6] */
+      {
+        riskId: null,
+        AND: [
+          { OR: [{ occurrenceId: null }, { occurrence: { establishmentId: null } }] },
+          { OR: [{ changeEventId: null }, { changeEvent: { establishmentId: null } }] },
+        ],
+        establishmentId: em,
       },
     ],
   };

@@ -340,7 +340,9 @@ export function ActionsPage() {
                         ? "Ocorrência"
                         : a.riskId
                           ? "Risco"
-                          : (ACTION_SOURCE_LABEL[a.sourceType] ?? a.sourceType)}
+                          : a.drillId
+                            ? "Simulado"
+                            : (ACTION_SOURCE_LABEL[a.sourceType] ?? a.sourceType)}
                     </td>
                   </tr>
                   {open && (
