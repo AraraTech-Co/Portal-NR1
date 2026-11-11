@@ -174,6 +174,30 @@ describe("a rota das filiais da tela de login (R4)", () => {
     expect(master.body.user.login_without_establishments).toBe(false);
   });
 
+  it("LOGIN_ORG_ID vazio, como o deploy entrega sem a variável, e uma só empresa ativa: mostra as filiais dela", async () => {
+    /*
+      O compose grava LOGIN_ORG_ID="" quando o environment não tem a
+      variável. Vazio vale como ausente: a tela usa a única empresa ativa.
+      O banco de teste tem várias empresas ativas; a consulta das ativas é
+      a única coisa simulada aqui. [C3-2]
+    */
+    const ativas = vi
+      .spyOn(prisma.organization, "findMany")
+      .mockResolvedValueOnce([{ id: ORG_ID }] as never);
+    process.env.LOGIN_ORG_ID = "";
+    try {
+      const res = await request(app).get("/api/auth/filiais");
+      expect(res.status).toBe(200);
+      const ids = (res.body.establishments as { id: string }[]).map((f) => f.id);
+      expect(ids).toEqual(expect.arrayContaining([filialA, filialB, filialC]));
+      expect(ids).not.toContain(filialDeOutra);
+      expect(ativas).toHaveBeenCalledTimes(1);
+    } finally {
+      ativas.mockRestore();
+      process.env.LOGIN_ORG_ID = ORG_ID;
+    }
+  });
+
   it("LOGIN_ORG_ID que não é empresa ativa também não mostra filial", async () => {
     process.env.LOGIN_ORG_ID = randomUUID();
     try {
