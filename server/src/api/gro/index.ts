@@ -12,6 +12,7 @@ import occurrences from "./occurrences.route";
 import emergencyProcedures from "./emergency-procedures.route";
 import contractors from "./contractors.route";
 import participations from "./participations.route";
+import copiaEntreFiliais from "./copia-entre-filiais.route";
 
 /**
  * Agrega as rotas do domínio GRO / NR-1.
@@ -32,5 +33,6 @@ router.use(occurrences);
 router.use(emergencyProcedures);
 router.use(contractors);
 router.use(participations);
+router.use(copiaEntreFiliais);
 
 export default router;

@@ -22,7 +22,9 @@ import {
 import { Button } from "@/components/Button";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
-import { useModuleAccess } from "@/lib/module-access";
+import { canCopyBetweenUnits, useModuleAccess } from "@/lib/module-access";
+import { useAuth } from "@/auth/AuthContext";
+import { CopiarDeOutraFilial } from "./CopiarDeOutraFilial";
 import "@/components/form.css";
 import "./operation.css";
 import { LoadingState } from "@/components/LoadingState";
@@ -132,6 +134,9 @@ function QuickAdd({
 
 export function OperationPage() {
   const { canWrite: canEdit } = useModuleAccess("operacao");
+  /* Copiar a estrutura de outra filial: o SST e o Master. [C3-8] */
+  const { user } = useAuth();
+  const podeCopiar = canCopyBetweenUnits(user?.permission);
 
   const [establishments, setEstablishments] = useState<Establishment[]>([]);
   const [sectors, setSectors] = useState<Sector[]>([]);
@@ -329,6 +334,14 @@ export function OperationPage() {
                 establishment={selectedEstablishment}
                 canEdit={canEdit}
                 onChanged={reload}
+              />
+            )}
+            {selectedEstablishment && podeCopiar && (
+              <CopiarDeOutraFilial
+                key={`copia-${selectedEstablishment.id}`}
+                destino={selectedEstablishment}
+                filiais={establishments}
+                onCopied={reload}
               />
             )}
             {canEdit && (

@@ -205,3 +205,14 @@ export function listModuleIds(): string[] {
   const first = Object.values(matrix)[0];
   return first ? Object.keys(first) : [];
 }
+
+/**
+ * Copiar setores, funções, atividades, perigos, riscos e medidas de uma
+ * filial para outra: o SST e o Master (resposta C, 10/11). O Dono não, mesmo
+ * escrevendo no Inventário. [C3-8]
+ */
+const UNIT_COPY_ROLES: readonly string[] = ["master", "sst"];
+
+export function canCopyBetweenUnits(roleKey: string): boolean {
+  return UNIT_COPY_ROLES.includes(normalizeRoleKey(roleKey));
+}
