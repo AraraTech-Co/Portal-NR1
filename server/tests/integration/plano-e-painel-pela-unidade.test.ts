@@ -36,6 +36,8 @@ const titulo = {
   semUnidade: `Revisar o regulamento ${SUFIXO}`,
   riscoLoja: `Calçado de segurança na Loja ${SUFIXO}`,
   mudancaAg: `Treinar na esteira nova da AG ${SUFIXO}`,
+  ocorrenciaLoja: `Sinalizar o piso molhado da Loja ${SUFIXO}`,
+  ocorrenciaAg: `Consertar a prateleira da AG ${SUFIXO}`,
 };
 
 async function simulado(establishmentId: string) {
@@ -117,6 +119,23 @@ beforeAll(async () => {
     },
   });
   await acao(titulo.mudancaAg, { changeEventId: mudanca.id, sourceType: "CHANGE_EVENT" });
+  /* Ações de ocorrência: a da Loja é da Loja; a da AG não é "sem unidade". */
+  for (const [nome, unidade] of [
+    [titulo.ocorrenciaLoja, loja],
+    [titulo.ocorrenciaAg, ag],
+  ] as const) {
+    const ocorrencia = await prisma.occurrence.create({
+      data: {
+        organizationId: empresa.orgId,
+        establishmentId: unidade,
+        type: "DANGEROUS_EVENT",
+        occurredAt: new Date(),
+        description: `Ocorrência ${nome}`,
+        reportedById: sstId,
+      },
+    });
+    await acao(nome, { occurrenceId: ocorrencia.id, sourceType: "OCCURRENCE" });
+  }
 });
 
 afterAll(async () => {
@@ -126,6 +145,7 @@ afterAll(async () => {
   await prisma.pgrDocument.deleteMany({ where: { organizationId: orgId } });
   await prisma.action.deleteMany({ where: { organizationId: orgId } });
   await prisma.changeEvent.deleteMany({ where: { organizationId: orgId } });
+  await prisma.occurrence.deleteMany({ where: { organizationId: orgId } });
   await prisma.risk.deleteMany({ where: { organizationId: orgId } });
   await prisma.hazard.deleteMany({ where: { organizationId: orgId } });
   await prisma.activity.deleteMany({ where: { organizationId: orgId } });
@@ -163,11 +183,13 @@ const doPainel = async (establishmentId: string | null) => {
 
 describe("o PGR plano de ação por unidade leva as ações da unidade [C3-6]", () => {
   it("o da Loja leva a do risco e a do simulado da Loja; não a da AG nem a sem unidade", async () => {
-    expect(await planoDoPgr(loja)).toEqual([titulo.riscoLoja, titulo.simuladoLoja].sort());
+    expect(await planoDoPgr(loja)).toEqual(
+      [titulo.riscoLoja, titulo.simuladoLoja, titulo.ocorrenciaLoja].sort(),
+    );
   });
 
-  it("o da AG leva a do simulado e a da mudança da AG", async () => {
-    expect(await planoDoPgr(ag)).toEqual([titulo.mudancaAg, titulo.simuladoAg].sort());
+  it("o da AG leva a do simulado, a da mudança e a da ocorrência da AG", async () => {
+    expect(await planoDoPgr(ag)).toEqual([titulo.mudancaAg, titulo.simuladoAg, titulo.ocorrenciaAg].sort());
   });
 
   it("o da organização continua com todas", async () => {
@@ -177,7 +199,9 @@ describe("o PGR plano de ação por unidade leva as ações da unidade [C3-6]", 
 
 describe("o painel filtrado por unidade [C3-6]", () => {
   it("na Loja: as da Loja e a sem unidade; a do simulado da AG sai", async () => {
-    expect(await doPainel(loja)).toEqual([titulo.riscoLoja, titulo.simuladoLoja, titulo.semUnidade].sort());
+    expect(await doPainel(loja)).toEqual(
+      [titulo.riscoLoja, titulo.simuladoLoja, titulo.ocorrenciaLoja, titulo.semUnidade].sort(),
+    );
   });
 
   it("sem filtro, todas", async () => {
