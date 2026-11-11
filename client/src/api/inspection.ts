@@ -163,6 +163,8 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   "user.first_access": "Conta ativada pelo primeiro acesso",
   "user.first_access_reopened": "Primeiro acesso reaberto",
   "user.legacy_classified": "Conta antiga classificada",
+  /* A central deu unidade a um registro do histórico sem unidade. [C3-7] */
+  "history.classify": "Registro antigo classificado numa unidade",
   "consulta.view": "Consulta abriu uma tela",
   /*
     Faltavam rótulo: o convite, a planilha e o que entrou depois. O Histórico

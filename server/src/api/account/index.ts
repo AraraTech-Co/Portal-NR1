@@ -6,6 +6,7 @@ import pessoas from "./pessoas.route";
 import notificacoes from "./notificacoes.route";
 import inicio from "./inicio.route";
 import organizacao from "./organizacao.route";
+import historico from "./historico.route";
 
 const router = Router();
 router.use(invites);
@@ -15,5 +16,6 @@ router.use(pessoas);
 router.use(notificacoes);
 router.use(inicio);
 router.use(organizacao);
+router.use(historico);
 
 export default router;

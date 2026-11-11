@@ -39,6 +39,8 @@ const MODULO_POR_ROTA: Record<string, string> = {
   conta: "conta",
   /** Painel de ativação das contas (primeiro acesso). [C1-7] */
   ativacao: "ativacao",
+  /** Histórico sem unidade, da central. [C3-7] */
+  "historico-sem-unidade": "conta",
   configuracoes: "configuracoes",
 };
 
