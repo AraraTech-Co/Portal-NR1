@@ -16,6 +16,11 @@ export function moduleOwn(moduleId: string) {
   return verifyModule(moduleId, "own");
 }
 
+/** Enviar o próprio registro, com ficha ativa, qualquer papel menos o fiscal. [C4-4] */
+export function moduleOwnSend(moduleId: string) {
+  return verifyModule(moduleId, "ownSend");
+}
+
 /** Escrita (L/E) no módulo. */
 export function moduleWrite(moduleId: string) {
   return verifyModule(moduleId, "write");
