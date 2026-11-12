@@ -71,7 +71,7 @@ describe("Emergency module (NR-1 1.5.6)", () => {
     expect(patch.body.procedure.evacuationPlan).toContain("Rota B");
   });
 
-  it("records drill and attaches evidence (1.5.6.3.1)", async () => {
+  it("records drill and attaches evidence", async () => {
     const drill = await request(app)
       .post(`/api/emergency-procedures/${procedureId}/drills`)
       .set("Authorization", `Bearer ${token}`)

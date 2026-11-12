@@ -212,10 +212,9 @@ export const OCCURRENCE_TYPE_VALUES: readonly OccurrenceType[] =
 // ─── Emergências (NR-1 1.5.6) ─────────────────────────────────────────────────
 
 /**
- * Periodicidade padrão sugerida para exercícios simulados (meses),
- * quando o procedimento não informa `drillFrequencyMonths` (1.5.6.3).
- * A norma exige que a periodicidade esteja definida no procedimento —
- * este valor é só fallback de leitura, não substitui o cadastro.
+ * Periodicidade padrão da empresa para exercícios simulados (meses), quando
+ * o procedimento não informa `drillFrequencyMonths`. É padrão da empresa,
+ * não exigência citada da NR-1. [C4-10]
  */
 export const EMERGENCY_DRILL_FREQUENCY_MONTHS_DEFAULT = 12;
 

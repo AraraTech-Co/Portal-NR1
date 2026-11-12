@@ -466,7 +466,7 @@ class EmergencyController {
     }
   }
 
-  /** 1.5.6.3 / 1.5.6.3.1 — exercício simulado; evidências via addDrillEvidence. */
+  /** Exercício simulado, na periodicidade definida pela empresa; evidências via addDrillEvidence. */
   async addDrill(req: Request, res: Response) {
     try {
       const orgId = actorOrgId(req as AuthRequest);
@@ -544,7 +544,7 @@ class EmergencyController {
     }
   }
 
-  /** 1.5.6.3.1: evidências do exercício simulado. */
+  /** Evidências do exercício simulado. */
   /**
    * Baixar a evidência do simulado (ata assinada, foto).
    *

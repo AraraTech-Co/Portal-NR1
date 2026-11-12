@@ -734,7 +734,8 @@ export function EmergenciesPage() {
         <section className="form-section" style={{ marginTop: "1rem" }}>
           <h2>Registrar exercício simulado</h2>
           <p className="muted">
-            NR-1 1.5.6.3 — registre data, participantes e achados do treino.
+            Registre data, participantes e achados do treino. A periodicidade é a definida pela empresa
+            no procedimento (12 meses, se o procedimento não disser).
           </p>
           <form className="form-grid" onSubmit={onDrill}>
             <div className="form-grid cols-2">
