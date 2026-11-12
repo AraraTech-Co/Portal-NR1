@@ -119,6 +119,11 @@ describe("a tela usa as regras [B3-2-E]", () => {
 
   it("o botão que abre o painel não diz mais Reavaliar", () => {
     const perigo = tela("HazardFormPage.tsx");
-    expect(perigo).toContain('{avaliando === r.id ? "Fechar" : level ? "Avaliação e medidas" : "Avaliar"}');
+    /* Desde a C4-2, o risco aguardando validação diz "Ver e validar". */
+    const botao = perigo.slice(perigo.indexOf("{avaliando === r.id"), perigo.indexOf("</Button>", perigo.indexOf("{avaliando === r.id")));
+    expect(botao.replace(/\s+/g, " ")).toContain(
+      '{avaliando === r.id ? "Fechar" : level ? "Avaliação e medidas" : r.awaiting_validation ? "Ver e validar" : "Avaliar"}',
+    );
+    expect(botao).not.toContain("Reavaliar");
   });
 });

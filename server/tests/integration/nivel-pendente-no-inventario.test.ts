@@ -109,7 +109,10 @@ describe("o nível no Inventário [B3-2-A]", () => {
       .replace(/\{?\/\*[\s\S]*?\*\/\}?/g, " ")
       .replace(/\s+/g, " ");
     expect(tela).toContain("pendingLevel: risk.pending_level ?? null,");
-    expect(tela).toMatch(/\{row\.pendingLevel && row\.pendingLevel !== row\.level && \( <div className="muted inventory-pendente"> aguardando validação:\{" "\} \{LEVEL_LABEL\[row\.pendingLevel\] \?\? row\.pendingLevel\}/);
-    expect(tela).toContain('{row.pendingLevel ? "Sem avaliação validada" : "Sem avaliação"}');
+    /* Desde a C4-2, a copiada de outra filial diz que veio de outra filial e está em revisão. */
+    expect(tela).toContain(
+      '{row.pendingLevel && row.pendingLevel !== row.level && ( <div className="muted inventory-pendente"> {row.emRevisao ? "copiada de outra filial, aguardando validação: " : "aguardando validação: "} {LEVEL_LABEL[row.pendingLevel] ?? row.pendingLevel}',
+    );
+    expect(tela).toContain('{row.emRevisao ? "Em revisão" : row.pendingLevel ? "Sem avaliação validada" : "Sem avaliação"}');
   });
 });
