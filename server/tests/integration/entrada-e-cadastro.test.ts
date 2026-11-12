@@ -374,8 +374,14 @@ describe("a planilha completa quem já existe [CB-2] [S1-G]", () => {
     const segunda = await importar([
       { name: `Ana Completa ${SUFIXO}`, registration: matricula, tax_id: outroCpf },
     ]);
-    const linha = segunda.body.results[0] as { status: string };
-    expect(linha.status, "nada a completar").toBe("skipped");
+    /*
+      Desde a planilha da folha, CPF diferente para a mesma matrícula não é
+      ignorado em silêncio: a linha vai para o RH conferir, e nada muda
+      (decisão do Leonardo, 12/11/2026). [PF-3]
+    */
+    const linha = segunda.body.results[0] as { status: string; message: string };
+    expect(linha.status, "vai para o RH").toBe("error");
+    expect(linha.message).toBe(`Ana Completa ${SUFIXO} tem outro CPF no portal: confira a planilha. Nada mudou.`);
 
     const ficha = await prisma.employeeProfile.findFirstOrThrow({
       where: { organizationId: ORG_ID, user: { login } },

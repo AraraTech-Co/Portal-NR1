@@ -55,6 +55,15 @@ export type ImportResult = {
   awaiting_first_access?: boolean;
   /** A filial em que a linha cai. [C3-3] */
   establishment?: { id: string; name: string } | null;
+  /** O que a planilha traz diferente do portal, esperando o RH. [PF-3] */
+  divergences?: ImportDivergence[];
+};
+
+export type ImportDivergence = {
+  campo: string;
+  rotulo: string;
+  portal: string;
+  planilha: string;
 };
 
 export type ImportReport = {

@@ -98,6 +98,11 @@ export function ImportPeople() {
   const [celulas, setCelulas] = useState<string[][] | null>(null);
   const [progresso, setProgresso] = useState<string | null>(null);
   /*
+    O que o RH marcou para receber o valor da planilha, por linha do Excel.
+    Nada muda sozinho em quem já existe. [PF-3]
+  */
+  const [aceitos, setAceitos] = useState<Record<number, string[]>>({});
+  /*
     A colagem sai: o cadastro passa a ser pelo envio do arquivo da planilha
     modelo, como combinado com a empresa em 21/10/2026. Colar do Excel
     perdia separador e transformava a linha inteira em nome. [B3-1-B] [S1-G]
@@ -147,8 +152,14 @@ export function ImportPeople() {
   */
   async function enviar(simulacao: boolean) {
     const verbo = simulacao ? "Conferindo" : "Gravando";
+    const linhas = simulacao
+      ? lido.rows
+      : lido.rows.map((row, i) => {
+          const marcados = aceitos[lido.numeros[i]!];
+          return marcados?.length ? { ...row, aceitar: marcados } : row;
+        });
     return importarEmLotes(
-      lido.rows,
+      linhas,
       lido.numeros,
       (lote) => importPeople(lote, simulacao),
       undefined,
@@ -160,6 +171,7 @@ export function ImportPeople() {
   async function conferir() {
     setErro(null);
     setRelatorio(null);
+    setAceitos({});
     setOcupado(true);
     try {
       setPrevia(await enviar(true));
@@ -178,6 +190,7 @@ export function ImportPeople() {
       const res = await enviar(false);
       setRelatorio(res);
       setPrevia(null);
+      setAceitos({});
       setTexto("");
       setCelulas(null);
     } catch (err) {
@@ -195,6 +208,16 @@ export function ImportPeople() {
   }
 
   const mostrado = relatorio ?? previa;
+  const marcados = Object.values(aceitos).reduce((t, a) => t + a.length, 0);
+  const comDiferenca = previa?.results.filter((r) => r.divergences?.length).length ?? 0;
+  function marcar(linha: number, campo: string, sim: boolean) {
+    setAceitos((a) => {
+      const atual = new Set(a[linha] ?? []);
+      if (sim) atual.add(campo);
+      else atual.delete(campo);
+      return { ...a, [linha]: [...atual] };
+    });
+  }
 
   return (
     <section className="form-section">
@@ -232,6 +255,7 @@ export function ImportPeople() {
             setPrevia(null);
             setRelatorio(null);
             setErroDoArquivo(null);
+            setAceitos({});
             setTexto("");
             setCelulas(null);
             if (!f) return;
@@ -332,15 +356,19 @@ export function ImportPeople() {
         </Button>
         {/* Agora a planilha também completa quem já existe: o botão não pode
             sumir quando só há fichas a completar. [CB-2] */}
-        {previa && previa.created + previa.completed > 0 && (
+        {previa && previa.created + previa.completed + marcados > 0 && (
           <Button type="button" disabled={ocupado} onClick={() => void cadastrar()}>
             {ocupado
               ? "Gravando…"
-              : previa.created > 0 && previa.completed > 0
-                ? `Cadastrar ${previa.created} e completar ${previa.completed}`
-                : previa.created > 0
-                  ? `Cadastrar ${previa.created} pessoa(s)`
-                  : `Completar ${previa.completed} ficha(s)`}
+              : [
+                  previa.created > 0 ? `cadastrar ${previa.created} pessoa(s)` : null,
+                  previa.completed > 0 ? `completar ${previa.completed} ficha(s)` : null,
+                  marcados > 0 ? `aplicar ${marcados} mudança(s) marcada(s)` : null,
+                ]
+                  .filter(Boolean)
+                  .join(", ")
+                  .replace(/, ([^,]*)$/, " e $1")
+                  .replace(/^./, (c) => c.toUpperCase())}
           </Button>
         )}
       </div>
@@ -352,6 +380,13 @@ export function ImportPeople() {
               ? `${relatorio.created} cadastrada(s), ${relatorio.completed} ficha(s) completada(s), ${relatorio.skipped} sem nada a mudar, ${relatorio.errors} com erro.`
               : `Prévia: ${previa!.created} entrariam, ${previa!.completed} teriam a ficha completada, ${previa!.skipped} ficariam como estão, ${previa!.errors} com erro. Nada foi gravado ainda.`}
           </p>
+          {previa && comDiferenca > 0 && (
+            <p className="import-warning">
+              {comDiferenca === 1 ? "1 pessoa já cadastrada" : `${comDiferenca} pessoas já cadastradas`} com
+              dados diferentes do portal. Nada disso muda sozinho: marque, linha a linha, o que deve
+              receber o valor da planilha. Matrícula e CPF nunca são trocados pela planilha.
+            </p>
+          )}
           {/* Nenhuma senha sai da planilha: a pessoa cria a própria no
               primeiro acesso, conferindo matrícula, CPF e nascimento. [C1-7] */}
           {relatorio && relatorio.created > 0 && (
@@ -395,6 +430,25 @@ export function ImportPeople() {
                               : "Erro"}
                       </Chip>
                       {r.message && <div className="muted">{r.message}</div>}
+                      {r.divergences?.map((d) =>
+                        previa ? (
+                          <label key={d.campo} className="import-divergence">
+                            <input
+                              type="checkbox"
+                              checked={(aceitos[r.line] ?? []).includes(d.campo)}
+                              onChange={(e) => marcar(r.line, d.campo, e.target.checked)}
+                              aria-label={`Usar o da planilha: ${d.rotulo} de ${r.name}`}
+                            />
+                            <span>
+                              <strong>{d.rotulo}</strong>: no portal “{d.portal}”, na planilha “{d.planilha}”
+                            </span>
+                          </label>
+                        ) : (
+                          <div key={d.campo} className="muted import-divergence">
+                            Ficou como estava — {d.rotulo}: no portal “{d.portal}”, na planilha “{d.planilha}”
+                          </div>
+                        ),
+                      )}
                     </td>
                     <td>{r.login ?? <span className="muted">—</span>}</td>
                   </tr>

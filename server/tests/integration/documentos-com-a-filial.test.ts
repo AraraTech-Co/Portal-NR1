@@ -139,11 +139,13 @@ beforeAll(async () => {
 describe("a filial guarda razão social e código da folha [C3-4]", () => {
   it("grava e devolve, e limpar a razão social volta a valer a empresa", async () => {
     const f = await filialComRisco("Grava", cnpjFicticio(Date.now()));
-    const salvo = await editarFilial(f.id, { legal_name: "  Utilidade Americana Loja Ltda  ", payroll_code: "0682" });
+    /* O código é único na empresa (PF-1): um por execução, para não esbarrar em sobra de outra. */
+    const codigo = `0682-${SUFIXO}`;
+    const salvo = await editarFilial(f.id, { legal_name: "  Utilidade Americana Loja Ltda  ", payroll_code: codigo });
     expect(salvo.status, JSON.stringify(salvo.body)).toBe(200);
     expect(salvo.body.establishment).toMatchObject({
       legalName: "Utilidade Americana Loja Ltda",
-      payrollCode: "0682",
+      payrollCode: codigo,
     });
     const limpo = await editarFilial(f.id, { legal_name: null, payroll_code: "" });
     expect(limpo.status).toBe(200);
