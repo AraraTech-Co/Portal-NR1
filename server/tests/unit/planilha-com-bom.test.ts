@@ -60,9 +60,10 @@ describe("ler o arquivo da planilha [B3-1-B]", () => {
     expect(await lerPlanilha(arquivo(utf8("abc")))).toBe("abc");
   });
 
-  it("o modelo baixado continua com BOM, para o Excel abrir os acentos", () => {
+  it("o modelo CSV baixado continua com BOM, para o Excel abrir os acentos", () => {
+    /* Desde a planilha da folha, o CSV é o "outro formato" e o .xlsx é o modelo. [PF-1] */
     const tela = readFileSync(join(__dirname, "..", "..", "..", "client", "src", "pages", "ImportPeople.tsx"), "utf8");
-    expect(tela).toContain("new Blob([`\\ufeff${MODELO}\\r\\n`]");
-    expect(tela).toContain("setTexto(await lerPlanilha(f));");
+    expect(tela).toContain("new Blob([`\\ufeff${MODELO_CSV}\\r\\n`]");
+    expect(tela).toContain("else setTexto(await lerPlanilha(f));");
   });
 });

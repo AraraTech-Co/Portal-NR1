@@ -23,7 +23,7 @@ export type LinhaDaPlanilha = {
   establishment_id?: string;
 };
 
-type LinhaLocal = LinhaDaPlanilha & { establishment?: string };
+type LinhaLocal = LinhaDaPlanilha & { establishment?: string; payroll_code?: string };
 
 export type FuncaoDaEmpresa = {
   id: string;
@@ -31,10 +31,25 @@ export type FuncaoDaEmpresa = {
   establishment?: { id?: string; name: string } | null;
 };
 
-/** As filiais ativas da empresa, como vêm de `/api/establishments`. [C3-3] */
-export type FilialDaEmpresa = { id: string; name: string; taxId: string | null };
+/**
+ * As filiais ativas da empresa, como vêm de `/api/establishments`. [C3-3]
+ * O código da folha (C3-4) é como a planilha da folha diz a filial. [PF-1]
+ */
+export type FilialDaEmpresa = {
+  id: string;
+  name: string;
+  taxId: string | null;
+  payrollCode?: string | null;
+};
 
-export type Lido = { rows: LinhaDaPlanilha[]; problems: string[] };
+export type Lido = {
+  rows: LinhaDaPlanilha[];
+  problems: string[];
+  /** O número da linha no Excel de cada linha de `rows`, na mesma ordem. */
+  numeros: number[];
+  /** Em que modelo a planilha veio. [PF-1] */
+  modelo: "folha" | "csv" | null;
+};
 
 export type RotulosDaPlanilha = {
   /** código → rótulo, como ORG_ROLE_LABEL e WORKER_BOND_LABEL. */
@@ -95,6 +110,89 @@ const COLUNAS: Record<string, keyof LinhaLocal> = {
   unidade: "establishment",
   estabelecimento: "establishment",
 };
+
+/**
+ * O modelo da planilha de funcionários: as colunas da exportação do sistema
+ * de folha, na ordem em que saem. O RH envia o arquivo como vem, e o modelo
+ * que o portal oferece é este. [PF-1]
+ */
+export const CABECALHO_DA_FOLHA = [
+  "Cód. Empresa",
+  "Empresa",
+  "Competência",
+  "Cód. Func.",
+  "Nome",
+  "CPF",
+  "RG",
+  "PIS",
+  "CTPS",
+  "CTPS Série",
+  "CTPS UF",
+  "Data Nasc.",
+  "Admissão",
+  "Dt. Rescisão",
+  "Causa Rescisão",
+  "Tipo Movimento",
+  "Cargo",
+  "CBO 94",
+  "CBO 2002",
+  "Tipo Salário",
+  "Salário",
+  "Data Opção FGTS",
+  "Nº Dependentes",
+  "Grau Instrução",
+  "Cód. Nacionalidade",
+  "Endereço",
+  "Complemento",
+  "Bairro",
+  "Cidade",
+  "Data Relatório",
+] as const;
+
+/** "Cód. Func." → "cod func": sem acento, sem pontuação, sem caixa. */
+export function chaveDaFolha(cabecalho: string): string {
+  return semAcento(cabecalho)
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/**
+ * O que cada coluna da folha vira. `null` é coluna conhecida que esta
+ * leitura não usa: a "Empresa" repete a filial (e não é empresa contratada),
+ * e o salário fica fora por decisão do Leonardo (12/11/2026). [PF-1]
+ */
+const COLUNAS_DA_FOLHA: Record<string, keyof LinhaLocal | null> = Object.fromEntries(
+  CABECALHO_DA_FOLHA.map((c) => [chaveDaFolha(c), null]),
+);
+Object.assign(COLUNAS_DA_FOLHA, {
+  "cod empresa": "payroll_code",
+  "cod func": "registration",
+  nome: "name",
+  cpf: "tax_id",
+  "data nasc": "birth_date",
+  admissao: "admitted_at",
+  cargo: "job_role_id",
+} satisfies Record<string, keyof LinhaLocal>);
+
+/** Uma planilha é a da folha quando traz as duas colunas de código. */
+function ehDaFolha(cabecalho: string[]): boolean {
+  const chaves = cabecalho.map(chaveDaFolha);
+  return chaves.includes("cod empresa") && chaves.includes("cod func");
+}
+
+/** Número de série do Excel (dias desde 30/12/1899) → AAAA-MM-DD. */
+export function dataDoExcel(valor: string): string | null {
+  if (!/^\d+(\.\d+)?$/.test(valor)) return null;
+  const dias = Math.floor(Number(valor));
+  if (dias < 1 || dias > 80000) return null;
+  return new Date(Date.UTC(1899, 11, 30) + dias * 86400000).toISOString().slice(0, 10);
+}
+
+/** "0682" e "682" são o mesmo código; letras ficam como estão, sem caixa. */
+function codigoCanonico(codigo: string): string {
+  const c = codigo.trim().toUpperCase();
+  return /^\d+$/.test(c) ? c.replace(/^0+(?=\d)/, "") : c;
+}
 
 /**
  * Papéis que a planilha aceita.
@@ -158,21 +256,48 @@ export function lerLinhas(
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter(Boolean);
-  if (linhas.length === 0) return { rows: [], problems: [] };
-
+  if (linhas.length === 0) return { rows: [], problems: [], numeros: [], modelo: null };
   const sep = separador(linhas[0]!);
-  const cabecalho = linhas[0]!.split(sep).map((c) => semAcento(c));
-  const temCabecalho = cabecalho.some((c) => c in COLUNAS);
+  return lerTabela(
+    linhas.map((l) => l.split(sep).map((c) => c.trim())),
+    funcoes,
+    empresas,
+    rotulos,
+    filiais,
+    "texto",
+  );
+}
+
+/**
+ * Lê a planilha já separada em células: a do CSV (linhas sem as em branco,
+ * numeradas na ordem) ou a do `.xlsx` (cada linha na posição do Excel). A
+ * planilha da folha é reconhecida pelo cabeçalho. [PF-1]
+ */
+export function lerTabela(
+  matriz: string[][],
+  funcoes: FuncaoDaEmpresa[],
+  empresas: { id: string; name: string }[],
+  rotulos: RotulosDaPlanilha,
+  filiais: FilialDaEmpresa[] = [],
+  origem: "texto" | "xlsx" = "xlsx",
+): Lido {
+  const inicio = matriz.findIndex((l) => l.some((c) => c !== ""));
+  if (inicio < 0) return { rows: [], problems: [], numeros: [], modelo: null };
+  const primeira = matriz[inicio]!;
+  const daFolha = ehDaFolha(primeira);
+  const cabecalho = daFolha ? primeira.map(chaveDaFolha) : primeira.map((c) => semAcento(c));
+  const temCabecalho = daFolha || cabecalho.some((c) => c in COLUNAS);
   /*
     Coluna com cabeçalho que o portal não conhece era deixada de lado em
     silêncio: a empresa montava a planilha seguindo a tela e o dado não
     entrava, sem ninguém perceber. [B3-1-B]
   */
+  const conhecidas: Record<string, keyof LinhaLocal | null> = daFolha ? COLUNAS_DA_FOLHA : COLUNAS;
   const colunasIgnoradas = temCabecalho
-    ? cabecalho.filter((c) => c && !(c in COLUNAS))
+    ? cabecalho.filter((c) => c && !(c in conhecidas))
     : [];
   const campos = temCabecalho
-    ? cabecalho.map((c) => COLUNAS[c] ?? null)
+    ? cabecalho.map((c) => conhecidas[c] ?? null)
     : ([
         "name",
         "registration",
@@ -200,27 +325,41 @@ export function lerLinhas(
     Object.entries(rotulos.papeis).map(([codigo, rotulo]) => [semAcento(rotulo), codigo]),
   );
 
+  /* Filial de cada código da folha; código em duas filiais é ambíguo. [PF-1] */
+  const porCodigo = new Map<string, FilialDaEmpresa[]>();
+  for (const f of filiais) {
+    if (!f.payrollCode) continue;
+    const k = codigoCanonico(f.payrollCode);
+    porCodigo.set(k, [...(porCodigo.get(k) ?? []), f]);
+  }
+
   const rows: LinhaDaPlanilha[] = [];
+  const numeros: number[] = [];
   const problems: string[] = [];
+  /* Repetição dentro do arquivo: com o envio em lotes, o servidor só vê a do lote. [PF-1] */
+  const cpfVisto = new Map<string, number>();
+  const matriculaVista = new Map<string, number>();
 
   if (colunasIgnoradas.length > 0) {
     problems.push(
       `Coluna não reconhecida: ${colunasIgnoradas
         .map((c) => `"${c}"`)
-        .join(", ")}. O portal lê ${CABECALHO_OFICIAL.join(
+        .join(", ")}. O portal lê ${(daFolha ? CABECALHO_DA_FOLHA : CABECALHO_OFICIAL).join(
         ", ",
       )} — baixe o modelo para usar os mesmos nomes.`,
     );
   }
 
-  for (const [i, linha] of linhas.slice(temCabecalho ? 1 : 0).entries()) {
+  for (const [i, celulasBrutas] of matriz.entries()) {
+    if (i < inicio || (temCabecalho && i === inicio)) continue;
+    if (!celulasBrutas.some((c) => c !== "")) continue;
     /*
       A linha é numerada como no Excel: com cabeçalho, a primeira pessoa está
       na linha 2. Antes a prévia dizia "Linha 1" para ela, e quem conferia no
       Excel procurava no lugar errado. [S1-G]
     */
-    const numero = temCabecalho ? i + 2 : i + 1;
-    const celulas = linha.split(sep).map((c) => c.trim());
+    const numero = i + 1;
+    const celulas = celulasBrutas.map((c) => c.trim());
     const row: LinhaDaPlanilha = { name: "" };
     celulas.forEach((valor, coluna) => {
       const campo = campos[coluna];
@@ -239,7 +378,7 @@ export function lerLinhas(
       pessoa sem matrícula, sem CPF e sem função. A prévia existe para
       proteger. [B2-1-L]
     */
-    if (temCabecalho && cabecalho.length > 1 && celulas.length === 1) {
+    if (origem === "texto" && temCabecalho && cabecalho.length > 1 && celulas.length === 1) {
       problems.push(
         `Linha ${numero}: veio sem separador — o cabeçalho tem ${cabecalho.length} colunas e esta linha tem 1. Cole de novo mantendo o ponto e vírgula ou a tabulação.`,
       );
@@ -264,10 +403,44 @@ export function lerLinhas(
       );
       continue;
     }
-    const unidade = (row as LinhaLocal).establishment;
+    let unidade = (row as LinhaLocal).establishment;
     delete (row as LinhaLocal).establishment;
+    const codigo = (row as LinhaLocal).payroll_code;
+    delete (row as LinhaLocal).payroll_code;
     let filial: FilialDaEmpresa | undefined;
-    if (unidade && filiais.length > 0) {
+    if (daFolha) {
+      /*
+        Na planilha da folha, a filial vem pelo código da empresa na folha,
+        o mesmo do cadastro da filial. A razão social não serve: a loja e a
+        de suplementos têm a mesma. Todo mundo na folha é empregado. [PF-1]
+      */
+      row.bond = "EMPLOYEE";
+      if (codigo) {
+        const achadas = porCodigo.get(codigoCanonico(codigo)) ?? [];
+        if (achadas.length === 0) {
+          problems.push(
+            `Linha ${numero}: código ${codigo} não é de nenhuma filial. Preencha o código da folha em Operação → Estabelecimentos.`,
+          );
+          continue;
+        }
+        if (achadas.length > 1) {
+          problems.push(
+            `Linha ${numero}: o código ${codigo} está em mais de uma filial (${achadas
+              .map((f) => f.name)
+              .join(" e ")}). Corrija em Operação → Estabelecimentos.`,
+          );
+          continue;
+        }
+        filial = achadas[0]!;
+        unidade = filial.name;
+        row.establishment_id = filial.id;
+      } else if (filiais.length > 1) {
+        problems.push(
+          `Linha ${numero}: sem o Cód. Empresa — a empresa tem mais de uma filial.`,
+        );
+        continue;
+      }
+    } else if (unidade && filiais.length > 0) {
       filial = acharFilial(unidade, filiais);
       if (!filial) {
         problems.push(`Linha ${numero}: filial "${unidade}" não existe nesta empresa.`);
@@ -364,6 +537,11 @@ export function lerLinhas(
         `Linha ${numero}: "${row.name}" entra como Terceirizado sem empresa contratada. Preencha a coluna "empresa contratada" ou cadastre a empresa em Terceiros.`,
       );
     }
+    /* Data em número de série, como sai do .xlsx. [PF-1] */
+    if (row.admitted_at) row.admitted_at = dataDoExcel(row.admitted_at) ?? row.admitted_at;
+    if (row.birth_date) row.birth_date = dataDoExcel(row.birth_date) ?? row.birth_date;
+    /* CPF gravado como número no Excel perde os zeros da frente. [PF-1] */
+    if (row.tax_id && /^\d{9,10}$/.test(row.tax_id)) row.tax_id = row.tax_id.padStart(11, "0");
     if (row.admitted_at && /^\d{2}\/\d{2}\/\d{4}$/.test(row.admitted_at)) {
       const [d, m, a] = row.admitted_at.split("/");
       row.admitted_at = `${a}-${m}-${d}`;
@@ -372,10 +550,33 @@ export function lerLinhas(
       const [d, m, a] = row.birth_date.split("/");
       row.birth_date = `${a}-${m}-${d}`;
     }
+    const cpf = row.tax_id?.replace(/\D/g, "");
+    if (cpf) {
+      const antes = cpfVisto.get(cpf);
+      if (antes !== undefined) {
+        problems.push(`Linha ${numero}: CPF repetido na planilha (já está na linha ${antes}).`);
+        continue;
+      }
+    }
+    const chaveMatricula = row.registration
+      ? `${row.establishment_id ?? "-"}:${codigoCanonico(row.registration)}`
+      : null;
+    if (chaveMatricula) {
+      const antes = matriculaVista.get(chaveMatricula);
+      if (antes !== undefined) {
+        problems.push(
+          `Linha ${numero}: matrícula ${row.registration} repetida na mesma filial (já está na linha ${antes}).`,
+        );
+        continue;
+      }
+    }
+    if (cpf) cpfVisto.set(cpf, numero);
+    if (chaveMatricula) matriculaVista.set(chaveMatricula, numero);
     rows.push(row);
+    numeros.push(numero);
   }
 
-  return { rows, problems };
+  return { rows, problems, numeros, modelo: daFolha ? "folha" : "csv" };
 }
 
 
