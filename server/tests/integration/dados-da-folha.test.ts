@@ -331,7 +331,7 @@ describe("quem vê e quem edita os dados da folha [PF-2]", () => {
     const { id } = await fichaDe(ANA);
     const res = await editar("rh", id, { fgts_option_date: "31/02/2020" });
     expect(res.status).toBe(400);
-    expect(res.body.message).toBe("opção do FGTS: data inválida — use AAAA-MM-DD.");
+    expect(res.body.message).toBe("opção do FGTS: data inválida — esse dia não existe. Use dd/mm/aaaa.");
   });
 
   it("a ficha e a lista de colaboradores não carregam os dados da folha", async () => {

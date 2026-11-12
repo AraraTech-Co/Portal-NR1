@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   CABECALHO_DA_FOLHA,
   dataDoExcel,
+  lerLinhas,
   lerTabela,
+  normalizarData,
   type FilialDaEmpresa,
   type FuncaoDaEmpresa,
 } from "../../../client/src/lib/planilha";
@@ -435,3 +437,23 @@ function zipComprimido(arquivos: [string, string][]): Uint8Array {
   fim.writeUInt32LE(offset, 16);
   return new Uint8Array(Buffer.concat([...partes, ...central, fim]));
 }
+
+describe("datas que o Excel grava no CSV [C4-3]", () => {
+  const ROT = { papeis: { COLABORADOR: "Colaborador" }, vinculos: { EMPLOYEE: "Empregado" } };
+  const ler = (admissao: string, nascimento: string) =>
+    lerLinhas(`nome;admissao;nascimento\nAna;${admissao};${nascimento}`, [], [], ROT, []).rows[0]!;
+
+  it("número de série vira a data: 46338 é 12/11/2026 e 34462 é 08/05/1994", () => {
+    expect(ler("46338", "34462")).toMatchObject({ admitted_at: "2026-11-12", birth_date: "1994-05-08" });
+  });
+
+  it("d/m/aaaa ganha os zeros, e aaaa/mm/dd e aaaa-mm-dd viram AAAA-MM-DD", () => {
+    expect(ler("1/2/1990", "2024/3/5")).toMatchObject({ admitted_at: "1990-02-01", birth_date: "2024-03-05" });
+    expect(ler("15/01/2024", "1990-01-05")).toMatchObject({ admitted_at: "2024-01-15", birth_date: "1990-01-05" });
+  });
+
+  it("o que não é data passa como veio, para o servidor recusar com o motivo", () => {
+    expect(normalizarData("ontem")).toBe("ontem");
+    expect(normalizarData("31/02/2020")).toBe("2020-02-31");
+  });
+});
