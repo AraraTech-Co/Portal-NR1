@@ -6,11 +6,31 @@ import { tmpdir } from "node:os";
 import { bancoLocal, enderecoDoBanco, hostDoBanco } from "../../../prisma/banco-local";
 
 /**
+ * No Windows, o `npx` é `npx.cmd`, e o Node só abre `.cmd` com shell: sem
+ * isso o processo voltava sem código e os testes falhavam. [C4-12]
+ */
+export function comoChamarNpx(plataforma: NodeJS.Platform = process.platform): {
+  comando: string;
+  shell: boolean;
+} {
+  return plataforma === "win32" ? { comando: "npx", shell: true } : { comando: "npx", shell: false };
+}
+const NPX = comoChamarNpx();
+
+/**
  * Seed com senha conhecida só grava em banco local: o seed de teste cria
  * contas com senha conhecida, inclusive um master; o seed principal, sem
  * SEED_ADMIN_PASSWORD, grava a senha dos testes no `master` e no `admin`.
  */
 const RAIZ = join(__dirname, "..", "..", "..");
+
+describe("npx no Windows [C4-12]", () => {
+  it("no Windows chama pelo shell; nos outros sistemas, direto", () => {
+    expect(comoChamarNpx("win32")).toEqual({ comando: "npx", shell: true });
+    expect(comoChamarNpx("darwin")).toEqual({ comando: "npx", shell: false });
+    expect(comoChamarNpx("linux")).toEqual({ comando: "npx", shell: false });
+  });
+});
 
 describe("o seed de teste só roda em banco local", () => {
   it("aceita localhost, 127.0.0.1 e ::1", () => {
@@ -58,7 +78,8 @@ describe("o seed de teste só roda em banco local", () => {
 
   it("rodado com host externo, para com código 1 antes de conectar, sem mostrar a URL", () => {
     const url = "postgresql://usuario:senha-secreta@db.exemplo.invalid:5432/portal";
-    const r = spawnSync("npx", ["tsx", "scripts/seed-teste-org.ts"], {
+    const r = spawnSync(NPX.comando, ["tsx", "scripts/seed-teste-org.ts"], {
+      shell: NPX.shell,
       cwd: RAIZ,
       env: { ...process.env, DATABASE_URL: url },
       encoding: "utf8",
@@ -76,7 +97,8 @@ describe("o seed de teste só roda em banco local", () => {
 function rodar(script: string, env: Record<string, string | undefined>) {
   const base = { ...process.env };
   delete base.SEED_ADMIN_PASSWORD;
-  return spawnSync("npx", ["tsx", script], {
+  return spawnSync(NPX.comando, ["tsx", script], {
+    shell: NPX.shell,
     cwd: RAIZ,
     env: { ...base, ...env },
     encoding: "utf8",
