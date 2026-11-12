@@ -930,21 +930,12 @@ describe("histórico do risco: as ações e as ocorrências seguem o recorte [C2
 });
 
 describe("painel da fiscalização nas unidades visíveis [C2-13]", () => {
-  it("o gestor de Rio Claro vê o painel de Rio Claro; Barueri responde igual a inexistente", async () => {
-    const painel = ok(await request(app).get("/api/fiscalizacao").set(as(gerRC.token)), 200);
-    expect(ids(painel.establishments)).toEqual([rioClaro.id]);
-    const texto = JSON.stringify(painel);
-    expect(texto, "o risco da unidade dele aparece").toContain(`Lombalgia Rio Claro ${SUFIXO}`);
-    expect(texto, "o de Barueri não").not.toContain(`Lombalgia Barueri ${SUFIXO}`);
-    expect(texto).not.toContain(`Caixa pesada Barueri ${SUFIXO}`);
-    // Ações de Barueri, abertas no teste das contagens do Início.
-    expect(texto, "ação de Barueri").not.toContain(`Atrasada B ${SUFIXO}`);
-    await igualAInexistente(
-      (id) => request(app).get(`/api/fiscalizacao?establishment_id=${id}`).set(as(gerRC.token)),
-      barueri.id,
-    );
-    // Na própria unidade, o filtro continua valendo.
-    ok(await request(app).get(`/api/fiscalizacao?establishment_id=${rioClaro.id}`).set(as(gerRC.token)), 200);
+  it("o gestor não abre o painel (decisão P-2); a central vê as duas unidades [C4-13]", async () => {
+    /* Desde a C4-13, o painel é de Master, Dono, SST, RH e fiscal: o gestor recebe 403, filtrado ou não. */
+    expect((await request(app).get("/api/fiscalizacao").set(as(gerRC.token))).status).toBe(403);
+    expect(
+      (await request(app).get(`/api/fiscalizacao?establishment_id=${rioClaro.id}`).set(as(gerRC.token))).status,
+    ).toBe(403);
 
     const central = ok(await request(app).get("/api/fiscalizacao").set(as(master.token)), 200);
     expect(ids(central.establishments)).toEqual(expect.arrayContaining([rioClaro.id, barueri.id]));
