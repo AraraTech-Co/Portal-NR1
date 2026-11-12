@@ -309,7 +309,7 @@ export function ImportPeople() {
           Colaborador. O fiscal não entra por aqui: o acesso dele tem prazo,
           definido ao aprovar o pedido de entrada.
           <br />
-          Datas em DD/MM/AAAA ou AAAA-MM-DD.
+          Datas em dd/mm/aaaa. Se o Excel gravar a data como número (como 46338), o portal entende.
         </span>
       </label>
 

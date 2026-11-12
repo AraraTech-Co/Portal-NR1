@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { lerDataDeCalendario } from "./data-de-calendario";
 
 /**
  * Os dados da planilha da folha que o portal guarda à parte da ficha:
@@ -49,11 +50,11 @@ function valor(campo: CampoDaFolha, bruto: unknown): string | number | Date | nu
   if (texto === "") return null;
   if (texto.length > 200) throw new DadoDaFolhaInvalido(`${rotulo}: passa de 200 caracteres.`);
   if (tipo === "data") {
-    const dia = texto.slice(0, 10);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(dia) || Number.isNaN(Date.parse(`${dia}T00:00:00Z`))) {
-      throw new DadoDaFolhaInvalido(`${rotulo}: data inválida — use AAAA-MM-DD.`);
+    try {
+      return lerDataDeCalendario(texto, `${rotulo}: data`);
+    } catch (err) {
+      throw new DadoDaFolhaInvalido((err as Error).message);
     }
-    return new Date(`${dia}T00:00:00.000Z`);
   }
   if (tipo === "inteiro") {
     if (!/^\d{1,3}$/.test(texto)) throw new DadoDaFolhaInvalido(`${rotulo}: use um número inteiro.`);

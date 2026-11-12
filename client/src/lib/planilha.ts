@@ -220,6 +220,23 @@ export function dataDoExcel(valor: string): string | null {
   return new Date(Date.UTC(1899, 11, 30) + dias * 86400000).toISOString().slice(0, 10);
 }
 
+/**
+ * Data como o Excel e as pessoas escrevem, em AAAA-MM-DD: número de série,
+ * dd/mm/aaaa (também d/m/aaaa), aaaa-mm-dd e aaaa/mm/dd. O resto volta como
+ * veio, e o servidor recusa pedindo dd/mm/aaaa. [C4-3]
+ */
+export function normalizarData(valor: string): string {
+  const v = valor.trim();
+  const serie = dataDoExcel(v);
+  if (serie) return serie;
+  const pad = (n: string) => n.padStart(2, "0");
+  const br = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(v);
+  if (br) return `${br[3]}-${pad(br[2]!)}-${pad(br[1]!)}`;
+  const iso = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/.exec(v);
+  if (iso) return `${iso[1]}-${pad(iso[2]!)}-${pad(iso[3]!)}`;
+  return v;
+}
+
 /** "0682" e "682" são o mesmo código; letras ficam como estão, sem caixa. */
 function codigoCanonico(codigo: string): string {
   const c = codigo.trim().toUpperCase();
@@ -576,28 +593,17 @@ export function lerTabela(
     if (row.payroll) {
       for (const k of DATAS_DA_FOLHA) {
         const v = row.payroll[k];
-        if (!v) continue;
-        const serie = dataDoExcel(v);
-        const br = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(v);
-        row.payroll[k] = serie ?? (br ? `${br[3]}-${br[2]}-${br[1]}` : v);
+        if (v) row.payroll[k] = normalizarData(v);
       }
       /* "10/2026" → "2026-10". */
       const comp = /^(\d{1,2})\/(\d{4})$/.exec(row.payroll.competence ?? "");
       if (comp) row.payroll.competence = `${comp[2]}-${comp[1]!.padStart(2, "0")}`;
     }
-    /* Data em número de série, como sai do .xlsx. [PF-1] */
-    if (row.admitted_at) row.admitted_at = dataDoExcel(row.admitted_at) ?? row.admitted_at;
-    if (row.birth_date) row.birth_date = dataDoExcel(row.birth_date) ?? row.birth_date;
+    /* Data em número de série, d/m/aaaa ou aaaa/mm/dd, como o Excel grava. [PF-1] [C4-3] */
+    if (row.admitted_at) row.admitted_at = normalizarData(row.admitted_at);
+    if (row.birth_date) row.birth_date = normalizarData(row.birth_date);
     /* CPF gravado como número no Excel perde os zeros da frente. [PF-1] */
     if (row.tax_id && /^\d{9,10}$/.test(row.tax_id)) row.tax_id = row.tax_id.padStart(11, "0");
-    if (row.admitted_at && /^\d{2}\/\d{2}\/\d{4}$/.test(row.admitted_at)) {
-      const [d, m, a] = row.admitted_at.split("/");
-      row.admitted_at = `${a}-${m}-${d}`;
-    }
-    if (row.birth_date && /^\d{2}\/\d{2}\/\d{4}$/.test(row.birth_date)) {
-      const [d, m, a] = row.birth_date.split("/");
-      row.birth_date = `${a}-${m}-${d}`;
-    }
     const cpf = row.tax_id?.replace(/\D/g, "");
     if (cpf) {
       const antes = cpfVisto.get(cpf);

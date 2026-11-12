@@ -309,3 +309,17 @@ describe("matrícula e CPF dizem quem é a pessoa e nunca mudam [PF-3]", () => {
     expect(biaFicha).toBeTruthy();
   });
 });
+
+describe("datas inválidas pedem dd/mm/aaaa [C4-3]", () => {
+  it("dia que não existe é recusado, com o formato do modelo; dd/mm/aaaa direto é aceito", async () => {
+    const ruim = await importar([{ name: "DATA RUIM", tax_id: cpf("744744744"), admitted_at: "2020-02-31", job_role_id: repositor }], true);
+    expect(ruim.body.results[0]).toMatchObject({
+      status: "error",
+      message: "Data de admissão inválida — esse dia não existe. Use dd/mm/aaaa.",
+    });
+    const texto = await importar([{ name: "DATA TEXTO", tax_id: cpf("755755755"), admitted_at: "amanhã", job_role_id: repositor }], true);
+    expect(texto.body.results[0].message).toBe("Data de admissão inválida — use dd/mm/aaaa.");
+    const br = await importar([{ name: "DATA BR", tax_id: cpf("766766766"), admitted_at: "1/2/2020", job_role_id: repositor }], true);
+    expect(br.body.results[0].status).toBe("created");
+  });
+});

@@ -15,6 +15,7 @@ import { randomBytes } from "crypto";
 import { FIRST_ACCESS_WINDOW_DAYS, canonicalRegistration } from "../helper/auth-attempts";
 import { MATRICULA_FORA_DO_PADRAO, matriculaNoPadrao } from "../helper/matricula";
 import { parseBirthDate } from "../helper/birth-date";
+import { lerDataDeCalendario } from "../helper/data-de-calendario";
 import type { AuthRequest } from "../types/auth";
 import {
   DadoDaFolhaInvalido,
@@ -115,13 +116,7 @@ function texto(v: unknown): string | null {
 }
 
 function dataDeCalendario(raw: unknown, campo: string): Date | null {
-  const value = texto(raw);
-  if (!value) return null;
-  const dia = value.slice(0, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dia) || Number.isNaN(Date.parse(`${dia}T00:00:00Z`))) {
-    throw new Error(`${campo} inválida — use AAAA-MM-DD.`);
-  }
-  return new Date(`${dia}T00:00:00.000Z`);
+  return lerDataDeCalendario(raw, campo);
 }
 
 /** Arroba, CPF, data ou comprimento de linha inteira num campo de nome. */
