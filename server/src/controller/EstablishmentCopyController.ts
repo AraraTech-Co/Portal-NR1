@@ -638,7 +638,8 @@ class EstablishmentCopyController {
             kind: NotificationKind.UNIT_COPY_AWAITING_VALIDATION,
             title: `Avaliações copiadas para ${par.destino.name}`,
             body: `${resultado.contagem.avaliacoes.criados} avaliação(ões) copiada(s) de ${par.origem.name} aguardam validação. Quem copiou não pode validar.`,
-            link: "/inventario",
+            /* Direto no inventário da filial que recebeu a cópia. [C4-2] */
+            link: `/inventario?unidade=${encodeURIComponent(par.destino.id)}`,
             entityType: "EstablishmentCopy",
             entityId: resultado.copia_id,
           },

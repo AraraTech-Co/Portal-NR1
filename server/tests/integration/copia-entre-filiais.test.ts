@@ -609,3 +609,65 @@ describe("volume [C3-8]", () => {
     console.log(`cópia de 300 riscos: ${ms} ms`);
   });
 });
+
+describe("validar a avaliação copiada [C4-2]", () => {
+  let destino = "";
+  let copiada = "";
+  let riscoCopiado = "";
+
+  it("a avaliação copiada aparece em revisão, com a filial de origem, no inventário e no Início", async () => {
+    destino = (
+      await prisma.establishment.create({ data: { organizationId: orgDe(), name: `Loja Valida ${SUFIXO}` } })
+    ).id;
+    const res = await copiar(token.Sara!, destino, f.centro);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    riscoCopiado = (
+      await prisma.risk.findFirstOrThrow({
+        where: { organizationId: orgDe(), copiedFromId: o.risco, hazard: { activity: { establishmentId: destino } } },
+      })
+    ).id;
+
+    const lista = await request(app).get(`/api/assessments?risk_id=${riscoCopiado}`).set(as(token.Tito!));
+    expect(lista.status).toBe(200);
+    const [a] = lista.body.assessments;
+    expect(a).toMatchObject({ status: "IN_REVIEW", copied_from_establishment: `Loja Centro ${SUFIXO}` });
+    copiada = a.id;
+
+    const inv = await request(app).get(`/api/inventory?establishment_id=${destino}`).set(as(token.Tito!));
+    expect(inv.status).toBe(200);
+    const risco = inv.body.inventory.items
+      .flatMap((h: { risks: { risk_id: string }[] }) => h.risks)
+      .find((r: { risk_id: string }) => r.risk_id === riscoCopiado);
+    expect(risco).toMatchObject({ level: null, pending_level: "HIGH", pending_in_review: true });
+
+    const riscos = await request(app)
+      .get(`/api/risks?hazard_id=${(await prisma.risk.findUniqueOrThrow({ where: { id: riscoCopiado } })).hazardId}`)
+      .set(as(token.Tito!));
+    expect(riscos.body.risks.find((r: { id: string }) => r.id === riscoCopiado).awaiting_validation).toBe(true);
+
+    const inicio = await request(app).get("/api/inicio").set(as(token.Tito!));
+    const cartao = inicio.body.desk.find((c: { id: string }) => c.id === "avaliacoes_rascunho");
+    const emRevisao = await prisma.riskAssessment.count({ where: { organizationId: orgDe(), status: "IN_REVIEW" } });
+    const rascunhos = await prisma.riskAssessment.count({ where: { organizationId: orgDe(), status: "DRAFT" } });
+    expect(emRevisao).toBeGreaterThan(0);
+    expect(cartao?.count).toBe(rascunhos + emRevisao);
+
+    const aviso = await prisma.notification.findFirstOrThrow({
+      where: { organizationId: orgDe(), kind: "UNIT_COPY_AWAITING_VALIDATION", userId: id.Tito },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(aviso.link).toBe(`/inventario?unidade=${destino}`);
+  });
+
+  it("quem copiou não valida; o outro SST valida, e o inventário passa a mostrar o nível", async () => {
+    const dele = await request(app).post(`/api/assessments/${copiada}/validate`).set(as(token.Sara!));
+    expect(dele.status).toBe(403);
+    const ok = await request(app).post(`/api/assessments/${copiada}/validate`).set(as(token.Tito!));
+    expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+    const inv = await request(app).get(`/api/inventory?establishment_id=${destino}`).set(as(token.Tito!));
+    const risco = inv.body.inventory.items
+      .flatMap((h: { risks: { risk_id: string }[] }) => h.risks)
+      .find((r: { risk_id: string }) => r.risk_id === riscoCopiado);
+    expect(risco).toMatchObject({ level: "HIGH", pending_level: null, pending_in_review: false });
+  });
+});

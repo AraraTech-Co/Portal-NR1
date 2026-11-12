@@ -14,6 +14,8 @@ export type InventoryRisk = {
   level: string | null;
   /** O nível da avaliação que aguarda validação, se houver. */
   pending_level?: string | null;
+  /** A que aguarda veio copiada de outra filial, em revisão. [C4-2] */
+  pending_in_review?: boolean;
   severity: number | null;
   probability: number | null;
   controls: InventoryControl[];

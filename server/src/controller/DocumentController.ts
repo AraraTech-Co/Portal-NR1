@@ -43,7 +43,9 @@ async function buildInventorySnapshot(
             mais recente [B3-2-A], e o Inventário mostrava só a validada.
           */
           assessments: {
-            where: { status: { in: [AssessmentStatus.VALIDATED, AssessmentStatus.DRAFT] } },
+            where: {
+              status: { in: [AssessmentStatus.VALIDATED, AssessmentStatus.DRAFT, AssessmentStatus.IN_REVIEW] },
+            },
             orderBy: { assessedAt: "desc" },
           },
           controls: { where: { archivedAt: null } },
@@ -78,7 +80,10 @@ async function buildInventorySnapshot(
       establishment: h.activity.establishment.name,
       risks: h.risks.map((r) => {
         const validada = r.assessments.find((a) => a.status === AssessmentStatus.VALIDATED);
-        const pendente = r.assessments.find((a) => a.status === AssessmentStatus.DRAFT);
+        /* A copiada de outra filial chega em revisão e também aguarda validação. [C4-2] */
+        const pendente = r.assessments.find(
+          (a) => a.status === AssessmentStatus.DRAFT || a.status === AssessmentStatus.IN_REVIEW,
+        );
         return {
           risk_id: r.id,
           description: r.description,
@@ -88,6 +93,8 @@ async function buildInventorySnapshot(
           probability: validada?.probability ?? null,
           /** O nível da avaliação que aguarda validação, se houver. */
           pending_level: pendente?.resultingLevel ?? null,
+          /** Copiada de outra filial, em revisão. [C4-2] */
+          pending_in_review: pendente?.status === AssessmentStatus.IN_REVIEW,
           controls: r.controls.map((c) => ({
             id: c.id,
             type: c.type,
