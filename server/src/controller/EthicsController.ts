@@ -1477,7 +1477,8 @@ class EthicsController {
           kind: NotificationKind.ETHICS_REPORT_CLOSED,
           title: "Sua denúncia foi encerrada",
           body: "Veja o resultado e dê ciência pelo acompanhamento, com o protocolo e o código.",
-          link: "/denuncia",
+          /* Direto em "Acompanhar", que é onde a ciência se dá. [C4-6] */
+          link: "/denuncia?acompanhar",
           entityType: "EthicsReport",
           entityId: current.id,
         });
