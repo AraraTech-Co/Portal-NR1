@@ -147,6 +147,29 @@ describe("situação de cada pessoa [C1-7]", () => {
   });
 });
 
+describe("senha provisória [C4-7]", () => {
+  it("redefinida pelo RH, aparece como senha provisória; trocada pela pessoa, como ativa", async () => {
+    const id = await pessoa();
+    const reset = await request(app)
+      .post(`/api/pessoas-acessos/${id}/redefinir-senha`)
+      .set(as(rh.token))
+      .send({});
+    expect(reset.status, JSON.stringify(reset.body)).toBe(200);
+    expect(await situacao(id)).toBe("TEMP_PASSWORD");
+
+    const login = (await prisma.user.findUniqueOrThrow({ where: { id } })).login;
+    const entrou = await request(app).post("/api/auth").send({ login, password: reset.body.temporary_password });
+    expect(entrou.status, JSON.stringify(entrou.body)).toBe(200);
+    const nova = ["Nova", "Senha", "C47", SUFIXO].join("-");
+    const troca = await request(app)
+      .post("/api/auth/password")
+      .set(as(entrou.body.token))
+      .send({ current_password: reset.body.temporary_password, new_password: nova, new_password_confirmation: nova });
+    expect(troca.status, JSON.stringify(troca.body)).toBe(200);
+    expect(await situacao(id)).toBe("ACTIVE");
+  });
+});
+
 describe("reabrir e classificar [C1-7]", () => {
   it("reabrir: dá 30 dias e desbloqueia; conta ativada ou legado não classificado é recusado", async () => {
     const id = await pessoa();

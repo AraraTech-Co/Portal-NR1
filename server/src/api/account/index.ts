@@ -7,6 +7,7 @@ import notificacoes from "./notificacoes.route";
 import inicio from "./inicio.route";
 import organizacao from "./organizacao.route";
 import historico from "./historico.route";
+import feriados from "./feriados.route";
 
 const router = Router();
 router.use(invites);
@@ -17,5 +18,6 @@ router.use(notificacoes);
 router.use(inicio);
 router.use(organizacao);
 router.use(historico);
+router.use(feriados);
 
 export default router;

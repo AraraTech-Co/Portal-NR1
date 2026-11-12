@@ -3,6 +3,7 @@ import { request } from "./client";
 /** Situação de cada pessoa no painel de ativação. [C1-7] */
 export type ActivationSituation =
   | "BLOCKED"
+  | "TEMP_PASSWORD"
   | "ACTIVE"
   | "LEGACY_UNCLASSIFIED"
   | "MISSING_DATA"
@@ -10,6 +11,7 @@ export type ActivationSituation =
   | "AWAITING";
 
 export const ACTIVATION_SITUATION_LABEL: Record<ActivationSituation, string> = {
+  TEMP_PASSWORD: "Senha provisória, aguardando a troca",
   ACTIVE: "Ativo",
   AWAITING: "Aguardando primeiro acesso",
   MISSING_DATA: "Sem dados para o primeiro acesso",

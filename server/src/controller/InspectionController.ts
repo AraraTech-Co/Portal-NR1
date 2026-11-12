@@ -693,7 +693,7 @@ class InspectionController {
         ),
       );
 
-      // 7. Emergência (1.5.6.2 e 1.5.6.3).
+      // 7. Emergência (1.5.6.2), e o exercício simulado pelo padrão da empresa. [C4-10]
       const emergPorEst = new Map<string, (typeof emergencias)[number][]>();
       for (const p of emergencias) {
         const lista = emergPorEst.get(p.establishmentId) ?? [];
@@ -704,7 +704,7 @@ class InspectionController {
         check(
           "emergencia",
           "Preparação para emergências",
-          "NR-1 1.5.6.2: primeiros socorros, abandono do local e responsáveis; 1.5.6.3: exercício simulado.",
+          "NR-1 1.5.6.2: primeiros socorros, abandono do local e responsáveis. Exercício simulado na periodicidade da empresa.",
           noEscopo.map((e) => {
             const planos = emergPorEst.get(e.id) ?? [];
             const comSimulado = planos.find((p) => p.drills[0]);

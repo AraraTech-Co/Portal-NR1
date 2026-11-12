@@ -175,3 +175,13 @@ describe("situação do prazo [C1-2]", () => {
     );
   });
 });
+
+describe("feriado que repete todo ano [C4-11]", () => {
+  it("conta em qualquer ano pelo dia e mês", async () => {
+    const { isHoliday } = await import("../../src/helper/business-days");
+    const cal = { recurringDays: ["08-27"] };
+    expect(isHoliday({ year: 2026, month: 8, day: 27 }, cal)).toBe(true);
+    expect(isHoliday({ year: 2031, month: 8, day: 27 }, cal)).toBe(true);
+    expect(isHoliday({ year: 2026, month: 8, day: 28 }, cal)).toBe(false);
+  });
+});

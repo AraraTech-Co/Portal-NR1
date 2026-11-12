@@ -170,6 +170,8 @@ describe("aviso no encerramento [C1-5]", () => {
       where: { entityId: identificada.id, kind: "ETHICS_REPORT_CLOSED" },
     });
     expect(aviso?.userId).toBe(colaborador.user.id);
+    /* O aviso abre direto em "Acompanhar", onde se dá a ciência. [C4-6] */
+    expect(aviso?.link).toBe("/denuncia?acompanhar");
 
     const anonima = await denunciar();
     await encerrar(anonima.id);

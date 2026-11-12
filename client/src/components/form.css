@@ -82,3 +82,25 @@ textarea[aria-invalid="true"] {
   border-color: var(--destructive);
   box-shadow: 0 0 0 1px var(--destructive);
 }
+
+/* Aviso que não bloqueia o envio, como a idade fora do comum. [C4-8] */
+.form-warning {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--sem-warning-fg);
+}
+
+/* Confirmação de que deu certo, destacada, com link quando houver. [C4-9] */
+.form-success {
+  margin: 0.5rem 0 0;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--sem-success-bd);
+  border-radius: var(--radius);
+  background: var(--sem-success);
+  color: var(--sem-success-fg);
+  font-size: 0.9rem;
+}
+.form-success a {
+  color: inherit;
+  font-weight: 600;
+}

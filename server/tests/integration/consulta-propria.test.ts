@@ -197,25 +197,52 @@ describe("gerente, supervisor e SST consultam o que é seu [C2-1]", () => {
     }
   });
 
-  it("a consulta não vira escrita: pedir férias, enviar atestado e perguntar continuam pela matriz", async () => {
+  it("a consulta não vira escrita: pedir férias e perguntar continuam pela matriz", async () => {
     // SST não tem férias na matriz: não pede.
     const pedido = await request(app)
       .post("/api/leaves")
       .set(as(sst.token))
       .send({ start_date: "2027-01-10", end_date: "2027-01-12", kind: "VACATION" });
     expect(pedido.status).toBe(403);
-    // Supervisor não tem atestados na matriz: não envia.
-    const envio = await request(app)
-      .post("/api/medical-certificates")
-      .set(as(supervisor.token))
-      .send({ start_date: "2026-10-05", days: 1 });
-    expect(envio.status).toBe(403);
+    /*
+      Atestado é a exceção decidida na Correção 4: o próprio atestado se envia
+      pela consulta própria, e o teste dele está no bloco [C4-4] abaixo.
+    */
     // Gerente não tem holerites na matriz: não pergunta.
     const duvida = await request(app)
       .post(`/api/payslips/${gerente.payslipId}/questions`)
       .set(as(gerente.token))
       .send({ question: "Por que veio menor?" });
     expect(duvida.status).toBe(403);
+  });
+});
+
+describe("o próprio atestado, qualquer papel com ficha ativa [C4-4]", () => {
+  const enviar = (token: string) =>
+    request(app).post("/api/medical-certificates").set(as(token)).send({ start_date: "2026-10-05", days: 1 });
+
+  it("supervisor, gerente e SST enviam o próprio atestado, gravado em nome de quem envia", async () => {
+    for (const [nome, p] of [["supervisor", supervisor], ["gerente", gerente], ["sst", sst]] as const) {
+      const res = await enviar(p.token);
+      expect(res.status, nome).toBe(201);
+      const gravado = await prisma.medicalCertificate.findUniqueOrThrow({ where: { id: res.body.certificate.id } });
+      expect(gravado.userId, nome).toBe(p.id);
+      expect(gravado.status, nome).toBe("PENDING");
+    }
+  });
+
+  it("sem ficha, desligado ou fiscal não enviam", async () => {
+    for (const [nome, p] of [["sst desligado", sstDesligado], ["fiscal com ficha", fiscal]] as const) {
+      expect((await enviar(p.token)).status, nome).toBe(403);
+    }
+  });
+
+  it("enviar não é decidir: quem só envia não aceita nem recusa", async () => {
+    const res = await request(app)
+      .post(`/api/medical-certificates/${colega.certId}/review`)
+      .set(as(sst.token))
+      .send({ status: "APPROVED" });
+    expect(res.status).toBe(403);
   });
 });
 

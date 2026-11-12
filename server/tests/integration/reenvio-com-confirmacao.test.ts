@@ -323,3 +323,18 @@ describe("datas inválidas pedem dd/mm/aaaa [C4-3]", () => {
     expect(br.body.results[0].status).toBe("created");
   });
 });
+
+describe("idade fora do comum avisa, sem bloquear [C4-8]", () => {
+  it("nascimento que dá 6 anos entra com o aviso; um comum, sem", async () => {
+    const res = await importar(
+      [
+        { name: "IDADE ESTRANHA", tax_id: cpf("777177717"), birth_date: "2020-01-05", job_role_id: repositor },
+        { name: "IDADE COMUM", tax_id: cpf("788188818"), birth_date: "1990-01-05", job_role_id: repositor },
+      ],
+      true,
+    );
+    expect(res.body.results[0].status).toBe("created");
+    expect(res.body.results[0].message).toMatch(/^Pronto para entrar\. Idade calculada: \d+ anos\. Confira a data\.$/);
+    expect(res.body.results[1].message).toBe("Pronto para entrar.");
+  });
+});

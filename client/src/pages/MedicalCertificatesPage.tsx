@@ -190,7 +190,12 @@ function SendForm({ onSent }: { onSent: () => Promise<void> }) {
 
 export function MedicalCertificatesPage() {
   const { user } = useAuth();
-  const { canWrite, canManage } = useModuleAccess("atestados");
+  const { canWrite: escreve, canManage } = useModuleAccess("atestados");
+  /*
+    Quem tem ficha ativa envia o próprio atestado, qualquer que seja o papel:
+    a mesma regra da consulta própria. [C4-4]
+  */
+  const canWrite = escreve || (user?.own_modules ?? []).includes("atestados");
   const [rows, setRows] = useState<MedicalCertificateRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

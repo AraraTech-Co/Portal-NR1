@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   acknowledgeEthicsReport,
   createEthicsReport,
@@ -39,7 +39,9 @@ export function EthicsReportPage({
   semEmpresa?: boolean;
 } = {}) {
   const { user } = useAuth();
-  const [mode, setMode] = useState<Mode>(semEmpresa ? "track" : "new");
+  /* Quem chega pelo aviso de encerramento cai em "Acompanhar"; pelo menu, em "Nova denúncia". [C4-6] */
+  const [searchParams] = useSearchParams();
+  const [mode, setMode] = useState<Mode>(semEmpresa || searchParams.has("acompanhar") ? "track" : "new");
   const [categories, setCategories] = useState<string[]>([]);
   const [category, setCategory] = useState("");
   /** A unidade onde o fato aconteceu: obrigatória; com uma só, já vem escolhida. [C1-3] */

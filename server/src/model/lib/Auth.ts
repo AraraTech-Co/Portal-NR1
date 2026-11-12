@@ -121,7 +121,12 @@ function guardReadOnly(req: Request, res: Response, actor: Actor): boolean {
  * própria: quem lê o módulo, ou quem tem ficha ativa e só vai ver o que é
  * seu (o controlador filtra pela titularidade). Só em rota de leitura. [C2-1]
  */
-export type ModuleGateLevel = "read" | "write" | "manage" | "own";
+/**
+ * `ownSend`: enviar o PRÓPRIO registro (o atestado), qualquer papel com ficha
+ * ativa, pela regra da consulta própria; sem ficha, só quem escreve no
+ * módulo. O fiscal fica fora. O controller grava em nome de quem envia. [C4-4]
+ */
+export type ModuleGateLevel = "read" | "write" | "manage" | "own" | "ownSend";
 
 type Gate =
   | { kind: "public" }
@@ -183,6 +188,10 @@ async function authenticate(
         ? canManageModule(roleKey, gate.moduleId)
         : gate.level === "write"
           ? canWriteModule(roleKey, gate.moduleId)
+          : gate.level === "ownSend"
+            ? canWriteModule(roleKey, gate.moduleId) ||
+              ((await hasActiveProfile(access.organizationId, access.user.id)) &&
+                canConsultOwn(roleKey, gate.moduleId, true))
           : gate.level === "own"
             ? canReadModule(roleKey, gate.moduleId) ||
               (["GET", "HEAD"].includes(req.method.toUpperCase()) &&

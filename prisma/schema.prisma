@@ -210,6 +210,7 @@ model Organization {
   ethicsReports   EthicsReport[]
   employeeProfiles EmployeeProfile[]
   employeePayrollData EmployeePayrollData[]
+  holidays            Holiday[]
   ideas           Idea[]
   announcements   Announcement[]
   hrDocuments     HrDocument[]
@@ -422,6 +423,10 @@ model Establishment {
   legalName      String?
   /// Código da folha (0682, 0683): o que a folha imprime antes da razão social. [C3-4]
   payrollCode    String?
+  /// A Sexta-feira Santa é feriado na cidade da filial: ligada por padrão. [C4-11]
+  goodFridayHoliday    Boolean @default(true)
+  /// O Corpus Christi é feriado na cidade da filial: desligado por padrão. [C4-11]
+  corpusChristiHoliday Boolean @default(false)
   address        String?
   archivedAt     DateTime?
   createdAt      DateTime  @default(now())
@@ -458,6 +463,8 @@ model Establishment {
   /// Cópias entre filiais em que esta foi a origem ou o destino. [C3-8]
   copiesFrom          EstablishmentCopy[] @relation("CopySource")
   copiesTo            EstablishmentCopy[] @relation("CopyTarget")
+
+  holidays       Holiday[]
 
   @@index([organizationId, archivedAt])
 }
@@ -2903,4 +2910,23 @@ model EstablishmentCopy {
 
   @@index([organizationId, createdAt])
   @@index([targetEstablishmentId])
+}
+
+/// Feriado da empresa (filial nula) ou de uma filial, no prazo da denúncia.
+/// Os nacionais ficam no código e não se apagam. O que repete todo ano
+/// compara só o dia e o mês. Cadastrar não muda o prazo já gravado. [C4-11]
+model Holiday {
+  id              String   @id @default(uuid())
+  organizationId  String
+  establishmentId String?
+  date            DateTime
+  name            String
+  recurring       Boolean  @default(false)
+  createdById     String
+  createdAt       DateTime @default(now())
+
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  establishment Establishment? @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, establishmentId])
 }
