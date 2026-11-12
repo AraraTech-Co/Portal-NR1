@@ -357,6 +357,15 @@ export function ServiceOrderViewPage() {
                 </span>
               </dd>
             </div>
+            {(content.job_role.cbo2002 || content.job_role.cbo94) && (
+              <div>
+                <dt>CBO</dt>
+                <dd>
+                  {content.job_role.cbo2002 ?? "—"}
+                  {content.job_role.cbo94 && <span className="doc-sub">CBO 94: {content.job_role.cbo94}</span>}
+                </dd>
+              </div>
+            )}
             <div>
               <dt>Versão</dt>
               <dd>{order.version}</dd>

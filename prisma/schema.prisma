@@ -209,6 +209,7 @@ model Organization {
   ethicsCommittee EthicsCommitteeMember[]
   ethicsReports   EthicsReport[]
   employeeProfiles EmployeeProfile[]
+  employeePayrollData EmployeePayrollData[]
   ideas           Idea[]
   announcements   Announcement[]
   hrDocuments     HrDocument[]
@@ -498,6 +499,10 @@ model JobRole {
   sectorId       String
   name           String
   description    String?
+  /// CBO 2002 do cargo, como a planilha da folha traz ou o SST preenche. [PF-2]
+  cbo2002        String?
+  /// CBO 94 do cargo, como a planilha da folha traz. [PF-2]
+  cbo94          String?
   /// Ordem escolhida pela empresa dentro do setor, para juntar as parecidas. [S1-I]
   position       Int       @default(0)
   archivedAt     DateTime?
@@ -1727,6 +1732,8 @@ model EmployeeProfile {
   establishment Establishment? @relation(fields: [establishmentId], references: [id], onDelete: SetNull)
   dismissedBy  User?        @relation("ProfileDismisser", fields: [dismissedById], references: [id])
   contractor   Contractor?  @relation(fields: [contractorId], references: [id])
+  /// Os dados da planilha da folha que o portal não tinha. [PF-2]
+  payrollData  EmployeePayrollData?
 
   /// Um CPF por empresa (só dígitos). NR-7 7.5.19.1 b.
   @@unique([organizationId, taxId])
@@ -1737,6 +1744,52 @@ model EmployeeProfile {
   @@index([establishmentId])
   @@unique([organizationId, userId])
   @@index([organizationId, dismissedAt])
+}
+
+/// Os dados da planilha da folha que o portal não tinha: documentos,
+/// endereço, dependentes, instrução, nacionalidade e rescisão. [PF-2]
+///
+/// Ficam fora da `EmployeeProfile` de propósito: muitas rotas devolvem a
+/// ficha inteira, e com estas colunas lá passariam a entregar RG, PIS e
+/// endereço a quem só vê a função. Aqui, só lê quem pede de propósito, pela
+/// regra `canReadPayrollData` (Master, Dono e RH; a pessoa, os próprios).
+/// O salário não é guardado (decisão do Leonardo, 12/11/2026).
+model EmployeePayrollData {
+  id                String    @id @default(uuid())
+  organizationId    String
+  profileId         String    @unique
+  rg                String?
+  pis               String?
+  ctpsNumber        String?
+  ctpsSeries        String?
+  ctpsUf            String?
+  /// Como a folha escreve ("M", "P").
+  salaryType        String?
+  fgtsOptionDate    DateTime?
+  dependents        Int?
+  /// Código da folha (7 = médio completo, 9 = superior completo).
+  educationLevel    String?
+  /// Código da folha (10 = brasileira).
+  nationalityCode   String?
+  address           String?
+  addressComplement String?
+  district          String?
+  city              String?
+  /// Rescisão como a folha informa; desligar a ficha é decisão do RH.
+  terminationDate   DateTime?
+  terminationCause  String?
+  movementType      String?
+  /// "AAAA-MM": de que folha vieram estes dados. Folha mais velha não
+  /// sobrescreve a mais nova. Nulo quando preenchido à mão.
+  competence        String?
+  updatedById       String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  profile      EmployeeProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
 }
 
 // ---------- Ideias ----------

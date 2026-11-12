@@ -38,7 +38,7 @@ const TIMEOUT_MS = 60_000;
 /** Os campos de conteúdo de cada nível: o que a cópia leva e atualiza. */
 const CONTEUDO = {
   setores: ["name", "description", "processDescription", "environmentDescription"],
-  funcoes: ["name", "description", "position"],
+  funcoes: ["name", "description", "position", "cbo2002", "cbo94"],
   atividades: ["name", "description"],
   perigos: [
     "description",

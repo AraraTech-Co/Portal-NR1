@@ -81,6 +81,9 @@ async function buildServiceOrderContent(organizationId: string, jobRoleId: strin
         id: role.id,
         name: role.name,
         description: role.description,
+        /* Só nas ordens emitidas daqui em diante: a emitida é retrato. [PF-2] */
+        cbo2002: role.cbo2002,
+        cbo94: role.cbo94,
         sector: role.sector.name,
         establishment: role.sector.establishment.name,
         establishment_address: role.sector.establishment.address,

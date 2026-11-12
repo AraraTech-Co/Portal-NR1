@@ -119,6 +119,7 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   "occupational_exam.create": "Exame ocupacional registrado",
   "employee_profile.create": "Ficha de colaborador criada",
   "employee_profile.update": "Ficha de colaborador alterada",
+  "employee_payroll_data.update": "Dados da folha da ficha alterados",
   "employee_profile.dismiss": "Desligamento registrado",
   "employee_profile.reinstate": "Desligamento revertido",
   "establishment.create": "Estabelecimento cadastrado",

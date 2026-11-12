@@ -25,6 +25,9 @@ export type JobRole = {
   sectorId: string;
   name: string;
   description: string | null;
+  /** CBO do cargo, da planilha da folha ou do SST. [PF-2] */
+  cbo2002?: string | null;
+  cbo94?: string | null;
   /** Lugar na lista do setor, escolhido pela empresa. [S1-I] */
   position?: number;
   /** Para não casar função pelo nome na empresa inteira. [CB-6] */
@@ -151,7 +154,10 @@ export async function archiveSector(id: string) {
   return request(`/api/sectors/${id}`, { method: "DELETE" });
 }
 
-export async function updateJobRole(id: string, input: { name?: string }) {
+export async function updateJobRole(
+  id: string,
+  input: { name?: string; cbo_2002?: string | null; cbo_94?: string | null },
+) {
   return request<{ job_role: JobRole }>(`/api/job-roles/${id}`, {
     method: "PATCH",
     body: JSON.stringify(input),

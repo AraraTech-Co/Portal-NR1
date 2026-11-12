@@ -121,6 +121,8 @@ export type EmployeeFile = {
           id: string;
           name: string;
           description: string | null;
+          /** CBO do cargo. [PF-2] */
+          cbo2002?: string | null;
           sector: { id: string; name: string; establishment: { id: string; name: string } };
         }
       | null;
@@ -206,3 +208,42 @@ export const REQUIREMENT_STATUS_LABEL: Record<string, string> = {
   pending: "Em análise",
   rejected: "Recusado",
 };
+
+/** Os dados da planilha da folha guardados à parte da ficha. [PF-2] */
+export type DadosDaFolha = {
+  rg: string | null;
+  pis: string | null;
+  ctps_number: string | null;
+  ctps_series: string | null;
+  ctps_uf: string | null;
+  salary_type: string | null;
+  fgts_option_date: string | null;
+  dependents: number | null;
+  education_level: string | null;
+  nationality_code: string | null;
+  address: string | null;
+  address_complement: string | null;
+  district: string | null;
+  city: string | null;
+  termination_date: string | null;
+  termination_cause: string | null;
+  movement_type: string | null;
+  competence: string | null;
+  updated_at: string | null;
+};
+
+export function fetchDadosDaFolha(profileId: string) {
+  return request<{ dados: DadosDaFolha | null; pode_editar: boolean }>(
+    `/api/employee-profiles/${encodeURIComponent(profileId)}/dados-da-folha`,
+  );
+}
+
+export function updateDadosDaFolha(
+  profileId: string,
+  input: Partial<Record<keyof DadosDaFolha, string | number | null>>,
+) {
+  return request<{ dados: DadosDaFolha | null; mudou: string[] }>(
+    `/api/employee-profiles/${encodeURIComponent(profileId)}/dados-da-folha`,
+    { method: "PATCH", body: JSON.stringify(input) },
+  );
+}

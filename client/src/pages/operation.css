@@ -213,3 +213,21 @@
   margin-top: 0.2rem;
   flex: none;
 }
+
+/* O CBO do cargo, abaixo do nome da função. [PF-2] */
+.op-job-cbo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+}
+.op-job-cbo-form {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+}
+.op-job-cbo-form .form-actions,
+.op-job-cbo-form .form-error {
+  grid-column: 1 / -1;
+}

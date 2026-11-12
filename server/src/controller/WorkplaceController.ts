@@ -577,24 +577,45 @@ class WorkplaceController {
         res.status(404).json({ message: "Função não encontrada." });
         return;
       }
-      const { name, description } = req.body as {
+      const { name, description, cbo_2002, cbo_94 } = req.body as {
         name?: string;
         description?: string | null;
+        cbo_2002?: string | null;
+        cbo_94?: string | null;
       };
       if (name !== undefined && !name.trim()) {
         res.status(400).json({ message: "O nome não pode ficar vazio." });
         return;
+      }
+      /* O CBO do cargo, que aparece onde a função aparece. [PF-2] */
+      const cbo: { cbo2002?: string | null; cbo94?: string | null } = {};
+      for (const [chave, rotulo, valor] of [
+        ["cbo2002", "CBO 2002", cbo_2002],
+        ["cbo94", "CBO 94", cbo_94],
+      ] as const) {
+        if (valor === undefined) continue;
+        if (valor !== null && typeof valor !== "string") {
+          res.status(400).json({ message: `${rotulo} deve ser texto.` });
+          return;
+        }
+        const limpo = valor?.trim() || null;
+        if (limpo && !/^[0-9][0-9.-]{0,9}$/.test(limpo)) {
+          res.status(400).json({ message: `${rotulo} inválido: use os números do código, como 5211-25.` });
+          return;
+        }
+        cbo[chave] = limpo;
       }
       const row = await new JobRole().update.one(
         { id: req.params.id, organizationId: orgId },
         {
           ...(name !== undefined ? { name: name.trim() } : {}),
           ...(description !== undefined ? { description } : {}),
+          ...cbo,
         },
       );
       await audit(req, "job_role.update", "JobRole", existing.id,
-        { name: existing.name, description: existing.description },
-        { name: row?.name, description: row?.description });
+        { name: existing.name, description: existing.description, cbo2002: existing.cbo2002, cbo94: existing.cbo94 },
+        { name: row?.name, description: row?.description, cbo2002: row?.cbo2002, cbo94: row?.cbo94 });
       res.json({ job_role: row });
     } catch (err) {
       fail(res, err);

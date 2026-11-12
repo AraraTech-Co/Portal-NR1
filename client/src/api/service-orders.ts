@@ -34,6 +34,9 @@ export type ServiceOrderContent = {
     id: string;
     name: string;
     description: string | null;
+    /** Nas ordens emitidas antes da planilha da folha, não vem. [PF-2] */
+    cbo2002?: string | null;
+    cbo94?: string | null;
     sector: string;
     establishment: string;
     establishment_address: string | null;

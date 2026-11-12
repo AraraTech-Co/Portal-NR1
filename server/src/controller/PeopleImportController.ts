@@ -16,6 +16,13 @@ import { FIRST_ACCESS_WINDOW_DAYS, canonicalRegistration } from "../helper/auth-
 import { MATRICULA_FORA_DO_PADRAO, matriculaNoPadrao } from "../helper/matricula";
 import { parseBirthDate } from "../helper/birth-date";
 import type { AuthRequest } from "../types/auth";
+import {
+  DadoDaFolhaInvalido,
+  camposQueMudam,
+  lerDadosDaFolha,
+  soPreenchidos,
+  type DadosDaFolha,
+} from "../helper/dados-da-folha";
 
 function fail(res: Response, err: unknown) {
   const e = err as { status?: number; message?: string };
@@ -39,7 +46,14 @@ type Entrada = {
   bond?: unknown;
   contractor_id?: unknown;
   org_role?: unknown;
+  /** Os dados da planilha da folha que o portal guarda à parte. [PF-2] */
+  payroll?: unknown;
+  /** CBO do cargo, como a planilha da folha traz: vai para a função. [PF-2] */
+  job_role_cbo2002?: unknown;
+  job_role_cbo94?: unknown;
 };
+
+const CBO = /^[0-9][0-9.-]{0,9}$/;
 
 type Resultado = {
   line: number;
@@ -184,6 +198,35 @@ class PeopleImportController {
     return mudou;
   }
 
+  /**
+   * Os dados da folha de quem já existe: a folha é a fonte, então o que veio
+   * preenchido grava por cima; célula em branco não apaga; e uma folha de
+   * competência mais velha que a guardada não mexe em nada. [PF-2]
+   */
+  private async aplicarDadosDaFolha(entrada: {
+    orgId: string;
+    profileId: string;
+    atual: Record<string, unknown> | null;
+    novos: DadosDaFolha;
+    simulacao: boolean;
+    actorId: string;
+  }): Promise<{ mudou: string[]; antiga: string | null }> {
+    const { orgId, profileId, atual, novos, simulacao, actorId } = entrada;
+    if (Object.keys(novos).length === 0) return { mudou: [], antiga: null };
+    const guardada = (atual?.competence as string | null | undefined) ?? null;
+    const chegou = (novos.competence as string | null | undefined) ?? null;
+    if (guardada && chegou && chegou < guardada) return { mudou: [], antiga: guardada };
+    const mudou = camposQueMudam(atual, novos);
+    if (mudou.length > 0 && !simulacao) {
+      await prisma.employeePayrollData.upsert({
+        where: { profileId },
+        create: { organizationId: orgId, profileId, ...novos, updatedById: actorId },
+        update: { ...novos, updatedById: actorId },
+      });
+    }
+    return { mudou, antiga: null };
+  }
+
 
   /**
    * Cadastra várias pessoas de uma vez, a partir de uma planilha colada.
@@ -217,7 +260,12 @@ class PeopleImportController {
       const [funcoes, contratadas] = await Promise.all([
         prisma.jobRole.findMany({
           where: { organizationId: orgId, archivedAt: null },
-          select: { id: true, sector: { select: { establishmentId: true } } },
+          select: {
+            id: true,
+            cbo2002: true,
+            cbo94: true,
+            sector: { select: { establishmentId: true } },
+          },
         }),
         prisma.contractor.findMany({
           where: { organizationId: orgId, archivedAt: null },
@@ -225,6 +273,41 @@ class PeopleImportController {
         }),
       ]);
       const funcaoValida = new Set(funcoes.map((f) => f.id));
+      /*
+        CBO de cada função como está agora, e como fica depois desta
+        planilha: a primeira linha que traz o CBO de uma função sem CBO
+        preenche; as seguintes já o encontram. [PF-2]
+      */
+      const cboDaFuncao = new Map(
+        funcoes.map((f) => [f.id, { cbo2002: f.cbo2002, cbo94: f.cbo94 }]),
+      );
+      const preencherCbo = async (
+        jobRoleId: string | null,
+        cbo2002: string | null,
+        cbo94: string | null,
+      ): Promise<string[]> => {
+        if (!jobRoleId) return [];
+        const atual = cboDaFuncao.get(jobRoleId);
+        if (!atual) return [];
+        const dados: { cbo2002?: string; cbo94?: string } = {};
+        if (!atual.cbo2002 && cbo2002) dados.cbo2002 = cbo2002;
+        if (!atual.cbo94 && cbo94) dados.cbo94 = cbo94;
+        const feitos = Object.keys(dados).map((k) => (k === "cbo2002" ? "CBO 2002 da função" : "CBO 94 da função"));
+        if (feitos.length === 0) return [];
+        cboDaFuncao.set(jobRoleId, { ...atual, ...dados });
+        if (!simulacao) {
+          await prisma.jobRole.update({ where: { id: jobRoleId }, data: dados });
+          await writeAudit({
+            organizationId: orgId,
+            actorId: actor.userId,
+            action: "job_role.update",
+            entityType: "JobRole",
+            entityId: jobRoleId,
+            after: { via: "import", ...dados },
+          });
+        }
+        return feitos;
+      };
       /* Filial de cada função: a ficha nasce na filial da função. [C3-2] */
       const filialDaFuncao = new Map(funcoes.map((f) => [f.id, f.sector.establishmentId]));
       const filiaisAtivas = await prisma.establishment.findMany({
@@ -278,6 +361,12 @@ class PeopleImportController {
           const jobRoleId = texto(linha.job_role_id);
           const admittedAt = dataDeCalendario(linha.admitted_at, "Data de admissão");
           const birthDate = parseBirthDate(linha.birth_date);
+          const daFolha = soPreenchidos(lerDadosDaFolha(linha.payroll));
+          const cbo2002 = texto(linha.job_role_cbo2002);
+          const cbo94 = texto(linha.job_role_cbo94);
+          for (const [rotulo, cbo] of [["CBO 2002", cbo2002], ["CBO 94", cbo94]] as const) {
+            if (cbo && !CBO.test(cbo)) throw new Error(`${rotulo} inválido: use os números do código, como 5211-25.`);
+          }
 
           let taxId: string | null = null;
           const cpfBruto = texto(linha.tax_id);
@@ -364,6 +453,7 @@ class PeopleImportController {
             admittedAt: true,
             birthDate: true,
             user: { select: { name: true, login: true } },
+            payrollData: true,
           } as const;
           const [porCpf, porMatricula, porEmail] = await Promise.all([
             taxId
@@ -416,14 +506,43 @@ class PeopleImportController {
               daPlanilha: { taxId, matricula, establishmentId: filial, jobRoleId, admittedAt, birthDate },
               simulacao,
             });
+            const folha = await this.aplicarDadosDaFolha({
+              orgId,
+              profileId: jaExiste.id,
+              atual: jaExiste.payrollData as Record<string, unknown> | null,
+              novos: daFolha,
+              simulacao,
+              actorId: actor.userId,
+            });
+            const cboFeito = await preencherCbo(jaExiste.jobRoleId ?? jobRoleId, cbo2002, cbo94);
             registro.login = jaExiste.user.login;
-            if (completado.length > 0) {
+            const tudo = [
+              ...completado,
+              ...(folha.mudou.length > 0 ? [`dados da folha (${folha.mudou.join(", ")})`] : []),
+              ...cboFeito,
+            ];
+            if (tudo.length > 0) {
               registro.status = "completed";
-              registro.filled = completado;
-              registro.message = `Já estava no portal; a planilha completou: ${completado.join(", ")}.`;
+              registro.filled = tudo;
+              registro.message = `Já estava no portal; a planilha completou: ${tudo.join(", ")}.`;
             } else {
               registro.status = "skipped";
               registro.message = `Já cadastrado (${jaExiste.user.name}); nada a completar.`;
+            }
+            if (folha.antiga) {
+              const [a, m] = folha.antiga.split("-");
+              registro.message += ` Os dados da folha do portal são de ${m}/${a}, mais novos que os desta planilha: ficaram como estavam.`;
+            }
+            if (!simulacao && folha.mudou.length > 0) {
+              /* A trilha diz o que mudou e de que folha, sem os valores. */
+              await writeAudit({
+                organizationId: orgId,
+                actorId: actor.userId,
+                action: "employee_payroll_data.update",
+                entityType: "EmployeeProfile",
+                entityId: jaExiste.id,
+                after: { via: "import", fields: folha.mudou, competence: daFolha.competence ?? null },
+              });
             }
             if (!simulacao && completado.length > 0) {
               await writeAudit({
@@ -449,6 +568,7 @@ class PeopleImportController {
               ? loginCandidateFromEmail(email)
               : loginCandidateFromName(nome);
 
+          await preencherCbo(jobRoleId, cbo2002, cbo94);
           if (simulacao) {
             registro.status = "created";
             registro.login = await allocateUniqueLogin(base, prisma);
@@ -484,7 +604,7 @@ class PeopleImportController {
             await tx.accountMembership.create({
               data: { accountId: actor.accountId, userId: user.id, role: AccountRole.USER },
             });
-            await tx.employeeProfile.create({
+            const ficha = await tx.employeeProfile.create({
               data: {
                 organizationId: orgId,
                 userId: user.id,
@@ -498,6 +618,11 @@ class PeopleImportController {
                 contractorId,
               },
             });
+            if (Object.keys(daFolha).length > 0) {
+              await tx.employeePayrollData.create({
+                data: { organizationId: orgId, profileId: ficha.id, ...daFolha, updatedById: actor.userId },
+              });
+            }
             return { id: user.id, login };
           });
 
@@ -526,7 +651,9 @@ class PeopleImportController {
             registro.message = "Já existe alguém com este login, CPF, matrícula ou e-mail.";
           } else {
             registro.message =
-              err instanceof Error ? err.message : "Não foi possível importar esta linha.";
+              err instanceof DadoDaFolhaInvalido || err instanceof Error
+                ? err.message
+                : "Não foi possível importar esta linha.";
           }
           resultados.push(registro);
         }
