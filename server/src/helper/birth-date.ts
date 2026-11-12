@@ -33,6 +33,21 @@ function invalida(message: string) {
   return Object.assign(new Error(message), { status: 400, field: "birth_date" });
 }
 
+/**
+ * Aviso de idade fora de 14 a 100 anos, sem bloquear: um ano errado passa e
+ * trava o primeiro acesso. A mesma regra da tela (`client/src/lib/idade.ts`). [C4-8]
+ */
+export function avisoDeIdade(nascimento: Date | null | undefined, hoje: Date = new Date()): string | null {
+  if (!nascimento) return null;
+  const a = nascimento.getUTCFullYear();
+  const m = nascimento.getUTCMonth();
+  const d = nascimento.getUTCDate();
+  let idade = hoje.getFullYear() - a;
+  if (hoje.getMonth() < m || (hoje.getMonth() === m && hoje.getDate() < d)) idade -= 1;
+  if (idade >= 14 && idade <= 100) return null;
+  return `Idade calculada: ${idade} ${idade === 1 ? "ano" : "anos"}. Confira a data.`;
+}
+
 /** Mesma data de calendário (as duas gravadas à meia-noite UTC). */
 export function sameBirthDate(a: Date | null | undefined, b: Date | null | undefined): boolean {
   return Boolean(a && b && a.toISOString().slice(0, 10) === b.toISOString().slice(0, 10));

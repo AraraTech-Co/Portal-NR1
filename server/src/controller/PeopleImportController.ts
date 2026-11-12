@@ -14,7 +14,7 @@ import {
 import { randomBytes } from "crypto";
 import { FIRST_ACCESS_WINDOW_DAYS, canonicalRegistration } from "../helper/auth-attempts";
 import { MATRICULA_FORA_DO_PADRAO, matriculaNoPadrao } from "../helper/matricula";
-import { parseBirthDate } from "../helper/birth-date";
+import { avisoDeIdade, parseBirthDate } from "../helper/birth-date";
 import { lerDataDeCalendario } from "../helper/data-de-calendario";
 import type { AuthRequest } from "../types/auth";
 import {
@@ -544,6 +544,8 @@ class PeopleImportController {
           const jobRoleId = texto(linha.job_role_id);
           const admittedAt = dataDeCalendario(linha.admitted_at, "Data de admissão");
           const birthDate = parseBirthDate(linha.birth_date);
+          /* Aviso, não bloqueio: a idade fora de 14 a 100 anos pede conferência. [C4-8] */
+          const aviso = avisoDeIdade(birthDate);
           const daFolha = soPreenchidos(lerDadosDaFolha(linha.payroll));
           const cbo2002 = texto(linha.job_role_cbo2002);
           const cbo94 = texto(linha.job_role_cbo94);
@@ -767,6 +769,7 @@ class PeopleImportController {
                   ? `Já cadastrado (${jaExiste.user.name}); a planilha traz ${pendentes.length === 1 ? "um dado diferente" : `${pendentes.length} dados diferentes`} do portal.`
                   : `Já cadastrado (${jaExiste.user.name}); nada a completar.`;
             }
+            if (aviso) registro.message += ` ${aviso}`;
             if (folha.antiga) {
               const [a, m] = folha.antiga.split("-");
               registro.message += ` Os dados da folha do portal são de ${m}/${a}, mais novos que os desta planilha: ficaram como estavam.`;
@@ -810,7 +813,7 @@ class PeopleImportController {
           if (simulacao) {
             registro.status = "created";
             registro.login = await allocateUniqueLogin(base, prisma);
-            registro.message = "Pronto para entrar.";
+            registro.message = aviso ? `Pronto para entrar. ${aviso}` : "Pronto para entrar.";
             resultados.push(registro);
             continue;
           }
@@ -879,6 +882,7 @@ class PeopleImportController {
           registro.message = birthDate && taxId && matricula
             ? "Aguardando primeiro acesso."
             : "Aguardando primeiro acesso — faltam dados (matrícula, CPF ou nascimento) para a pessoa entrar sozinha.";
+          if (aviso) registro.message += ` ${aviso}`;
           resultados.push(registro);
         } catch (err) {
           if (

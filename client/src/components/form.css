@@ -82,3 +82,10 @@ textarea[aria-invalid="true"] {
   border-color: var(--destructive);
   box-shadow: 0 0 0 1px var(--destructive);
 }
+
+/* Aviso que não bloqueia o envio, como a idade fora do comum. [C4-8] */
+.form-warning {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--sem-warning-fg);
+}

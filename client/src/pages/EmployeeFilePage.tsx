@@ -31,6 +31,7 @@ import {
 import "@/components/form.css";
 import "./people.css";
 import { DadosDaFolhaSection } from "./DadosDaFolhaSection";
+import { avisoDeIdade } from "@/lib/idade";
 
 function hojeIso(): string {
   return new Date(Date.now() - 3 * 3_600_000).toISOString().slice(0, 10);
@@ -282,6 +283,11 @@ function CadastroEditor({
             ? "Com matrícula e CPF, é o que a pessoa usa no primeiro acesso."
             : "Só o RH altera o nascimento."}
         </span>
+        {avisoDeIdade(birthDate) && (
+          <span className="form-warning" role="status">
+            {avisoDeIdade(birthDate)}
+          </span>
+        )}
       </label>
       <div className="form-grid cols-2">
         <label className="form-field">
@@ -573,7 +579,14 @@ export function EmployeeFilePage() {
                 </div>
                 <div>
                   <dt>Nascimento</dt>
-                  <dd>{formatDay(profile.birthDate ?? null)}</dd>
+                  <dd>
+                    {formatDay(profile.birthDate ?? null)}
+                    {avisoDeIdade(profile.birthDate ? String(profile.birthDate).slice(0, 10) : null) && (
+                      <span className="muted" style={{ display: "block" }}>
+                        {avisoDeIdade(String(profile.birthDate).slice(0, 10))}
+                      </span>
+                    )}
+                  </dd>
                 </div>
                 <div>
                   <dt>Telefone</dt>
