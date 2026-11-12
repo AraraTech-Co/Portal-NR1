@@ -1,5 +1,6 @@
 import { Router } from "express";
 import profiles from "../../controller/EmployeeProfileController";
+import dadosDaFolha from "../../controller/EmployeePayrollDataController";
 import { exigeQuadroDePessoal, moduleRead, moduleWrite } from "./middleware";
 
 const read = moduleRead("colaboradores");
@@ -22,6 +23,13 @@ router.get("/api/employee-profiles/:id", read, (req, res) =>
 /** A ficha inteira da pessoa: a própria sempre; a dos outros, quem cuida. [S6-C] */
 router.get("/api/employee-profiles/:id/ficha", read, (req, res) =>
   profiles.file(req, res),
+);
+/** Dados da planilha da folha: Master, Dono e RH; a pessoa lê os seus. [PF-2] */
+router.get("/api/employee-profiles/:id/dados-da-folha", read, (req, res) =>
+  dadosDaFolha.get(req, res),
+);
+router.patch("/api/employee-profiles/:id/dados-da-folha", read, (req, res) =>
+  dadosDaFolha.update(req, res),
 );
 router.patch("/api/employee-profiles/:id", read, (req, res) =>
   profiles.update(req, res),

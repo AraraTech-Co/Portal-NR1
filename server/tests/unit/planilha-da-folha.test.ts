@@ -104,6 +104,9 @@ describe("a planilha da folha é lida como sai do sistema de folha [PF-1]", () =
         admitted_at: "2018-06-19",
         birth_date: "1984-05-25",
         bond: "EMPLOYEE",
+        payroll: { competence: "2026-10", rg: "123456789", pis: "12345678901", salary_type: "M", city: "AMERICANA - SP" },
+        job_role_cbo2002: "5211-25",
+        job_role_cbo94: "0.11-05",
         establishment_id: LOJA.id,
       },
       {
@@ -114,6 +117,9 @@ describe("a planilha da folha é lida como sai do sistema de folha [PF-1]", () =
         admitted_at: "2020-02-01",
         birth_date: "1990-01-05",
         bond: "EMPLOYEE",
+        payroll: { competence: "2026-10", rg: "123456789", pis: "12345678901", salary_type: "M", city: "AMERICANA - SP" },
+        job_role_cbo2002: "5211-25",
+        job_role_cbo94: "0.11-05",
         establishment_id: AG.id,
       },
       {
@@ -124,9 +130,72 @@ describe("a planilha da folha é lida como sai do sistema de folha [PF-1]", () =
         admitted_at: "2025-01-17",
         birth_date: "2003-07-20",
         bond: "EMPLOYEE",
+        payroll: { competence: "2026-10", rg: "123456789", pis: "12345678901", salary_type: "M", city: "AMERICANA - SP" },
+        job_role_cbo2002: "5211-25",
+        job_role_cbo94: "0.11-05",
         establishment_id: SUPLEMENTO.id,
       },
     ]);
+  });
+
+  it("o que o portal não tinha vai para os dados da folha, com as datas e a competência convertidas [PF-2]", () => {
+    const cheia = CABECALHO_DA_FOLHA.map((c) =>
+      ({
+        "Cód. Empresa": "0682",
+        Competência: "11/2026",
+        "Cód. Func.": "7",
+        Nome: "ANA",
+        CPF: ANA,
+        RG: "MG-12.345.678",
+        PIS: "12345678901",
+        CTPS: "65333",
+        "CTPS Série": "0282",
+        "CTPS UF": "sp",
+        "Dt. Rescisão": "46000",
+        "Causa Rescisão": "Pedido de demissão",
+        "Tipo Movimento": "D",
+        Cargo: "REPOSITOR",
+        "CBO 94": "0.11-05",
+        "CBO 2002": "5211-25",
+        "Tipo Salário": "P",
+        Salário: "1800",
+        "Data Opção FGTS": "15/03/2019",
+        "Nº Dependentes": "2",
+        "Grau Instrução": "7",
+        "Cód. Nacionalidade": "22",
+        Endereço: "R Manguezal, 78",
+        Complemento: "casa 2",
+        Bairro: "Jardim",
+        Cidade: "AMERICANA - SP",
+        "Data Relatório": "46332",
+      })[c] ?? "",
+    );
+    const lido = lerTabela([[...CABECALHO_DA_FOLHA], cheia], FUNCOES, [], ROTULOS, FILIAIS);
+    expect(lido.problems).toEqual([]);
+    expect(lido.rows[0]!.payroll).toEqual({
+      competence: "2026-11",
+      rg: "MG-12.345.678",
+      pis: "12345678901",
+      ctps_number: "65333",
+      ctps_series: "0282",
+      ctps_uf: "sp",
+      termination_date: "2025-12-09",
+      termination_cause: "Pedido de demissão",
+      movement_type: "D",
+      salary_type: "P",
+      fgts_option_date: "2019-03-15",
+      dependents: "2",
+      education_level: "7",
+      nationality_code: "22",
+      address: "R Manguezal, 78",
+      address_complement: "casa 2",
+      district: "Jardim",
+      city: "AMERICANA - SP",
+    });
+    expect(lido.rows[0]!.job_role_cbo2002).toBe("5211-25");
+    expect(lido.rows[0]!.job_role_cbo94).toBe("0.11-05");
+    expect(JSON.stringify(lido.rows)).not.toContain("1800");
+    expect(JSON.stringify(lido.rows)).not.toContain("46332");
   });
 
   it("a coluna Empresa não vira empresa contratada, e o salário não sai da planilha", () => {

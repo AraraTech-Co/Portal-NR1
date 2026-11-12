@@ -295,6 +295,7 @@ class EmployeeProfileController {
               id: true,
               name: true,
               description: true,
+              cbo2002: true,
               sector: {
                 select: { id: true, name: true, establishment: { select: { id: true, name: true } } },
               },

@@ -216,3 +216,22 @@ const UNIT_COPY_ROLES: readonly string[] = ["master", "sst"];
 export function canCopyBetweenUnits(roleKey: string): boolean {
   return UNIT_COPY_ROLES.includes(normalizeRoleKey(roleKey));
 }
+
+/**
+ * Os dados da planilha da folha (documentos, endereço, dependentes,
+ * rescisão): Master, Dono e RH leem e editam os de todos; a própria pessoa
+ * lê os seus, sem editar; ninguém mais. Decisão do Leonardo em 12/11/2026,
+ * nem o ADM loja, que publica holerite. [PF-2]
+ */
+const PAYROLL_DATA_ROLES: readonly string[] = ["master", "owner", "rh"];
+
+export function canManagePayrollData(roleKey: string): boolean {
+  return PAYROLL_DATA_ROLES.includes(normalizeRoleKey(roleKey));
+}
+
+export function canReadPayrollData(
+  actor: { permission: string; userId: string },
+  profile: { userId: string },
+): boolean {
+  return canManagePayrollData(actor.permission) || profile.userId === actor.userId;
+}

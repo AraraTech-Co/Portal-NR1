@@ -30,6 +30,7 @@ import {
 } from "@/lib/module-access";
 import "@/components/form.css";
 import "./people.css";
+import { DadosDaFolhaSection } from "./DadosDaFolhaSection";
 
 function hojeIso(): string {
   return new Date(Date.now() - 3 * 3_600_000).toISOString().slice(0, 10);
@@ -526,7 +527,7 @@ export function EmployeeFilePage() {
         title={profile.user.name}
         description={
           profile.jobRole
-            ? `${profile.jobRole.name} · ${profile.jobRole.sector.name} · ${profile.jobRole.sector.establishment.name}`
+            ? `${profile.jobRole.name}${profile.jobRole.cbo2002 ? ` (CBO ${profile.jobRole.cbo2002})` : ""} · ${profile.jobRole.sector.name} · ${profile.jobRole.sector.establishment.name}`
             : profile.establishment
               ? `Sem função atribuída · ${profile.establishment.name}`
               : "Sem função atribuída · sem filial"
@@ -613,6 +614,8 @@ export function EmployeeFilePage() {
             onSaved={load}
           />
         </section>
+
+        <DadosDaFolhaSection profileId={id} />
 
         <section className="form-section">
           <h2>Acesso ao portal</h2>

@@ -25,6 +25,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { canCopyBetweenUnits, useModuleAccess } from "@/lib/module-access";
 import { useAuth } from "@/auth/AuthContext";
 import { CopiarDeOutraFilial } from "./CopiarDeOutraFilial";
+import { CboDaFuncao } from "./CboDaFuncao";
 import "@/components/form.css";
 import "./operation.css";
 import { LoadingState } from "@/components/LoadingState";
@@ -459,6 +460,16 @@ export function OperationPage() {
                           </span>
                         )}
                       </div>
+                      <CboDaFuncao
+                        nome={j.name}
+                        cbo2002={j.cbo2002}
+                        cbo94={j.cbo94}
+                        canEdit={canEdit}
+                        onSave={async (cbo) => {
+                          await updateJobRole(j.id, cbo);
+                          await reload();
+                        }}
+                      />
                       <NameActions
                         tipo="job_role"
                         name={j.name}

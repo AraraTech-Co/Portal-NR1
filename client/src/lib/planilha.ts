@@ -21,7 +21,15 @@ export type LinhaDaPlanilha = {
   contractor_id?: string;
   /** A filial da linha, resolvida pelo nome ou pelo CNPJ. [C3-3] */
   establishment_id?: string;
+  /** Os dados da planilha da folha que o portal guarda à parte da ficha. [PF-2] */
+  payroll?: Record<string, string>;
+  /** O CBO do cargo, que vai para a função. [PF-2] */
+  job_role_cbo2002?: string;
+  job_role_cbo94?: string;
 };
+
+/** Coluna da folha que vai para os dados da folha: `payroll:<campo>`. [PF-2] */
+type Destino = keyof LinhaLocal | `payroll:${string}`;
 
 type LinhaLocal = LinhaDaPlanilha & { establishment?: string; payroll_code?: string };
 
@@ -161,7 +169,7 @@ export function chaveDaFolha(cabecalho: string): string {
  * leitura não usa: a "Empresa" repete a filial (e não é empresa contratada),
  * e o salário fica fora por decisão do Leonardo (12/11/2026). [PF-1]
  */
-const COLUNAS_DA_FOLHA: Record<string, keyof LinhaLocal | null> = Object.fromEntries(
+const COLUNAS_DA_FOLHA: Record<string, Destino | null> = Object.fromEntries(
   CABECALHO_DA_FOLHA.map((c) => [chaveDaFolha(c), null]),
 );
 Object.assign(COLUNAS_DA_FOLHA, {
@@ -172,7 +180,31 @@ Object.assign(COLUNAS_DA_FOLHA, {
   "data nasc": "birth_date",
   admissao: "admitted_at",
   cargo: "job_role_id",
-} satisfies Record<string, keyof LinhaLocal>);
+  /* O que o portal não tinha vai para os dados da folha (12/11/2026). [PF-2] */
+  competencia: "payroll:competence",
+  rg: "payroll:rg",
+  pis: "payroll:pis",
+  ctps: "payroll:ctps_number",
+  "ctps serie": "payroll:ctps_series",
+  "ctps uf": "payroll:ctps_uf",
+  "dt rescisao": "payroll:termination_date",
+  "causa rescisao": "payroll:termination_cause",
+  "tipo movimento": "payroll:movement_type",
+  "tipo salario": "payroll:salary_type",
+  "data opcao fgts": "payroll:fgts_option_date",
+  "n dependentes": "payroll:dependents",
+  "grau instrucao": "payroll:education_level",
+  "cod nacionalidade": "payroll:nationality_code",
+  endereco: "payroll:address",
+  complemento: "payroll:address_complement",
+  bairro: "payroll:district",
+  cidade: "payroll:city",
+  "cbo 2002": "job_role_cbo2002",
+  "cbo 94": "job_role_cbo94",
+} satisfies Record<string, Destino>);
+
+/** Campos dos dados da folha que são data, para converter o número de série. */
+const DATAS_DA_FOLHA = ["fgts_option_date", "termination_date"];
 
 /** Uma planilha é a da folha quando traz as duas colunas de código. */
 function ehDaFolha(cabecalho: string[]): boolean {
@@ -292,7 +324,7 @@ export function lerTabela(
     silêncio: a empresa montava a planilha seguindo a tela e o dado não
     entrava, sem ninguém perceber. [B3-1-B]
   */
-  const conhecidas: Record<string, keyof LinhaLocal | null> = daFolha ? COLUNAS_DA_FOLHA : COLUNAS;
+  const conhecidas: Record<string, Destino | null> = daFolha ? COLUNAS_DA_FOLHA : COLUNAS;
   const colunasIgnoradas = temCabecalho
     ? cabecalho.filter((c) => c && !(c in conhecidas))
     : [];
@@ -364,7 +396,11 @@ export function lerTabela(
     celulas.forEach((valor, coluna) => {
       const campo = campos[coluna];
       if (!campo || !valor) return;
-      (row as Record<string, string>)[campo] = valor;
+      if (campo.startsWith("payroll:")) {
+        (row.payroll ??= {})[campo.slice(8)] = valor;
+        return;
+      }
+      (row as unknown as Record<string, string>)[campo] = valor;
     });
 
     if (!row.name) {
@@ -536,6 +572,18 @@ export function lerTabela(
       problems.push(
         `Linha ${numero}: "${row.name}" entra como Terceirizado sem empresa contratada. Preencha a coluna "empresa contratada" ou cadastre a empresa em Terceiros.`,
       );
+    }
+    if (row.payroll) {
+      for (const k of DATAS_DA_FOLHA) {
+        const v = row.payroll[k];
+        if (!v) continue;
+        const serie = dataDoExcel(v);
+        const br = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(v);
+        row.payroll[k] = serie ?? (br ? `${br[3]}-${br[2]}-${br[1]}` : v);
+      }
+      /* "10/2026" → "2026-10". */
+      const comp = /^(\d{1,2})\/(\d{4})$/.exec(row.payroll.competence ?? "");
+      if (comp) row.payroll.competence = `${comp[2]}-${comp[1]!.padStart(2, "0")}`;
     }
     /* Data em número de série, como sai do .xlsx. [PF-1] */
     if (row.admitted_at) row.admitted_at = dataDoExcel(row.admitted_at) ?? row.admitted_at;
