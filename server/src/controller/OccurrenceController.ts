@@ -7,6 +7,7 @@ import { Risk } from "../model/schema/Risk/Risk";
 import { Action } from "../model/schema/Action/Action";
 import { Evidence } from "../model/schema/Evidence/Evidence";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
+import { seesOnlyOwnOccurrences } from "../helper/module-access";
 import { writeAudit } from "../helper/audit";
 import { notify } from "../helper/notify";
 import {
@@ -144,6 +145,12 @@ async function riskOfEstablishment(
   return { ok: true };
 }
 
+/** O colaborador abre só a ocorrência que relatou; a dos outros responde como inexistente. [C4-14] */
+function alheiaDoColaborador(req: Request, reportedById: string): boolean {
+  const auth = req as AuthRequest;
+  return seesOnlyOwnOccurrences(auth.actor!.permission) && reportedById !== actorUserId(auth);
+}
+
 class OccurrenceController {
   async list(req: Request, res: Response) {
     try {
@@ -158,6 +165,10 @@ class OccurrenceController {
           ...(establishmentId ? { establishmentId } : {}),
           ...(type && isOccurrenceType(type) ? { type } : {}),
           AND: [collectiveReadScope(escopo, "reportedById")],
+          /* O colaborador, só as que relatou (P-5, opção c). [C4-14] */
+          ...(seesOnlyOwnOccurrences((req as AuthRequest).actor!.permission)
+            ? { reportedById: actorUserId(req as AuthRequest) }
+            : {}),
         },
         orderBy: { occurredAt: "desc" },
         include: {
@@ -198,7 +209,7 @@ class OccurrenceController {
         },
       });
       const escopo = await scopeOfRequest(req as AuthRequest);
-      if (!occurrence || !seesCollective(escopo, occurrence.establishmentId, occurrence.reportedById)) {
+      if (!occurrence || !seesCollective(escopo, occurrence.establishmentId, occurrence.reportedById) || alheiaDoColaborador(req, occurrence.reportedById)) {
         naoEncontrada(res);
         return;
       }
@@ -362,7 +373,7 @@ class OccurrenceController {
       });
       const escopo = await scopeOfRequest(req as AuthRequest);
       const como = current ? editaOcorrencia(req as AuthRequest, escopo, current) : null;
-      if (!current || !seesCollective(escopo, current.establishmentId, current.reportedById)) {
+      if (!current || !seesCollective(escopo, current.establishmentId, current.reportedById) || alheiaDoColaborador(req, current.reportedById)) {
         naoEncontrada(res);
         return;
       }
@@ -745,7 +756,7 @@ class OccurrenceController {
         organizationId: orgId,
       });
       const escopo = await scopeOfRequest(req as AuthRequest);
-      if (!occurrence || !seesCollective(escopo, occurrence.establishmentId, occurrence.reportedById)) {
+      if (!occurrence || !seesCollective(escopo, occurrence.establishmentId, occurrence.reportedById) || alheiaDoColaborador(req, occurrence.reportedById)) {
         naoEncontrada(res);
         return;
       }

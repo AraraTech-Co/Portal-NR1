@@ -254,3 +254,12 @@ export function canSeeInspectionPanel(roleKey: string): boolean {
 export function canSeeAllServiceOrders(roleKey: string): boolean {
   return normalizeRoleKey(roleKey) !== "colaborador";
 }
+
+/**
+ * Ocorrências: o colaborador vê só as que ele mesmo relatou (decisão P-5 do
+ * Léo, opção c; "caso contrário, mudamos depois"). Os demais papéis seguem o
+ * recorte por unidade da C2-13. [C4-14]
+ */
+export function seesOnlyOwnOccurrences(roleKey: string): boolean {
+  return normalizeRoleKey(roleKey) === "colaborador";
+}
