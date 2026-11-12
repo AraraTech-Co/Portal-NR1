@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import { AccountRole, Prisma, Role, WorkerBond } from "@prisma/client";
+import { AccessSuspensionReason, AccountRole, Prisma, Role, WorkerBond } from "@prisma/client";
 import { Request, Response } from "express";
 import prisma from "../model/prisma";
 import { actorOrgId } from "../helper/org-scope";
@@ -51,7 +51,41 @@ type Entrada = {
   /** CBO do cargo, como a planilha da folha traz: vai para a função. [PF-2] */
   job_role_cbo2002?: unknown;
   job_role_cbo94?: unknown;
+  /** O que o RH marcou, na prévia, para receber o valor da planilha. [PF-3] */
+  aceitar?: unknown;
 };
+
+/**
+ * O que a planilha traz diferente do portal para quem já existe. Não muda
+ * sozinho: a prévia mostra lado a lado, e só o que o RH marcar muda. [PF-3]
+ */
+type Divergencia = {
+  campo: "name" | "birth_date" | "admitted_at" | "job_role" | "cbo2002" | "cbo94" | "rescisao";
+  rotulo: string;
+  portal: string;
+  planilha: string;
+};
+
+const ROTULO_DA_DIVERGENCIA: Record<Divergencia["campo"], string> = {
+  name: "nome",
+  birth_date: "nascimento",
+  admitted_at: "admissão",
+  job_role: "função",
+  cbo2002: "CBO 2002 da função",
+  cbo94: "CBO 94 da função",
+  rescisao: "rescisão",
+};
+
+function dia(d: Date | null | undefined): string {
+  if (!d) return "—";
+  return d.toISOString().slice(0, 10).split("-").reverse().join("/");
+}
+
+/** "ANA  DA SILVA" e "Ana da Silva" são o mesmo nome: a folha escreve em maiúsculas. */
+function mesmoNome(a: string, b: string): boolean {
+  const n = (x: string) => x.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+  return n(a) === n(b);
+}
 
 const CBO = /^[0-9][0-9.-]{0,9}$/;
 
@@ -72,6 +106,8 @@ type Resultado = {
   awaiting_first_access?: boolean;
   /** A filial em que a linha cai, para a prévia mostrar. [C3-3] */
   establishment?: { id: string; name: string } | null;
+  /** Diferenças com o portal que ainda esperam o RH. [PF-3] */
+  divergences?: Divergencia[];
 };
 
 function texto(v: unknown): string | null {
@@ -228,6 +264,156 @@ class PeopleImportController {
   }
 
 
+  /** O que a planilha traz diferente do portal, campo a campo. [PF-3] */
+  private divergencias(entrada: {
+    jaExiste: {
+      jobRoleId: string | null;
+      birthDate: Date | null;
+      admittedAt: Date | null;
+      dismissedAt: Date | null;
+      user: { name: string };
+    };
+    linha: {
+      nome: string;
+      birthDate: Date | null;
+      admittedAt: Date | null;
+      jobRoleId: string | null;
+      cbo2002: string | null;
+      cbo94: string | null;
+    };
+    daFolha: DadosDaFolha;
+    nomeDaFuncao: Map<string, string>;
+    cboDaFuncao: Map<string, { cbo2002: string | null; cbo94: string | null }>;
+  }): Divergencia[] {
+    const { jaExiste: p, linha: l, daFolha, nomeDaFuncao, cboDaFuncao } = entrada;
+    const out: Divergencia[] = [];
+    const add = (campo: Divergencia["campo"], portal: string, planilha: string) =>
+      out.push({ campo, rotulo: ROTULO_DA_DIVERGENCIA[campo], portal, planilha });
+    if (!mesmoNome(p.user.name, l.nome)) add("name", p.user.name, l.nome);
+    if (p.birthDate && l.birthDate && p.birthDate.getTime() !== l.birthDate.getTime()) {
+      add("birth_date", dia(p.birthDate), dia(l.birthDate));
+    }
+    if (p.admittedAt && l.admittedAt && p.admittedAt.getTime() !== l.admittedAt.getTime()) {
+      add("admitted_at", dia(p.admittedAt), dia(l.admittedAt));
+    }
+    if (p.jobRoleId && l.jobRoleId && p.jobRoleId !== l.jobRoleId) {
+      add("job_role", nomeDaFuncao.get(p.jobRoleId) ?? "outra função", nomeDaFuncao.get(l.jobRoleId) ?? "");
+    }
+    /* O CBO é da função que a pessoa terá: a da planilha, se for trocar; senão a dela. */
+    const funcao = l.jobRoleId ?? p.jobRoleId;
+    const cbo = funcao ? cboDaFuncao.get(funcao) : undefined;
+    if (cbo?.cbo2002 && l.cbo2002 && cbo.cbo2002 !== l.cbo2002) add("cbo2002", cbo.cbo2002, l.cbo2002);
+    if (cbo?.cbo94 && l.cbo94 && cbo.cbo94 !== l.cbo94) add("cbo94", cbo.cbo94, l.cbo94);
+    const rescisao = daFolha.terminationDate as Date | null | undefined;
+    if (rescisao && !p.dismissedAt) {
+      const causa = (daFolha.terminationCause as string | null | undefined) ?? null;
+      add("rescisao", "ativa no portal", `rescisão em ${dia(rescisao)}${causa ? ` (${causa})` : ""}: desligar`);
+    }
+    return out;
+  }
+
+  /**
+   * Aplica só o que o RH marcou na prévia. Na prévia não grava; devolve o que
+   * seria aplicado, para a linha dizer. [PF-3]
+   */
+  private async aplicarConfirmados(entrada: {
+    orgId: string;
+    actorId: string;
+    jaExiste: { id: string; userId: string; admittedAt: Date | null };
+    aceitas: Divergencia[];
+    linha: {
+      nome: string;
+      birthDate: Date | null;
+      admittedAt: Date | null;
+      jobRoleId: string | null;
+      cbo2002: string | null;
+      cbo94: string | null;
+    };
+    daFolha: DadosDaFolha;
+    simulacao: boolean;
+    cboDaFuncao: Map<string, { cbo2002: string | null; cbo94: string | null }>;
+  }): Promise<string[]> {
+    const { orgId, actorId, jaExiste, aceitas, linha, daFolha, simulacao, cboDaFuncao } = entrada;
+    if (aceitas.length === 0) return [];
+    const campos = new Set(aceitas.map((d) => d.campo));
+    const rescisao = (daFolha.terminationDate as Date | null | undefined) ?? null;
+    if (campos.has("rescisao")) {
+      if (jaExiste.userId === actorId) {
+        throw new Error("A planilha traz a sua rescisão: outra pessoa do RH registra o seu desligamento.");
+      }
+      const admissao = campos.has("admitted_at") ? linha.admittedAt : jaExiste.admittedAt;
+      if (rescisao && admissao && rescisao < admissao) {
+        throw new Error("A rescisão da planilha é anterior à admissão: confira. Nada mudou.");
+      }
+    }
+    if (simulacao) return [...campos];
+
+    const ficha: Prisma.EmployeeProfileUncheckedUpdateInput = {};
+    if (campos.has("birth_date")) ficha.birthDate = linha.birthDate;
+    if (campos.has("admitted_at")) ficha.admittedAt = linha.admittedAt;
+    if (campos.has("job_role")) ficha.jobRoleId = linha.jobRoleId;
+    const funcao = linha.jobRoleId;
+    const cbo: { cbo2002?: string; cbo94?: string } = {};
+    if (campos.has("cbo2002") && linha.cbo2002) cbo.cbo2002 = linha.cbo2002;
+    if (campos.has("cbo94") && linha.cbo94) cbo.cbo94 = linha.cbo94;
+    const agora = new Date();
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        if (campos.has("name")) {
+          await tx.user.update({ where: { id: jaExiste.userId }, data: { name: linha.nome } });
+        }
+        if (Object.keys(ficha).length > 0) {
+          await tx.employeeProfile.update({ where: { id: jaExiste.id }, data: ficha });
+        }
+        if (funcao && Object.keys(cbo).length > 0) {
+          await tx.jobRole.update({ where: { id: funcao }, data: cbo });
+        }
+        if (campos.has("rescisao") && rescisao) {
+          /* O mesmo desligamento da ficha: a data, o motivo, e o acesso cai junto. [S5-H] */
+          await tx.employeeProfile.update({
+            where: { id: jaExiste.id },
+            data: {
+              dismissedAt: rescisao,
+              dismissalReason: (daFolha.terminationCause as string | null | undefined) ?? "Rescisão na folha",
+              dismissedById: actorId,
+            },
+          });
+          await tx.membership.updateMany({
+            where: { userId: jaExiste.userId, organizationId: orgId },
+            data: {
+              suspendedAt: agora,
+              suspensionReason: AccessSuspensionReason.DISMISSAL,
+              suspendedById: actorId,
+            },
+          });
+          await tx.token.deleteMany({ where: { userId: jaExiste.userId } });
+        }
+      });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+        throw new Error(
+          "Na filial da nova função já existe outra pessoa com esta matrícula: confira. Nada mudou.",
+        );
+      }
+      throw err;
+    }
+    if (funcao && Object.keys(cbo).length > 0) {
+      const atual = cboDaFuncao.get(funcao) ?? { cbo2002: null, cbo94: null };
+      cboDaFuncao.set(funcao, { ...atual, ...cbo });
+    }
+    const desligou = campos.has("rescisao");
+    await writeAudit({
+      organizationId: orgId,
+      actorId,
+      action: desligou ? "employee_profile.dismiss" : "employee_profile.update",
+      entityType: "EmployeeProfile",
+      entityId: jaExiste.id,
+      after: { via: "import", confirmed: [...campos], ...(campos.has("rescisao") ? { dismissedAt: rescisao } : {}) },
+    });
+    return [...campos];
+  }
+
   /**
    * Cadastra várias pessoas de uma vez, a partir de uma planilha colada.
    *
@@ -262,6 +448,7 @@ class PeopleImportController {
           where: { organizationId: orgId, archivedAt: null },
           select: {
             id: true,
+            name: true,
             cbo2002: true,
             cbo94: true,
             sector: { select: { establishmentId: true } },
@@ -310,6 +497,7 @@ class PeopleImportController {
       };
       /* Filial de cada função: a ficha nasce na filial da função. [C3-2] */
       const filialDaFuncao = new Map(funcoes.map((f) => [f.id, f.sector.establishmentId]));
+      const nomeDaFuncao = new Map(funcoes.map((f) => [f.id, f.name]));
       const filiaisAtivas = await prisma.establishment.findMany({
         where: { organizationId: orgId, archivedAt: null },
         select: { id: true, name: true },
@@ -452,6 +640,8 @@ class PeopleImportController {
             jobRoleId: true,
             admittedAt: true,
             birthDate: true,
+            userId: true,
+            dismissedAt: true,
             user: { select: { name: true, login: true } },
             payrollData: true,
           } as const;
@@ -497,7 +687,33 @@ class PeopleImportController {
             preenchido. Colar o quadro do RH não preenchia função nem CPF de
             quem já estava no portal. [CB-2] [S1-G]
           */
+          /*
+            CPF e matrícula dizem quem é a pessoa, e a planilha nunca os troca.
+            Se apontam para pessoas diferentes, ou se a pessoa achada tem outro
+            CPF ou outra matrícula no portal, a linha vai para o RH conferir e
+            nada muda. [PF-3]
+          */
+          if (porCpf && porMatricula && porCpf.id !== porMatricula.id) {
+            throw new Error(
+              `O CPF é de ${porCpf.user.name} e a matrícula é de ${porMatricula.user.name}: confira a planilha. Nada mudou.`,
+            );
+          }
           const jaExiste = porCpf ?? porMatricula ?? porEmail;
+          if (jaExiste && taxId && jaExiste.taxId && jaExiste.taxId !== taxId) {
+            throw new Error(
+              `${jaExiste.user.name} tem outro CPF no portal: confira a planilha. Nada mudou.`,
+            );
+          }
+          if (
+            jaExiste &&
+            matricula &&
+            jaExiste.registration &&
+            canonicalRegistration(jaExiste.registration) !== canonicalRegistration(matricula)
+          ) {
+            throw new Error(
+              `${jaExiste.user.name} tem a matrícula ${jaExiste.registration} no portal, e a planilha diz ${matricula}: confira. Nada mudou.`,
+            );
+          }
           if (jaExiste) {
             const completado = await this.completarFicha({
               orgId,
@@ -514,9 +730,33 @@ class PeopleImportController {
               simulacao,
               actorId: actor.userId,
             });
-            const cboFeito = await preencherCbo(jaExiste.jobRoleId ?? jobRoleId, cbo2002, cbo94);
+            /* O CBO é do cargo da planilha; sem cargo na linha, da função que a pessoa tem. */
+            const cboFeito = await preencherCbo(jobRoleId ?? jaExiste.jobRoleId, cbo2002, cbo94);
+            const divergencias = this.divergencias({
+              jaExiste,
+              linha: { nome, birthDate, admittedAt, jobRoleId, cbo2002, cbo94 },
+              daFolha,
+              nomeDaFuncao,
+              cboDaFuncao,
+            });
+            const aceitar = new Set(
+              Array.isArray(linha.aceitar) ? linha.aceitar.filter((c): c is string => typeof c === "string") : [],
+            );
+            const confirmados = await this.aplicarConfirmados({
+              orgId,
+              actorId: actor.userId,
+              jaExiste,
+              aceitas: divergencias.filter((d) => aceitar.has(d.campo)),
+              linha: { nome, birthDate, admittedAt, jobRoleId, cbo2002, cbo94 },
+              daFolha,
+              simulacao,
+              cboDaFuncao,
+            });
+            const pendentes = divergencias.filter((d) => !confirmados.includes(d.campo));
+            if (pendentes.length > 0) registro.divergences = pendentes;
             registro.login = jaExiste.user.login;
             const tudo = [
+              ...confirmados.map((c) => `${ROTULO_DA_DIVERGENCIA[c as Divergencia["campo"]]} (confirmado pelo RH)`),
               ...completado,
               ...(folha.mudou.length > 0 ? [`dados da folha (${folha.mudou.join(", ")})`] : []),
               ...cboFeito,
@@ -527,7 +767,10 @@ class PeopleImportController {
               registro.message = `Já estava no portal; a planilha completou: ${tudo.join(", ")}.`;
             } else {
               registro.status = "skipped";
-              registro.message = `Já cadastrado (${jaExiste.user.name}); nada a completar.`;
+              registro.message =
+                pendentes.length > 0
+                  ? `Já cadastrado (${jaExiste.user.name}); a planilha traz ${pendentes.length === 1 ? "um dado diferente" : `${pendentes.length} dados diferentes`} do portal.`
+                  : `Já cadastrado (${jaExiste.user.name}); nada a completar.`;
             }
             if (folha.antiga) {
               const [a, m] = folha.antiga.split("-");

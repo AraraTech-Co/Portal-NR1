@@ -50,3 +50,15 @@
   user-select: all;
   white-space: nowrap;
 }
+
+/* Diferença com o portal, que só muda com a marca do RH. [PF-3] */
+.import-divergence {
+  display: flex;
+  gap: 0.45rem;
+  align-items: flex-start;
+  margin-top: 0.3rem;
+  font-size: 0.85rem;
+}
+.import-divergence input {
+  margin-top: 0.2rem;
+}
