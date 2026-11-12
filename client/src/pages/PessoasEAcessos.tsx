@@ -179,7 +179,7 @@ export function PessoasEAcessos() {
 
   async function onReset(p: Person) {
     const ok = window.confirm(
-      `Redefinir a senha de ${p.name}?\n\nA sessão aberta dela cai, e no próximo acesso ela entra com uma senha provisória e precisa trocar.`,
+      `Redefinir a senha de ${p.name}?\n\nA sessão aberta dela cai, e no próximo acesso ela entra com uma senha provisória e precisa trocar. O primeiro acesso por matrícula, CPF e nascimento deixa de valer para esta conta.`,
     );
     if (!ok) return;
     setBusyId(p.id);

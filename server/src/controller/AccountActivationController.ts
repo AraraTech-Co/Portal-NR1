@@ -21,13 +21,15 @@ import { scopeOfRequest } from "../helper/unit-scope";
  * O gerente vê só as unidades que gere e a própria conta (decisão 5, 10/11);
  * quem cuida da empresa inteira continua vendo todos. [C3-5]
  *
- * Uma situação por pessoa, nesta ordem: Bloqueado · Ativo · Legado não
+ * Uma situação por pessoa, nesta ordem: Bloqueado · Senha provisória
+ * (redefinida pelo RH, aguardando a troca) [C4-7] · Ativo · Legado não
  * classificado · Sem dados para o primeiro acesso · Prazo vencido ·
  * Aguardando primeiro acesso.
  */
 
 export type ActivationSituation =
   | "BLOCKED"
+  | "TEMP_PASSWORD"
   | "ACTIVE"
   | "LEGACY_UNCLASSIFIED"
   | "MISSING_DATA"
@@ -190,6 +192,7 @@ class AccountActivationController {
               login: true,
               active: true,
               activatedAt: true,
+              mustChangePassword: true,
               firstAccessEligible: true,
               firstAccessUntil: true,
               employeeProfiles: {
@@ -259,6 +262,11 @@ class AccountActivationController {
             .sort((a, b) => b.getTime() - a.getTime())[0];
           let situation: ActivationSituation;
           if (ate) situation = "BLOCKED";
+          /*
+            "Redefinir senha" grava a ativação e pede a troca: até a pessoa
+            entrar e trocar, a senha é provisória, não "Ativo". [C4-7]
+          */
+          else if (u.activatedAt && u.mustChangePassword) situation = "TEMP_PASSWORD";
           else if (u.activatedAt) situation = "ACTIVE";
           else if (!u.firstAccessEligible) situation = "LEGACY_UNCLASSIFIED";
           else if (faltam.length > 0) situation = "MISSING_DATA";

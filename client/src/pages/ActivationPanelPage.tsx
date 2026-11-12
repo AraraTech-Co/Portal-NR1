@@ -15,6 +15,7 @@ import "./denuncia.css";
 
 const ORDEM: ActivationSituation[] = [
   "ACTIVE",
+  "TEMP_PASSWORD",
   "AWAITING",
   "MISSING_DATA",
   "BLOCKED",
@@ -24,7 +25,7 @@ const ORDEM: ActivationSituation[] = [
 
 function tom(s: ActivationSituation): "success" | "info" | "warning" | "danger" | "neutral" {
   if (s === "ACTIVE") return "success";
-  if (s === "AWAITING") return "info";
+  if (s === "AWAITING" || s === "TEMP_PASSWORD") return "info";
   if (s === "BLOCKED") return "danger";
   if (s === "MISSING_DATA" || s === "WINDOW_EXPIRED") return "warning";
   return "neutral";
