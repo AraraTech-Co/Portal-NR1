@@ -370,7 +370,7 @@ class EthicsController {
         severity,
         severitySource: "AUTO",
         createdAt: recebidaEm,
-        dueAt: computeDueAt(recebidaEm, severity, holidayCalendarFor(orgId)),
+        dueAt: computeDueAt(recebidaEm, severity, await holidayCalendarFor(orgId, est.id)),
       });
 
       // Auditoria sem revelar identidade do denunciante anônimo.
@@ -1529,7 +1529,7 @@ class EthicsController {
 
       const report = await prisma.ethicsReport.findFirst({
         where: { id: req.params.id, organizationId: orgId },
-        select: { id: true, severity: true, createdAt: true },
+        select: { id: true, severity: true, createdAt: true, establishmentId: true },
       });
       if (!report) {
         res.status(404).json({ message: "Relato não encontrado." });
@@ -1554,7 +1554,11 @@ class EthicsController {
               a Alta deixar o vencimento no passado, a denúncia aparece
               atrasada. [C1-2]
             */
-            dueAt: computeDueAt(report.createdAt, severity, holidayCalendarFor(orgId)),
+            dueAt: computeDueAt(
+              report.createdAt,
+              severity,
+              await holidayCalendarFor(orgId, report.establishmentId ?? null),
+            ),
           },
         }),
         prisma.ethicsReportSeverityChange.create({

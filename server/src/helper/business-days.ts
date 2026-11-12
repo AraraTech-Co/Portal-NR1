@@ -39,6 +39,8 @@ export type HolidayCalendar = {
   goodFriday?: boolean;
   corpusChristi?: boolean;
   extraDates?: string[];
+  /** Feriados que repetem todo ano, "MM-DD". [C4-11] */
+  recurringDays?: string[];
 };
 
 /**
@@ -104,6 +106,7 @@ export function isHoliday(d: CalendarDate, calendar: HolidayCalendar = NATIONAL_
     if (calendar.goodFriday && key(addCalendarDays(easter, -2)) === key(d)) return true;
     if (calendar.corpusChristi && key(addCalendarDays(easter, 60)) === key(d)) return true;
   }
+  if ((calendar.recurringDays ?? []).includes(key(d).slice(5))) return true;
   return (calendar.extraDates ?? []).includes(key(d));
 }
 

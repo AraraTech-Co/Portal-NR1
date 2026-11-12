@@ -27,6 +27,7 @@ import { ConsultaAcessos, FiscaisComAcesso } from "./ConsultaAcessos";
 import { ImportPeople } from "./ImportPeople";
 import { EthicsCommitteeSection } from "./EthicsCommitteeSection";
 import { PessoasEAcessos } from "./PessoasEAcessos";
+import { FeriadosDoPrazo } from "./FeriadosDoPrazo";
 
 /** Hoje no fuso de Brasília, em AAAA-MM-DD. */
 function todayIso(): string {
@@ -841,6 +842,7 @@ export function AccountPage() {
       {parte === "pessoas" && canManage && <ImportPeople />}
       {/* Quem é o comitê de ética é decisão de acesso. [CB-27] */}
       {parte === "canal" && canManage && <EthicsCommitteeSection />}
+      {parte === "canal" && canManage && <FeriadosDoPrazo />}
       {parte === "fiscalizacao" && canManage && <FiscaisComAcesso />}
       {parte === "fiscalizacao" && canManage && <ConsultaAcessos />}
     </div>

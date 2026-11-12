@@ -41,6 +41,8 @@ const MODULO_POR_ROTA: Record<string, string> = {
   ativacao: "ativacao",
   /** Histórico sem unidade, da central. [C3-7] */
   "historico-sem-unidade": "conta",
+  /* Feriados do prazo da denúncia, no Canal e comitê. [C4-11] */
+  feriados: "conta",
   configuracoes: "configuracoes",
 };
 
