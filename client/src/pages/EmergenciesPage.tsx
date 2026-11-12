@@ -24,6 +24,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { PeoplePicker } from "@/components/PeoplePicker";
 import { ACTION_PRIORITY_LABEL, CRITERIO_HINT, CRITERIO_LABEL, formatDay } from "@/lib/labels";
 import { useModuleAccess } from "@/lib/module-access";
+import { Link } from "react-router-dom";
 import "@/components/data-table.css";
 import "@/components/form.css";
 const DRILL_LABEL: Record<DrillStatus, string> = {
@@ -94,7 +95,8 @@ export function EmergenciesPage() {
   const [criterioDaAcao, setCriterioDaAcao] = useState("");
   const [abrindoAcao, setAbrindoAcao] = useState(false);
   const [erroDaAcao, setErroDaAcao] = useState<string | null>(null);
-  const [acaoFeita, setAcaoFeita] = useState<string | null>(null);
+  /* A ação aberta pelo achado: confirmação destacada, com o link para ela. [C4-9] */
+  const [acaoFeita, setAcaoFeita] = useState<{ id: string; title: string } | null>(null);
 
   const [drillFor, setDrillFor] = useState<string | null>(null);
   const [performedAt, setPerformedAt] = useState("");
@@ -242,7 +244,7 @@ export function EmergenciesPage() {
       setResponsavel("");
       setPrazoDaAcao("");
       setCriterioDaAcao("");
-      setAcaoFeita(`Ação aberta no plano: "${action.title}".`);
+      setAcaoFeita({ id: action.id, title: action.title });
     } catch (err) {
       setErroDaAcao(err instanceof Error ? err.message : "Falha ao abrir a ação");
     } finally {
@@ -610,8 +612,9 @@ export function EmergenciesPage() {
                               </ul>
                             )}
                             {acaoFeita && (
-                              <p className="muted" role="status">
-                                {acaoFeita}
+                              <p className="form-success" role="status">
+                                Ação aberta no Plano de ação: “{acaoFeita.title}”.{" "}
+                                <Link to={`/acoes?acao=${encodeURIComponent(acaoFeita.id)}`}>Abrir a ação</Link>
                               </p>
                             )}
                           </div>

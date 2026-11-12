@@ -89,3 +89,18 @@ textarea[aria-invalid="true"] {
   font-size: 0.85rem;
   color: var(--sem-warning-fg);
 }
+
+/* Confirmação de que deu certo, destacada, com link quando houver. [C4-9] */
+.form-success {
+  margin: 0.5rem 0 0;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--sem-success-bd);
+  border-radius: var(--radius);
+  background: var(--sem-success);
+  color: var(--sem-success-fg);
+  font-size: 0.9rem;
+}
+.form-success a {
+  color: inherit;
+  font-weight: 600;
+}
