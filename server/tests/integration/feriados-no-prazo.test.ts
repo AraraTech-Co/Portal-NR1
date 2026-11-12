@@ -176,4 +176,32 @@ describe("o prazo da denúncia usa os feriados da filial e da empresa [C4-11]", 
     const nova = await denunciar(filialA);
     expect(nova.dueAt!.getTime() - nova.createdAt.getTime()).toBeLessThan(6 * DIA);
   });
+
+  it("feriado da empresa de OUTRA organização não entra no prazo desta", async () => {
+    const outra = await prisma.organization.findFirstOrThrow({ where: { id: { not: ORG_ID } }, select: { id: true } });
+    const quem = await prisma.user.findFirstOrThrow({ select: { id: true } });
+    const alheios = [];
+    for (let i = 0; i <= 12; i++) {
+      alheios.push(
+        await prisma.holiday.create({
+          data: {
+            organizationId: outra.id,
+            establishmentId: null,
+            date: new Date(`${new Date(Date.now() + i * DIA).toISOString().slice(0, 10)}T00:00:00.000Z`),
+            name: `Alheio ${SUFIXO} ${i}`,
+            createdById: quem.id,
+          },
+        }),
+      );
+    }
+    try {
+      const deB = await denunciar(filialB);
+      /* Esta empresa já não tem feriado cadastrado (o teste anterior excluiu): só os nacionais. */
+      expect(deB.dueAt!.toISOString()).toBe(computeDueAt(deB.createdAt, "NORMAL", { goodFriday: false }).toISOString());
+      expect(deB.dueAt!.getTime() - deB.createdAt.getTime()).toBeLessThan(6 * DIA);
+    } finally {
+      await prisma.holiday.deleteMany({ where: { id: { in: alheios.map((h) => h.id) } } });
+    }
+  });
+
 });
