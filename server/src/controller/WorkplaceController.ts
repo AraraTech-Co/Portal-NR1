@@ -266,6 +266,28 @@ class WorkplaceController {
         });
         return;
       }
+      /*
+        A planilha da folha diz a filial pelo código: duas filiais com o mesmo
+        código deixariam a importação sem saber de qual é a pessoa. "0682" e
+        "682" são o mesmo código. [PF-1]
+      */
+      if (payrollCode) {
+        const canonico = (c: string) => {
+          const u = c.trim().toUpperCase();
+          return /^\d+$/.test(u) ? u.replace(/^0+(?=\d)/, "") : u;
+        };
+        const outras = await prisma.establishment.findMany({
+          where: { organizationId: orgId, archivedAt: null, payrollCode: { not: null }, id: { not: id } },
+          select: { name: true, payrollCode: true },
+        });
+        const igual = outras.find((o) => canonico(o.payrollCode!) === canonico(payrollCode));
+        if (igual) {
+          res.status(400).json({
+            message: `O código da folha ${payrollCode} já é da filial ${igual.name}. Cada filial tem o seu.`,
+          });
+          return;
+        }
+      }
       const row = await new Establishment().update.one(
         { id, organizationId: orgId },
         {
