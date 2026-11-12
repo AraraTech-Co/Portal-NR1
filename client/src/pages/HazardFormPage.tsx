@@ -146,6 +146,8 @@ function RiskList({
                 <span>{r.description}</span>
                 {level ? (
                   <Chip>{RISK_LEVEL_LABEL[level] ?? level}</Chip>
+                ) : r.awaiting_validation ? (
+                  <Chip tone="info">Aguardando validação</Chip>
                 ) : (
                   <Chip tone="warning">Sem avaliação</Chip>
                 )}
@@ -157,7 +159,13 @@ function RiskList({
                     onClick={() => setAvaliando(avaliando === r.id ? null : r.id)}
                   >
                     {/* O botão abre a avaliação e as medidas; reavaliar é lá dentro. [B3-2-E] */}
-                    {avaliando === r.id ? "Fechar" : level ? "Avaliação e medidas" : "Avaliar"}
+                    {avaliando === r.id
+                      ? "Fechar"
+                      : level
+                        ? "Avaliação e medidas"
+                        : r.awaiting_validation
+                          ? "Ver e validar"
+                          : "Avaliar"}
                   </Button>
                   {canEdit && (
                     <>

@@ -263,11 +263,29 @@ class RiskController {
         },
         orderBy: { createdAt: "desc" },
       });
+      /*
+        A avaliação que aguarda validação (o rascunho e a copiada de outra
+        filial, em revisão) não é a que vale, mas a tela precisa dizer que
+        ela existe: "Sem avaliação" fazia o SST avaliar do zero. [C4-2]
+      */
+      const aguardando = new Set(
+        (
+          await prisma.riskAssessment.findMany({
+            where: {
+              organizationId: orgId,
+              riskId: { in: rows.map((r) => r.id) },
+              status: { in: [AssessmentStatus.DRAFT, AssessmentStatus.IN_REVIEW] },
+            },
+            select: { riskId: true },
+          })
+        ).map((a) => a.riskId),
+      );
       res.json({
         risks: rows.map((r) => ({
           ...r,
           establishment: r.hazard.activity.establishment,
           activity: r.hazard.activity.name,
+          awaiting_validation: aguardando.has(r.id),
         })),
       });
     } catch (err) {
@@ -370,7 +388,28 @@ class RiskController {
         {},
         { createdAt: "desc" },
       );
-      res.json({ assessments: rows });
+      /*
+        A avaliação copiada de outra filial diz de onde veio: a filial da
+        avaliação de origem e a data da cópia. [C4-2]
+      */
+      const origens = rows.map((r) => r.copiedFromId).filter((id): id is string => !!id);
+      const filialDaOrigem = new Map(
+        (
+          await prisma.riskAssessment.findMany({
+            where: { id: { in: origens }, organizationId: orgId },
+            select: {
+              id: true,
+              risk: { select: { hazard: { select: { activity: { select: { establishment: { select: { name: true } } } } } } } },
+            },
+          })
+        ).map((o) => [o.id, o.risk.hazard.activity.establishment.name]),
+      );
+      res.json({
+        assessments: rows.map((r) => ({
+          ...r,
+          copied_from_establishment: r.copiedFromId ? filialDaOrigem.get(r.copiedFromId) ?? null : null,
+        })),
+      });
     } catch (err) {
       fail(res, err);
     }

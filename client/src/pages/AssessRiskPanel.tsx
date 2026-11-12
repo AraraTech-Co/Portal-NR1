@@ -155,7 +155,9 @@ export function AssessRiskPanel({
     }
   }
 
-  const draft = assessments?.find((a) => a.status === "DRAFT") ?? null;
+  /* A copiada de outra filial chega em revisão: também aguarda validação. [C4-2] */
+  const draft = assessments?.find((a) => a.status === "DRAFT" || a.status === "IN_REVIEW") ?? null;
+  const copiada = draft?.status === "IN_REVIEW";
   const validated = assessments?.find((a) => a.status === "VALIDATED") ?? null;
 
   const painel = painelDaAvaliacao({
@@ -196,16 +198,22 @@ export function AssessRiskPanel({
       {draft && (
         <div className="assess-draft">
           <p>
-            Avaliação aguardando validação:{" "}
+            {copiada ? "Avaliação em revisão:" : "Avaliação aguardando validação:"}{" "}
             <Chip tone={levelTone(draft.resultingLevel)}>{levelName(version, draft.resultingLevel)}</Chip>{" "}
             <span className="muted">
-              severidade {draft.severity} · probabilidade {draft.probability} · feita em{" "}
-              {formatDay(draft.assessedAt)}
+              severidade {draft.severity} · probabilidade {draft.probability} ·{" "}
+              {copiada
+                ? `copiada da filial ${draft.copied_from_establishment ?? "de origem"} em ${formatDay(draft.copiedAt ?? draft.assessedAt)}`
+                : `feita em ${formatDay(draft.assessedAt)}`}
             </span>
           </p>
           {canWrite &&
             (draft.assessorId === user?.id ? (
-              <p className="muted">Você fez esta avaliação. Outra pessoa precisa validar.</p>
+              <p className="muted">
+                {copiada
+                  ? "Você copiou esta avaliação. Outra pessoa precisa validar."
+                  : "Você fez esta avaliação. Outra pessoa precisa validar."}
+              </p>
             ) : (
               <Button type="button" disabled={busy} onClick={() => void onValidate(draft)}>
                 {busy ? "Validando…" : "Validar avaliação"}

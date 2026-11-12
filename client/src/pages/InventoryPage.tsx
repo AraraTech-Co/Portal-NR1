@@ -63,6 +63,8 @@ function flattenRows(items: InventoryItem[]) {
     level: string | null;
     /** O que a reavaliação dá, enquanto aguarda validação. */
     pendingLevel: string | null;
+    /** Copiada de outra filial, em revisão. [C4-2] */
+    emRevisao: boolean;
     status: string;
     place: string;
     /** De onde vem o perigo e quanta gente fica exposta. [S2-H] */
@@ -80,6 +82,7 @@ function flattenRows(items: InventoryItem[]) {
         risk: "—",
         level: null,
         pendingLevel: null,
+        emRevisao: false,
         status: controlStatus(item),
         place: `${item.establishment} · ${item.sector}`,
         activity: item.activity ?? null,
@@ -96,6 +99,7 @@ function flattenRows(items: InventoryItem[]) {
         risk: risk.description,
         level: risk.level,
         pendingLevel: risk.pending_level ?? null,
+        emRevisao: risk.pending_in_review === true,
         status: risk.needs_reassessment
           ? "Reavaliar"
           : controlStatus({ ...item, risks: [risk] }),
@@ -112,7 +116,9 @@ export function InventoryPage() {
   const [snapshot, setSnapshot] = useState<InventorySnapshot | null>(null);
   const [establishments, setEstablishments] = useState<Establishment[]>([]);
   // Cada unidade tem o seu inventário; misturar tudo confunde quem fiscaliza. [S6-D]
-  const [establishmentId, setEstablishmentId] = useState("");
+  /* O aviso da cópia entre filiais chega com a filial no endereço. [C4-2] */
+  const [searchParams] = useSearchParams();
+  const [establishmentId, setEstablishmentId] = useState(() => searchParams.get("unidade") ?? "");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [openRiskId, setOpenRiskId] = useState<string | null>(null);
@@ -121,7 +127,6 @@ export function InventoryPage() {
     Quem chega da ocorrência vem atrás de um risco certo: abre o histórico
     dele já, em vez de procurar a linha na lista inteira. [B3-4-C]
   */
-  const [searchParams] = useSearchParams();
   const riscoPedido = searchParams.get("risco");
 
   useEffect(() => {
@@ -249,7 +254,11 @@ export function InventoryPage() {
                           </Chip>
                         ) : (
                           <span className="muted">
-                            {row.pendingLevel ? "Sem avaliação validada" : "Sem avaliação"}
+                            {row.emRevisao
+                              ? "Em revisão"
+                              : row.pendingLevel
+                                ? "Sem avaliação validada"
+                                : "Sem avaliação"}
                           </span>
                         )}
                         {/*
@@ -259,7 +268,7 @@ export function InventoryPage() {
                         */}
                         {row.pendingLevel && row.pendingLevel !== row.level && (
                           <div className="muted inventory-pendente">
-                            aguardando validação:{" "}
+                            {row.emRevisao ? "copiada de outra filial, aguardando validação: " : "aguardando validação: "}
                             {LEVEL_LABEL[row.pendingLevel] ?? row.pendingLevel}
                           </div>
                         )}
@@ -279,7 +288,7 @@ export function InventoryPage() {
                             to={`/inventario/registrar?atividade=${encodeURIComponent(row.activityId)}`}
                             className="inventory-history-btn"
                           >
-                            {row.level ? "Reavaliar" : "Avaliar"}
+                            {row.pendingLevel ? "Validar" : row.level ? "Reavaliar" : "Avaliar"}
                           </Link>
                         )}
                         {row.riskId && (

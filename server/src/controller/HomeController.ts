@@ -309,7 +309,8 @@ class HomeController {
 
       if (cuida("inventario")) {
         const rascunhos = await prisma.riskAssessment.count({
-          where: { organizationId: orgId, status: AssessmentStatus.DRAFT },
+          /* Inclui as copiadas de outra filial, que chegam em revisão. [C4-2] */
+          where: { organizationId: orgId, status: { in: [AssessmentStatus.DRAFT, AssessmentStatus.IN_REVIEW] } },
         });
         if (rascunhos > 0) {
           mesa.push({

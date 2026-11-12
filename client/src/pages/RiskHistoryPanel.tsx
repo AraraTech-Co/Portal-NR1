@@ -119,6 +119,7 @@ export function RiskHistoryPanel({ riskId }: { riskId: string }) {
                   <span className="muted">{a.methodology}</span>
                   {a.supersededAt && <span className="muted">substituída em {formatDay(a.supersededAt)}</span>}
                   {a.status === "DRAFT" && <Chip tone="warning">Rascunho</Chip>}
+                  {a.status === "IN_REVIEW" && <Chip tone="info">Em revisão</Chip>}
                 </div>
                 <p className="muted">
                   Avaliado por {a.assessor.name} em {formatDay(a.assessedAt)}

@@ -76,6 +76,8 @@ export type RiskRow = {
   description: string;
   needsReassessment: boolean;
   assessments: Array<{ id: string; resultingLevel: string; validatedAt: string | null }>;
+  /** Há avaliação aguardando validação: rascunho ou copiada em revisão. [C4-2] */
+  awaiting_validation?: boolean;
 };
 
 export async function fetchRisksByHazard(hazardId: string) {
@@ -128,7 +130,8 @@ export type Assessment = {
   severity: number;
   probability: number;
   resultingLevel: string;
-  status: "DRAFT" | "VALIDATED" | "SUPERSEDED";
+  /** IN_REVIEW: copiada de outra filial, aguardando validação. [C4-2] */
+  status: "DRAFT" | "IN_REVIEW" | "VALIDATED" | "SUPERSEDED";
   severityReason: string | null;
   probabilityReason: string | null;
   controlsConsidered: string | null;
@@ -136,6 +139,9 @@ export type Assessment = {
   assessedAt: string;
   validatedById: string | null;
   validatedAt: string | null;
+  copiedAt?: string | null;
+  /** A filial de onde a avaliação foi copiada. [C4-2] */
+  copied_from_establishment?: string | null;
 };
 
 export async function fetchAssessments(riskId: string) {
