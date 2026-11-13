@@ -181,9 +181,16 @@ type PayslipBatchInput = {
   content_base64: string;
 };
 
-/** As filiais que quem envia alcança, e se a escolha é obrigatória. [C3-3] */
+/**
+ * As filiais que quem envia alcança; se a empresa tem mais de uma; e se todas
+ * têm o código da folha, com o qual a página diz a própria filial. [C3-3]
+ */
 export function fetchPayslipBatchEstablishments() {
-  return request<{ obrigatoria: boolean; filiais: { id: string; name: string }[] }>(
+  return request<{
+    por_filial: boolean;
+    com_codigo: boolean;
+    filiais: { id: string; name: string }[];
+  }>(
     "/api/payslips/lote/filiais",
   );
 }

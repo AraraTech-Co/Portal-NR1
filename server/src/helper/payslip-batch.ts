@@ -9,7 +9,12 @@
  *
  * Função pura sobre o texto de cada página: dá para testar sem PDF e sem banco.
  */
-import { extractEmployeeEntries, sameRegistration } from "./payslip-check";
+import {
+  extractEmployeeEntries,
+  extractEmployer,
+  samePayrollCode,
+  sameRegistration,
+} from "./payslip-check";
 
 export type BatchPartProblem =
   /** Página sem "matrícula - nome": resumo da folha, página em branco. */
@@ -22,12 +27,25 @@ export type BatchPartProblem =
    */
   | "REPETIDA";
 
+/**
+ * A mesma pessoa é a mesma matrícula NA MESMA EMPRESA: a 153 da loja e a 153
+ * da AG são duas. Página sem o código da empresa legível não prova que é
+ * outra, então conta como a mesma para recusar o repetido, e como outra para
+ * não juntar páginas. Na dúvida, nenhuma página vai para quem não é dela.
+ */
+function mesmaEmpresa(a: string | null, b: string | null, semCodigo: boolean): boolean {
+  if (a === null || b === null) return a === b || semCodigo;
+  return samePayrollCode(a, b);
+}
+
 export type BatchPart = {
   /** Páginas da parte, contadas a partir de 1, como o RH as vê no arquivo. */
   pages: number[];
   registration: string | null;
   /** O nome como está impresso no documento. */
   name: string | null;
+  /** O código da empresa impresso no cabeçalho (0682), quando se lê. */
+  employerCode: string | null;
   /** O texto das páginas da parte, para o `checkPayslip`. */
   text: string;
   problem: BatchPartProblem | null;
@@ -39,12 +57,14 @@ export function splitBatchPages(pageTexts: string[]): BatchPart[] {
   pageTexts.forEach((text, index) => {
     const page = index + 1;
     const entries = extractEmployeeEntries(text);
+    const employerCode = extractEmployer(text)?.code ?? null;
 
     if (entries.length !== 1) {
       parts.push({
         pages: [page],
         registration: null,
         name: null,
+        employerCode,
         text,
         problem: entries.length === 0 ? "SEM_FUNCIONARIO" : "VARIAS_PESSOAS",
       });
@@ -55,7 +75,12 @@ export function splitBatchPages(pageTexts: string[]): BatchPart[] {
     const last = parts[parts.length - 1];
     // A segunda folha da mesma pessoa vem logo depois da primeira. Página
     // sem pessoa, ou com mais de uma, não tem matrícula: não junta ninguém.
-    if (last?.registration && sameRegistration(last.registration, entry.registration)) {
+    // A mesma matrícula de outra empresa é outra pessoa: não junta.
+    if (
+      last?.registration &&
+      sameRegistration(last.registration, entry.registration) &&
+      mesmaEmpresa(last.employerCode, employerCode, false)
+    ) {
       last.pages.push(page);
       last.text += `\n${text}`;
       return;
@@ -65,6 +90,7 @@ export function splitBatchPages(pageTexts: string[]): BatchPart[] {
       pages: [page],
       registration: entry.registration,
       name: entry.name,
+      employerCode,
       text,
       problem: null,
     });
@@ -77,7 +103,8 @@ export function splitBatchPages(pageTexts: string[]): BatchPart[] {
       (other) =>
         other !== part &&
         other.registration !== null &&
-        sameRegistration(other.registration, registration),
+        sameRegistration(other.registration, registration) &&
+        mesmaEmpresa(other.employerCode, part.employerCode, true),
     );
     if (repeated) part.problem = "REPETIDA";
   }

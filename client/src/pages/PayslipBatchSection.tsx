@@ -73,23 +73,28 @@ export function PayslipBatchSection({
   const [feito, setFeito] = useState<string | null>(null);
   /*
     A filial da folha: a matrícula 153 da loja e a da AG são pessoas
-    diferentes. Com uma filial só que quem envia alcança, ela já vem
-    escolhida. [C3-3]
+    diferentes. O portal acha a filial pelo código da empresa impresso em
+    cada página; escolher na tela só é preciso quando falta o código da
+    folha em alguma filial. Com uma filial só que quem envia alcança, ela já
+    vem escolhida. [C3-3]
   */
   const [filiais, setFiliais] = useState<{ id: string; name: string }[]>([]);
-  const [filialObrigatoria, setFilialObrigatoria] = useState(false);
+  const [porFilial, setPorFilial] = useState(false);
+  const [comCodigo, setComCodigo] = useState(true);
   const [filial, setFilial] = useState("");
+  const filialObrigatoria = porFilial && !comCodigo;
 
   useEffect(() => {
     fetchPayslipBatchEstablishments()
       .then((r) => {
         setFiliais(r.filiais);
-        setFilialObrigatoria(r.obrigatoria);
+        setPorFilial(r.por_filial);
+        setComCodigo(r.com_codigo);
         if (r.filiais.length === 1) setFilial(r.filiais[0]!.id);
       })
       .catch(() => {
         setFiliais([]);
-        setFilialObrigatoria(false);
+        setPorFilial(false);
       });
   }, []);
 
@@ -168,7 +173,7 @@ export function PayslipBatchSection({
         inteiro não fica guardado.
       </p>
       <form className="form-grid" onSubmit={conferir}>
-        {filialObrigatoria && (
+        {porFilial && (
           <label className="form-field">
             Filial
             <select
@@ -178,9 +183,15 @@ export function PayslipBatchSection({
                 limpar();
               }}
               disabled={ocupado !== null || filiais.length === 1}
-              required
+              required={filialObrigatoria}
             >
-              {filiais.length !== 1 && <option value="">Escolha a filial da folha</option>}
+              {filiais.length !== 1 && (
+                <option value="">
+                  {filialObrigatoria
+                    ? "Escolha a filial da folha"
+                    : "Pelo código da empresa em cada página"}
+                </option>
+              )}
               {filiais.map((f) => (
                 <option key={f.id} value={f.id}>
                   {f.name}
@@ -188,8 +199,9 @@ export function PayslipBatchSection({
               ))}
             </select>
             <span className="form-hint">
-              Cada filial tem a sua folha: a matrícula é procurada só nas
-              fichas da filial escolhida.
+              {filialObrigatoria
+                ? "Falta o código da folha em alguma filial: escolha a filial, e a matrícula é procurada só nas fichas dela. Com o código preenchido em todas, o portal acha a filial sozinho."
+                : "O portal lê o código da empresa impresso em cada página (0682, 0683) e procura a matrícula só nas fichas da filial com esse código. Escolher uma filial confere que todas as páginas são dela."}
             </span>
           </label>
         )}

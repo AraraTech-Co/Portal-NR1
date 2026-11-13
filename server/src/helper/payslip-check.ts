@@ -21,6 +21,13 @@ export type PayslipExpectation = {
   referenceMonth: number;
   referenceYear: number;
   admittedAt: Date | null;
+  /**
+   * O código da folha da filial da pessoa (0682, 0683). A mesma matrícula
+   * existe em empresas diferentes do grupo para pessoas diferentes: o que
+   * desempata é a empresa que paga, impressa antes da razão social. Sem
+   * código no cadastro, ou sem o código legível no documento, não se confere.
+   */
+  payrollCode?: string | null;
 };
 
 export type PayslipCheck = {
@@ -80,6 +87,46 @@ export function sameRegistration(a: string, b: string): boolean {
   if (x.toUpperCase() === y.toUpperCase()) return true;
   if (!/^\d+$/.test(x) || !/^\d+$/.test(y)) return false;
   return x.replace(/^0+/, "") === y.replace(/^0+/, "");
+}
+
+/**
+ * "0682" e "682" são o mesmo código da folha, como na matrícula; código com
+ * letra compara como texto, sem diferenciar maiúsculas.
+ */
+export function samePayrollCode(a: string, b: string): boolean {
+  const canonico = (c: string) => {
+    const u = c.trim().toUpperCase();
+    return /^\d+$/.test(u) ? u.replace(/^0+(?=\d)/, "") : u;
+  };
+  return canonico(a) === canonico(b);
+}
+
+const CNPJ = /\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/;
+/** Até onde, antes do CNPJ, ainda é o cabeçalho da empresa. */
+const JANELA_DA_EMPRESA = 200;
+
+/**
+ * A empresa que paga, como a folha imprime no cabeçalho:
+ * "1238 - RAZÃO SOCIAL LTDA  R ENDEREÇO, 260 - CIDADE 08.974.027/0001-97".
+ *
+ * O primeiro CNPJ do documento é o da empresa; o código é o PRIMEIRO
+ * "número - nome" logo antes dele. O endereço também tem esse formato
+ * ("260 - AMERICANA"), por isso vale o primeiro, não o mais perto do CNPJ.
+ * Sem CNPJ não há cabeçalho de empresa para ler, e a resposta é `null`:
+ * a conferência pela empresa fica de fora, como num layout que não se lê.
+ *
+ * O holerite ainda não traz o CPF da pessoa; quando trouxer, ele entra aqui
+ * como a conferência mais forte.
+ */
+export function extractEmployer(text: string): { code: string; cnpj: string } | null {
+  const cnpj = CNPJ.exec(text);
+  if (!cnpj) return null;
+  const inicio = Math.max(0, cnpj.index - JANELA_DA_EMPRESA);
+  for (const match of text.matchAll(/(?<![\d.\/-])(\d{1,6})\s+-\s+[A-Za-zÀ-ÿ]/g)) {
+    if (match.index >= cnpj.index) break;
+    if (match.index >= inicio) return { code: match[1], cnpj: cnpj[0] };
+  }
+  return null;
 }
 
 /** Terminação de razão social: o cabeçalho da empresa tem o MESMO formato. */
@@ -228,6 +275,18 @@ export function checkPayslip(text: string, expected: PayslipExpectation): Paysli
         `O nome do documento é ${entry.name} e o do cadastro é ${expected.name}.`,
       );
     }
+  }
+
+  /*
+    A empresa que paga. A matrícula 153 da loja e a 153 da AG são pessoas
+    diferentes: o documento de uma empresa não vai para a ficha da outra, e
+    justificativa nenhuma cobre isso — o documento afirma de quem é.
+  */
+  const employer = extractEmployer(text);
+  if (employer && expected.payrollCode && !samePayrollCode(employer.code, expected.payrollCode)) {
+    recusaSemExcecao(
+      `O documento é da empresa código ${employer.code}, e a filial da pessoa tem o código ${expected.payrollCode}.`,
+    );
   }
 
   const competences = extractCompetences(text);
