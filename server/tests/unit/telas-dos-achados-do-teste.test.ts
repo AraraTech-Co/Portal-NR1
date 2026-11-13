@@ -92,3 +92,18 @@ describe("segunda rodada de achados (13/11)", () => {
     expect(tela("ServiceOrderViewPage.tsx")).toMatch(/<dt>CBO 2002<\/dt>/);
   });
 });
+
+describe("planilha: quem entra sem função (13/11)", () => {
+  const importar = tela("ImportPeople.tsx");
+
+  it("a conferência guarda os avisos e quem entra sem função", () => {
+    expect(importar).toMatch(/setAvisos\(lido\.avisos\);/);
+    expect(importar).toMatch(/setSemFuncao\(lido\.semFuncao\);/);
+  });
+
+  it("a linha mostra o aviso e a prévia conta quem entra sem função", () => {
+    expect(importar).toMatch(/\(avisosDaLinha\.get\(r\.line\) \?\? \[\]\)\.map\(/);
+    expect(importar).toMatch(/r\.status !== "error" && semFuncao\.includes\(r\.line\)/);
+    expect(importar).toMatch(/pessoas entram sem função/);
+  });
+});

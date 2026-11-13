@@ -216,7 +216,7 @@ describe("a planilha da folha é lida como sai do sistema de folha [PF-1]", () =
     expect(JSON.stringify(lido.rows)).not.toContain("2500");
   });
 
-  it("cargo com outra grafia não casa: REPOSITORA não é REPOSITOR, e a linha fica de fora", () => {
+  it("cargo com outra grafia não casa: REPOSITORA não é REPOSITOR, e a pessoa entra sem função", () => {
     const lido = lerTabela(
       [
         [...CABECALHO_DA_FOLHA],
@@ -228,10 +228,11 @@ describe("a planilha da folha é lida como sai do sistema de folha [PF-1]", () =
       FILIAIS,
     );
     expect(lido.problems).toEqual([
-      `Linha 2: função "REPOSITORA" não existe na filial "Administrativo". Cadastre a função com esse nome em Operação ou corrija o cargo na planilha.`,
+      `Linha 2: entra sem função — o cargo "REPOSITORA" ainda não é função na filial "Administrativo". Depois de cadastrar a função com esse nome em Operação, envie a planilha de novo para preenchê-la.`,
     ]);
-    expect(lido.rows).toEqual([]);
-    expect(lido.recusadas.map((r) => [r.linha, r.nome])).toEqual([[2, "BIA"]]);
+    expect(lido.rows.map((r) => [r.name, r.job_role_id, r.establishment_id])).toEqual([["BIA", undefined, AG.id]]);
+    expect(lido.recusadas).toEqual([]);
+    expect(lido.semFuncao).toEqual([2]);
   });
 
   it("código sem filial e código em duas filiais voltam com o motivo, e a linha não vai", () => {

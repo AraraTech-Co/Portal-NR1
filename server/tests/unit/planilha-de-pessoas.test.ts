@@ -89,17 +89,20 @@ describe("o que já era guardado continua [B2-1-L] [CB-6]", () => {
     expect(problems.join(" ")).toContain("não parece um nome");
   });
 
-  it("função que não existe deixa a linha de fora, e a prévia a mostra como recusada", () => {
-    const { rows, problems, recusadas } = ler("nome;funcao\nMaria;Soldador\nJoão;Torneiro");
-    expect(problems.join(" ")).toContain('função "Soldador" não existe');
-    /* A Maria não vai sem função: só o João segue. */
-    expect(rows.map((r) => r.name)).toEqual(["João"]);
-    expect(recusadas).toEqual([
+  it("cargo que ainda não é função: a pessoa entra sem função, e a linha avisa (decisão de 13/11)", () => {
+    const { rows, recusadas, avisos, semFuncao } = ler("nome;funcao\nMaria;Soldador\nJoão;Torneiro");
+    expect(rows.map((r) => [r.name, r.job_role_id])).toEqual([
+      ["Maria", undefined],
+      ["João", "f-torneiro"],
+    ]);
+    expect(recusadas).toEqual([]);
+    expect(semFuncao).toEqual([2]);
+    expect(avisos).toEqual([
       {
         linha: 2,
         nome: "Maria",
         motivos: [
-          'função "Soldador" não existe. Cadastre a função com esse nome em Operação ou corrija o cargo na planilha.',
+          'entra sem função — o cargo "Soldador" ainda não é função. Depois de cadastrar a função com esse nome em Operação, envie a planilha de novo para preenchê-la.',
         ],
       },
     ]);
@@ -124,9 +127,11 @@ describe("o que já era guardado continua [B2-1-L] [CB-6]", () => {
   });
 
   it("CPF repetido no arquivo: a segunda linha é recusada com o nome dela", () => {
-    const { rows, recusadas } = ler(
+    const { rows, recusadas, avisos } = ler(
       "nome;cpf\nMaria;529.982.247-25\nOutra Maria;52998224725",
     );
+    /* A recusa não vira também aviso. */
+    expect(avisos).toEqual([]);
     expect(rows.map((r) => r.name)).toEqual(["Maria"]);
     expect(recusadas).toEqual([
       { linha: 3, nome: "Outra Maria", motivos: ["CPF repetido na planilha (já está na linha 2)."] },

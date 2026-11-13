@@ -120,6 +120,12 @@ export function ImportPeople() {
     na tabela da prévia (e do relatório) como Erro, e na contagem.
   */
   const [recusadas, setRecusadas] = useState<LinhaRecusada[]>([]);
+  /*
+    Os avisos das linhas que entram — como "entra sem função" —, guardados
+    na conferência, para aparecerem na linha da prévia e do relatório.
+  */
+  const [avisos, setAvisos] = useState<LinhaRecusada[]>([]);
+  const [semFuncao, setSemFuncao] = useState<number[]>([]);
   const [relatorio, setRelatorio] = useState<ImportReport | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
@@ -179,6 +185,8 @@ export function ImportPeople() {
     setRelatorio(null);
     setAceitos({});
     setRecusadas(lido.recusadas);
+    setAvisos(lido.avisos);
+    setSemFuncao(lido.semFuncao);
     setOcupado(true);
     try {
       setPrevia(await enviar(true));
@@ -215,6 +223,11 @@ export function ImportPeople() {
   }
 
   const mostrado = relatorio ?? previa;
+  const avisosDaLinha = new Map(avisos.map((a) => [a.linha, a.motivos]));
+  /* Quem entra sem função e ainda está na prévia (não deu erro no servidor). */
+  const entramSemFuncao = mostrado
+    ? mostrado.results.filter((r) => r.status !== "error" && semFuncao.includes(r.line)).length
+    : 0;
   /* As linhas do servidor e as recusadas na leitura, na ordem da planilha. */
   const linhasDaTabela = mostrado
     ? [
@@ -269,6 +282,8 @@ export function ImportPeople() {
             setPrevia(null);
             setRelatorio(null);
             setRecusadas([]);
+            setAvisos([]);
+            setSemFuncao([]);
             setErroDoArquivo(null);
             setAceitos({});
             setTexto("");
@@ -395,6 +410,18 @@ export function ImportPeople() {
               ? `${relatorio.created} cadastrada(s), ${relatorio.completed} ficha(s) completada(s), ${relatorio.skipped} sem nada a mudar, ${relatorio.errors + recusadas.length} com erro.`
               : `Prévia: ${previa!.created} entrariam, ${previa!.completed} teriam a ficha completada, ${previa!.skipped} ficariam como estão, ${previa!.errors + recusadas.length} com erro. Nada foi gravado ainda.`}
           </p>
+          {entramSemFuncao > 0 && (
+            <p className="import-warning" role="status">
+              <strong>
+                {entramSemFuncao === 1
+                  ? "1 pessoa entra sem função"
+                  : `${entramSemFuncao} pessoas entram sem função`}
+              </strong>
+              : o cargo da planilha ainda não é função na filial. Depois que o SST cadastrar as
+              funções em Operação, envie a mesma planilha de novo — o portal preenche a função
+              de quem estiver sem e não mexe no resto.
+            </p>
+          )}
           {recusadas.length > 0 && (
             <p className="import-warning" role="alert">
               <strong>
@@ -481,6 +508,11 @@ export function ImportPeople() {
                                 : "Erro"}
                         </Chip>
                         {r.message && <div className="muted">{r.message}</div>}
+                      {(avisosDaLinha.get(r.line) ?? []).map((aviso) => (
+                        <div key={aviso} className="import-row-warning">
+                          {aviso}
+                        </div>
+                      ))}
                         {r.divergences?.map((d) =>
                           previa ? (
                             <label key={d.campo} className="import-divergence">

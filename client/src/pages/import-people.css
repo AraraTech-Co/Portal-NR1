@@ -62,3 +62,10 @@
 .import-divergence input {
   margin-top: 0.2rem;
 }
+
+/* O aviso da linha que entra — como "entra sem função". */
+.import-row-warning {
+  margin-top: 0.25rem;
+  font-size: 0.85rem;
+  color: var(--sem-warning-fg);
+}
