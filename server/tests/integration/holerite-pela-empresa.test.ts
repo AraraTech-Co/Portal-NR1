@@ -59,7 +59,7 @@ const lote = (pdf: Buffer, extra: Record<string, unknown> = {}) => ({
   ...extra,
 });
 
-type Parte = { situacao: string; user_id: string | null; motivos: string[] };
+type Parte = { situacao: string; user_id: string | null; motivos: string[]; filial: string | null };
 
 async function previa(token: string, paginas: string[][], extra: Record<string, unknown> = {}) {
   const res = await request(app)
@@ -158,9 +158,9 @@ describe("o lote acha a filial pelo código da empresa [C3-3]", () => {
 
   it("sem escolher filial, a mesma matrícula vai para a pessoa da empresa impressa", async () => {
     const partes = await previa(rhToken, [pagina("0682", "000153"), pagina("683", "153")]);
-    expect(partes.map((p) => [p.situacao, p.user_id])).toEqual([
-      ["CONFERE", pessoa.daLoja],
-      ["CONFERE", pessoa.daAg],
+    expect(partes.map((p) => [p.situacao, p.user_id, p.filial])).toEqual([
+      ["CONFERE", pessoa.daLoja, loja.nome],
+      ["CONFERE", pessoa.daAg, ag.nome],
     ]);
   });
 
@@ -174,6 +174,8 @@ describe("o lote acha a filial pelo código da empresa [C3-3]", () => {
       `Esta página é da empresa código 0683, e a filial escolhida, ${loja.nome}, tem o código 0682.`,
     ]);
     expect([daLoja.situacao, daLoja.user_id]).toEqual(["CONFERE", pessoa.daLoja]);
+    /* Cada página diz de que filial é: a da AG pelo código impresso. */
+    expect([daAg.filial, daLoja.filial]).toEqual([ag.nome, loja.nome]);
   });
 
   it("código que nenhuma filial tem fica de fora com o que fazer", async () => {
@@ -183,6 +185,7 @@ describe("o lote acha a filial pelo código da empresa [C3-3]", () => {
     expect(parte.motivos).toEqual([
       "Nenhuma filial tem o código da folha 0999. Preencha o código na filial ou escolha a filial da folha.",
     ]);
+    expect(parte.filial).toBeNull();
   });
 
   it("página sem o cabeçalho da empresa e sem filial escolhida: pede a filial", async () => {
@@ -215,7 +218,8 @@ describe("o lote acha a filial pelo código da empresa [C3-3]", () => {
     expect(daAg.user_id).toBeNull();
     expect(daAg.motivos).toEqual(["Esta página é de uma filial fora das que você gere."]);
     expect(daAg.motivos.join(" ")).not.toContain(ag.nome);
-    expect([daLoja.situacao, daLoja.user_id]).toEqual(["CONFERE", pessoa.daLoja]);
+    expect(daAg.filial, "o nome da filial de fora não sai").toBeNull();
+    expect([daLoja.situacao, daLoja.user_id, daLoja.filial]).toEqual(["CONFERE", pessoa.daLoja, loja.nome]);
   });
 
   it("publicar sem escolher filial entrega cada página à pessoa da sua empresa", async () => {

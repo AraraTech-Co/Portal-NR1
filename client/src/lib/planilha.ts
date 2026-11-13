@@ -50,9 +50,19 @@ export type FilialDaEmpresa = {
   payrollCode?: string | null;
 };
 
+/** Uma linha da planilha que não vai ao servidor, com o porquê. */
+export type LinhaRecusada = { linha: number; nome: string; motivos: string[] };
+
 export type Lido = {
   rows: LinhaDaPlanilha[];
   problems: string[];
+  /**
+   * As linhas que ficaram de fora, para a prévia mostrá-las na tabela e na
+   * contagem: antes elas só apareciam numa lista acima do botão, fora da
+   * prévia, e era fácil cadastrar sem ver. Problema de linha que entrou é
+   * aviso dela, não recusa.
+   */
+  recusadas: LinhaRecusada[];
   /** O número da linha no Excel de cada linha de `rows`, na mesma ordem. */
   numeros: number[];
   /** Em que modelo a planilha veio. [PF-1] */
@@ -305,7 +315,7 @@ export function lerLinhas(
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter(Boolean);
-  if (linhas.length === 0) return { rows: [], problems: [], numeros: [], modelo: null };
+  if (linhas.length === 0) return { rows: [], problems: [], recusadas: [], numeros: [], modelo: null };
   const sep = separador(linhas[0]!);
   return lerTabela(
     linhas.map((l) => l.split(sep).map((c) => c.trim())),
@@ -331,7 +341,7 @@ export function lerTabela(
   origem: "texto" | "xlsx" = "xlsx",
 ): Lido {
   const inicio = matriz.findIndex((l) => l.some((c) => c !== ""));
-  if (inicio < 0) return { rows: [], problems: [], numeros: [], modelo: null };
+  if (inicio < 0) return { rows: [], problems: [], recusadas: [], numeros: [], modelo: null };
   const primeira = matriz[inicio]!;
   const daFolha = ehDaFolha(primeira);
   const cabecalho = daFolha ? primeira.map(chaveDaFolha) : primeira.map((c) => semAcento(c));
@@ -387,6 +397,8 @@ export function lerTabela(
   const problems: string[] = [];
   /* Repetição dentro do arquivo: com o envio em lotes, o servidor só vê a do lote. [PF-1] */
   const cpfVisto = new Map<string, number>();
+  /* O nome de cada linha, para a recusa aparecer com ele na prévia. */
+  const nomeDaLinha = new Map<number, string>();
   const matriculaVista = new Map<string, number>();
 
   if (colunasIgnoradas.length > 0) {
@@ -424,6 +436,7 @@ export function lerTabela(
       problems.push(`Linha ${numero}: sem nome.`);
       continue;
     }
+    nomeDaLinha.set(numero, row.name);
 
     /*
       Linha copiada do Excel que perde as tabulações vira uma coluna só: o
@@ -521,13 +534,18 @@ export function lerTabela(
           (f) => semAcento(f.establishment?.name ?? "") === semAcento(unidade),
         );
       }
+      /*
+        A função tem o nome exato do cargo da planilha (decisão do Léo,
+        12/11). Cargo que não casa deixava a pessoa entrar sem função, com um
+        aviso fácil de não ver: agora a linha fica de fora até o nome bater.
+      */
       if (candidatas.length === 0) {
         problems.push(
           unidade
-            ? `Linha ${numero}: função "${nomeDaFuncao}" não existe na filial "${unidade}".`
-            : `Linha ${numero}: função "${nomeDaFuncao}" não existe.`,
+            ? `Linha ${numero}: função "${nomeDaFuncao}" não existe na filial "${unidade}". Cadastre a função com esse nome em Operação ou corrija o cargo na planilha.`
+            : `Linha ${numero}: função "${nomeDaFuncao}" não existe. Cadastre a função com esse nome em Operação ou corrija o cargo na planilha.`,
         );
-        delete row.job_role_id;
+        continue;
       } else if (candidatas.length > 1) {
         const unidades = [
           ...new Set(candidatas.map((f) => f.establishment?.name ?? "sem unidade")),
@@ -537,7 +555,7 @@ export function lerTabela(
             " e ",
           )}. Acrescente a coluna "filial" para dizer qual.`,
         );
-        delete row.job_role_id;
+        continue;
       } else {
         row.job_role_id = candidatas[0]!.id;
       }
@@ -630,7 +648,20 @@ export function lerTabela(
     numeros.push(numero);
   }
 
-  return { rows, problems, numeros, modelo: daFolha ? "folha" : "csv" };
+  const aceitas = new Set(numeros);
+  const porLinha = new Map<number, LinhaRecusada>();
+  for (const problema of problems) {
+    const m = /^Linha (\d+): ([\s\S]*)$/.exec(problema);
+    if (!m) continue;
+    const linha = Number(m[1]);
+    if (aceitas.has(linha)) continue;
+    const recusada = porLinha.get(linha) ?? { linha, nome: nomeDaLinha.get(linha) ?? "", motivos: [] };
+    recusada.motivos.push(m[2]!);
+    porLinha.set(linha, recusada);
+  }
+  const recusadas = [...porLinha.values()].sort((a, b) => a.linha - b.linha);
+
+  return { rows, problems, recusadas, numeros, modelo: daFolha ? "folha" : "csv" };
 }
 
 

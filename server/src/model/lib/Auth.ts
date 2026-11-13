@@ -7,6 +7,7 @@ import { effectivePermission } from "../../helper/auth";
 import { can } from "../../helper/permissions";
 import {
   canConsultOwn,
+  canSendOwn,
   canManageModule,
   canReadModule,
   canWriteModule,
@@ -190,8 +191,11 @@ async function authenticate(
           ? canWriteModule(roleKey, gate.moduleId)
           : gate.level === "ownSend"
             ? canWriteModule(roleKey, gate.moduleId) ||
-              ((await hasActiveProfile(access.organizationId, access.user.id)) &&
-                canConsultOwn(roleKey, gate.moduleId, true))
+              canSendOwn(
+                roleKey,
+                gate.moduleId,
+                await hasActiveProfile(access.organizationId, access.user.id),
+              )
           : gate.level === "own"
             ? canReadModule(roleKey, gate.moduleId) ||
               (["GET", "HEAD"].includes(req.method.toUpperCase()) &&

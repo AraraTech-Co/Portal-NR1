@@ -1,5 +1,5 @@
 import { FormEvent, useState } from "react";
-import { Link, Navigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { changePassword } from "@/api/auth";
 import { useAuth } from "@/auth/AuthContext";
 import { Button } from "@/components/Button";
@@ -7,11 +7,18 @@ import "./login.css";
 
 export function ChangePasswordPage() {
   const { user, setUser, logout } = useAuth();
+  const navigate = useNavigate();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  /*
+    A troca obrigatória não dava retorno nenhum: a sessão deixava de exigir a
+    troca e a tela ficava com o formulário preenchido. Na troca voluntária, o
+    aviso aparecia acima do formulário, fácil de não ver. Agora, gravada a
+    senha, o formulário dá lugar à confirmação, nos dois casos.
+  */
   const [pronto, setPronto] = useState(false);
 
   /*
@@ -32,8 +39,11 @@ export function ChangePasswordPage() {
     setSaving(true);
     try {
       const data = await changePassword(currentPassword, newPassword);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirm("");
+      setPronto(true);
       setUser(data.user);
-      if (!obrigado) setPronto(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao trocar senha");
     } finally {
@@ -46,16 +56,22 @@ export function ChangePasswordPage() {
       <div className="login-panel">
         <p className="login-eyebrow label-cond">Segurança</p>
         <h1 className="login-brand">Trocar senha</h1>
+        {pronto ? (
+          <div className="login-form" role="status">
+            <p className="login-lead">
+              <strong>Senha trocada.</strong> Use a nova senha na próxima vez que entrar.
+            </p>
+            <Button type="button" onClick={() => navigate("/")}>
+              Ir para o início
+            </Button>
+          </div>
+        ) : (
+        <>
         <p className="login-lead muted">
           {obrigado
             ? "Sua senha é provisória. Defina uma nova senha para continuar no portal."
             : "Defina uma nova senha. A atual é pedida para confirmar que é você."}
         </p>
-        {pronto && (
-          <p className="login-lead" role="status">
-            Senha trocada. <Link to="/">Voltar ao início</Link>
-          </p>
-        )}
         <form className="login-form" onSubmit={onSubmit}>
           <label className="login-field">
             Senha atual
@@ -104,6 +120,8 @@ export function ChangePasswordPage() {
             </Link>
           )}
         </form>
+        </>
+        )}
       </div>
       <div className="login-aside" aria-hidden>
         <div className="login-aside-mark" />

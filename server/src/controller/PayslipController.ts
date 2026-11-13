@@ -186,6 +186,12 @@ type ParteDoLote = {
   situacao: SituacaoDaParte;
   user_id: string | null;
   user_name: string | null;
+  /**
+   * A filial da página: a achada pelo código da empresa, a escolhida ou a da
+   * ficha da pessoa. Nula quando não se sabe, ou quando é uma filial fora
+   * das que quem envia gere — o nome dela não sai.
+   */
+  filial: string | null;
   /** Já há holerite dessa pessoa nessa competência: publicar substitui. */
   substitui: boolean;
   motivos: string[];
@@ -337,7 +343,7 @@ async function lerLote(
       registrationKey: true,
       admittedAt: true,
       establishmentId: true,
-      establishment: { select: { payrollCode: true } },
+      establishment: { select: { name: true, payrollCode: true } },
       user: { select: { name: true } },
     },
   });
@@ -361,6 +367,7 @@ async function lerLote(
       document_name: part.name,
       user_id: null,
       user_name: null,
+      filial: null as string | null,
       substitui: false,
       avisos: [] as string[],
     };
@@ -385,6 +392,13 @@ async function lerLote(
       confere; sem escolha, o código impresso acha a filial. [C3-3]
     */
     const empresa = extractEmployer(part.text);
+    /* A filial que o código da página aponta, entre as que quem envia alcança. */
+    const alcancadaPeloCodigo = empresa
+      ? filiais.alcancadas.filter(
+          (f) => f.payrollCode && samePayrollCode(f.payrollCode, empresa.code),
+        )
+      : [];
+    if (alcancadaPeloCodigo.length === 1) base.filial = alcancadaPeloCodigo[0]!.name;
     let filial = escolhida;
     if (filial) {
       if (empresa && filial.payrollCode && !samePayrollCode(empresa.code, filial.payrollCode)) {
@@ -421,6 +435,7 @@ async function lerLote(
       }
       filial = daPagina;
     }
+    if (filial) base.filial = filial.name;
 
     const donos = fichas.filter(
       (ficha) =>
@@ -447,6 +462,7 @@ async function lerLote(
       };
     }
     const [dono] = donos;
+    base.filial ??= dono.establishment?.name ?? null;
     const conferencia = checkPayslip(part.text, {
       registration: dono.registration!,
       name: dono.user.name,

@@ -158,6 +158,8 @@ export type PayslipBatchPart = {
     | "REPETIDA";
   user_id: string | null;
   user_name: string | null;
+  /** A filial da página; nula quando não se sabe ou é de fora da gestão. */
+  filial: string | null;
   substitui: boolean;
   motivos: string[];
   avisos: string[];

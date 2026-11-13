@@ -21,6 +21,7 @@ import {
   type FilialDaEmpresa,
   type FuncaoDaEmpresa,
   type Lido,
+  type LinhaRecusada,
 } from "@/lib/planilha";
 import { importarEmLotes } from "@/lib/importar-em-lotes";
 import { PlanilhaIlegivel, gerarXlsx, lerXlsx, pareceOfficeProtegido, pareceXlsx } from "@/lib/xlsx";
@@ -114,6 +115,11 @@ export function ImportPeople() {
   /* A filial de cada linha, pelo nome ou pelo CNPJ. [C3-3] */
   const [filiais, setFiliais] = useState<FilialDaEmpresa[]>([]);
   const [previa, setPrevia] = useState<ImportReport | null>(null);
+  /*
+    As linhas que a leitura deixou de fora, guardadas na conferência: entram
+    na tabela da prévia (e do relatório) como Erro, e na contagem.
+  */
+  const [recusadas, setRecusadas] = useState<LinhaRecusada[]>([]);
   const [relatorio, setRelatorio] = useState<ImportReport | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
@@ -172,6 +178,7 @@ export function ImportPeople() {
     setErro(null);
     setRelatorio(null);
     setAceitos({});
+    setRecusadas(lido.recusadas);
     setOcupado(true);
     try {
       setPrevia(await enviar(true));
@@ -208,6 +215,13 @@ export function ImportPeople() {
   }
 
   const mostrado = relatorio ?? previa;
+  /* As linhas do servidor e as recusadas na leitura, na ordem da planilha. */
+  const linhasDaTabela = mostrado
+    ? [
+        ...mostrado.results.map((r) => ({ tipo: "servidor" as const, linha: r.line, r })),
+        ...recusadas.map((r) => ({ tipo: "recusada" as const, linha: r.linha, r })),
+      ].sort((a, b) => a.linha - b.linha)
+    : [];
   const marcados = Object.values(aceitos).reduce((t, a) => t + a.length, 0);
   const comDiferenca = previa?.results.filter((r) => r.divergences?.length).length ?? 0;
   function marcar(linha: number, campo: string, sim: boolean) {
@@ -254,6 +268,7 @@ export function ImportPeople() {
             setArquivo(f);
             setPrevia(null);
             setRelatorio(null);
+            setRecusadas([]);
             setErroDoArquivo(null);
             setAceitos({});
             setTexto("");
@@ -328,7 +343,7 @@ export function ImportPeople() {
       )}
       {lido.problems.length > 0 && (
         <ul className="import-problems">
-          {lido.problems.slice(0, 10).map((p) => (
+          {lido.problems.map((p) => (
             <li key={p}>{p}</li>
           ))}
         </ul>
@@ -377,9 +392,21 @@ export function ImportPeople() {
         <div className="import-report">
           <p className="muted">
             {relatorio
-              ? `${relatorio.created} cadastrada(s), ${relatorio.completed} ficha(s) completada(s), ${relatorio.skipped} sem nada a mudar, ${relatorio.errors} com erro.`
-              : `Prévia: ${previa!.created} entrariam, ${previa!.completed} teriam a ficha completada, ${previa!.skipped} ficariam como estão, ${previa!.errors} com erro. Nada foi gravado ainda.`}
+              ? `${relatorio.created} cadastrada(s), ${relatorio.completed} ficha(s) completada(s), ${relatorio.skipped} sem nada a mudar, ${relatorio.errors + recusadas.length} com erro.`
+              : `Prévia: ${previa!.created} entrariam, ${previa!.completed} teriam a ficha completada, ${previa!.skipped} ficariam como estão, ${previa!.errors + recusadas.length} com erro. Nada foi gravado ainda.`}
           </p>
+          {recusadas.length > 0 && (
+            <p className="import-warning" role="alert">
+              <strong>
+                {recusadas.length === 1
+                  ? "1 linha da planilha fica de fora"
+                  : `${recusadas.length} linhas da planilha ficam de fora`}
+              </strong>{" "}
+              e não {relatorio ? "foram cadastradas" : "serão cadastradas"}. Estão na tabela abaixo
+              como Erro, com o motivo. Corrija a planilha e envie de novo: quem já entrou não é
+              cadastrado outra vez.
+            </p>
+          )}
           {previa && comDiferenca > 0 && (
             <p className="import-warning">
               {comDiferenca === 1 ? "1 pessoa já cadastrada" : `${comDiferenca} pessoas já cadastradas`} com
@@ -410,49 +437,74 @@ export function ImportPeople() {
                 </tr>
               </thead>
               <tbody>
-                {mostrado.results.map((r) => (
-                  <tr key={r.line}>
-                    <td className="import-line">{r.line}</td>
-                    <td>{r.name || <span className="muted">—</span>}</td>
-                    <td>{r.establishment?.name ?? <span className="muted">—</span>}</td>
-                    <td>
-                      <Chip tone={tone(r.status)}>
-                        {r.status === "created"
-                          ? relatorio
-                            ? "Cadastrada"
-                            : "Entra"
-                          : r.status === "completed"
+                {linhasDaTabela.map((item) => {
+                  if (item.tipo === "recusada") {
+                    return (
+                      <tr key={`recusada-${item.linha}`}>
+                        <td className="import-line">{item.linha}</td>
+                        <td>{item.r.nome || <span className="muted">—</span>}</td>
+                        <td>
+                          <span className="muted">—</span>
+                        </td>
+                        <td>
+                          <Chip tone="danger">Erro</Chip>
+                          {item.r.motivos.map((m) => (
+                            <div key={m} className="muted">
+                              {m}
+                            </div>
+                          ))}
+                        </td>
+                        <td>
+                          <span className="muted">—</span>
+                        </td>
+                      </tr>
+                    );
+                  }
+                  const r = item.r;
+                  return (
+                    <tr key={r.line}>
+                      <td className="import-line">{r.line}</td>
+                      <td>{r.name || <span className="muted">—</span>}</td>
+                      <td>{r.establishment?.name ?? <span className="muted">—</span>}</td>
+                      <td>
+                        <Chip tone={tone(r.status)}>
+                          {r.status === "created"
                             ? relatorio
-                              ? "Ficha completada"
-                              : "Completa a ficha"
-                            : r.status === "skipped"
-                              ? "Já existe"
-                              : "Erro"}
-                      </Chip>
-                      {r.message && <div className="muted">{r.message}</div>}
-                      {r.divergences?.map((d) =>
-                        previa ? (
-                          <label key={d.campo} className="import-divergence">
-                            <input
-                              type="checkbox"
-                              checked={(aceitos[r.line] ?? []).includes(d.campo)}
-                              onChange={(e) => marcar(r.line, d.campo, e.target.checked)}
-                              aria-label={`Usar o da planilha: ${d.rotulo} de ${r.name}`}
-                            />
-                            <span>
-                              <strong>{d.rotulo}</strong>: no portal “{d.portal}”, na planilha “{d.planilha}”
-                            </span>
-                          </label>
-                        ) : (
-                          <div key={d.campo} className="muted import-divergence">
-                            Ficou como estava — {d.rotulo}: no portal “{d.portal}”, na planilha “{d.planilha}”
-                          </div>
-                        ),
-                      )}
-                    </td>
-                    <td>{r.login ?? <span className="muted">—</span>}</td>
-                  </tr>
-                ))}
+                              ? "Cadastrada"
+                              : "Entra"
+                            : r.status === "completed"
+                              ? relatorio
+                                ? "Ficha completada"
+                                : "Completa a ficha"
+                              : r.status === "skipped"
+                                ? "Já existe"
+                                : "Erro"}
+                        </Chip>
+                        {r.message && <div className="muted">{r.message}</div>}
+                        {r.divergences?.map((d) =>
+                          previa ? (
+                            <label key={d.campo} className="import-divergence">
+                              <input
+                                type="checkbox"
+                                checked={(aceitos[r.line] ?? []).includes(d.campo)}
+                                onChange={(e) => marcar(r.line, d.campo, e.target.checked)}
+                                aria-label={`Usar o da planilha: ${d.rotulo} de ${r.name}`}
+                              />
+                              <span>
+                                <strong>{d.rotulo}</strong>: no portal “{d.portal}”, na planilha “{d.planilha}”
+                              </span>
+                            </label>
+                          ) : (
+                            <div key={d.campo} className="muted import-divergence">
+                              Ficou como estava — {d.rotulo}: no portal “{d.portal}”, na planilha “{d.planilha}”
+                            </div>
+                          ),
+                        )}
+                      </td>
+                      <td>{r.login ?? <span className="muted">—</span>}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

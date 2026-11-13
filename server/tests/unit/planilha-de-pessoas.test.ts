@@ -89,10 +89,48 @@ describe("o que já era guardado continua [B2-1-L] [CB-6]", () => {
     expect(problems.join(" ")).toContain("não parece um nome");
   });
 
-  it("função que não existe é avisada e a pessoa entra sem função", () => {
-    const { rows, problems } = ler("nome;funcao\nMaria;Soldador");
+  it("função que não existe deixa a linha de fora, e a prévia a mostra como recusada", () => {
+    const { rows, problems, recusadas } = ler("nome;funcao\nMaria;Soldador\nJoão;Torneiro");
     expect(problems.join(" ")).toContain('função "Soldador" não existe');
-    expect(rows[0]!.job_role_id).toBeUndefined();
+    /* A Maria não vai sem função: só o João segue. */
+    expect(rows.map((r) => r.name)).toEqual(["João"]);
+    expect(recusadas).toEqual([
+      {
+        linha: 2,
+        nome: "Maria",
+        motivos: [
+          'função "Soldador" não existe. Cadastre a função com esse nome em Operação ou corrija o cargo na planilha.',
+        ],
+      },
+    ]);
+  });
+
+  it("função com o mesmo nome em duas unidades, sem dizer qual: a linha fica de fora", () => {
+    const duas: FuncaoDaEmpresa[] = [
+      ...FUNCOES,
+      { id: "f-torneiro-filial", name: "Torneiro", establishment: { name: "Filial" } },
+    ];
+    const { rows, recusadas } = lerLinhas("nome;funcao\nMaria;Torneiro", duas, EMPRESAS, ROTULOS);
+    expect(rows).toEqual([]);
+    expect(recusadas.map((r) => [r.linha, r.nome])).toEqual([[2, "Maria"]]);
+    expect(recusadas[0]!.motivos[0]).toContain("existe em Matriz e Filial");
+  });
+
+  it("aviso de linha que entrou não é recusa: o vínculo desconhecido segue com a pessoa", () => {
+    const { rows, problems, recusadas } = ler("nome;vinculo\nMaria;Cooperado");
+    expect(problems.join(" ")).toContain('vínculo "Cooperado" desconhecido');
+    expect(rows.map((r) => r.name)).toEqual(["Maria"]);
+    expect(recusadas).toEqual([]);
+  });
+
+  it("CPF repetido no arquivo: a segunda linha é recusada com o nome dela", () => {
+    const { rows, recusadas } = ler(
+      "nome;cpf\nMaria;529.982.247-25\nOutra Maria;52998224725",
+    );
+    expect(rows.map((r) => r.name)).toEqual(["Maria"]);
+    expect(recusadas).toEqual([
+      { linha: 3, nome: "Outra Maria", motivos: ["CPF repetido na planilha (já está na linha 2)."] },
+    ]);
   });
 
   it("o papel chega por nome e sai como código", () => {
