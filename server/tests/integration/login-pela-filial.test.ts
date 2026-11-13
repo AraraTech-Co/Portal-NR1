@@ -251,7 +251,7 @@ describe("o que cada escolha aceita (R3)", () => {
     expect(naOutra.body).toEqual(NEGADO_LOGIN);
   });
 
-  it("Externo: login e CPF entram; matrícula é recusada", async () => {
+  it("Externo: login e CPF entram; matrícula que não é login de ninguém é recusada", async () => {
     const porLogin = await entrar(pa.login, "externo");
     expect(porLogin.status).toBe(200);
     expect((await entrar(pa.login)).status, "sem filial é Externo").toBe(200);
@@ -261,22 +261,18 @@ describe("o que cada escolha aceita (R3)", () => {
     expect(porMatricula.body).toEqual(NEGADO_LOGIN);
 
     /*
-      Recusada pelo formato, não por não achar: nem um login que é só
-      dígitos (a aprovação de convite usa a matrícula como login) entra por
-      Externo — para isso existe a filial.
+      Login que é só dígitos (o convite usa a matrícula como login) entra por
+      Externo: quem não tem filial na ficha (RH, SST, gestores) não tinha por
+      onde entrar. Decisão D4-1 do Léo. [C4-1]
     */
-    const soDigitos = await prisma.user.create({
-      data: {
-        login: `2${NUM}`,
-        name: `C32b digitos ${SUFIXO}`,
-        passwordHash: await bcrypt.hash(SENHA, 4),
-        activatedAt: new Date(),
-      },
-    });
-    await prisma.membership.create({ data: { userId: soDigitos.id, organizationId: ORG_ID, role: "COLABORADOR" } });
+    /* Uma conta como a do convite: o login é o número. */
+    const digitos = await pessoa("digitos", filialA, `3${NUM}`);
+    await prisma.user.update({ where: { id: digitos.userId }, data: { login: `2${NUM}` } });
     const r = await entrar(`2${NUM}`, "externo");
-    expect(r.status).toBe(401);
-    expect(r.body).toEqual(NEGADO_LOGIN);
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    const errada = await request(app).post("/api/auth").send({ login: `2${NUM}`, password: "senha-errada-1", establishment_id: "externo" });
+    expect(errada.status).toBe(401);
+    expect(errada.body).toEqual(NEGADO_LOGIN);
   });
 
   it("primeiro acesso: só na filial da ficha; Externo não tem primeiro acesso", async () => {
@@ -309,7 +305,7 @@ describe("o tempo de resposta não diz quem existe (R1)", () => {
         [`9${NUM}`, filialA], // matrícula que não existe
         [`8${NUM}`, filialA], // conta inativa
         [NUM, randomUUID()], // filial que não existe
-        [NUM, "externo"], // matrícula em Externo, recusada pelo formato
+        [NUM, "externo"], // matrícula em Externo, que não é login de ninguém
         [`ninguem.${SUFIXO}`, undefined], // login que não existe
       ];
       for (const [login, filial] of casos) {

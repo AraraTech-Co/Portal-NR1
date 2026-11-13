@@ -8,7 +8,7 @@ import { LoadingState } from "@/components/LoadingState";
 import { PageHeader } from "@/components/PageHeader";
 import { moduleEntry } from "@/layout/nav";
 import { ORG_ROLE_LABEL } from "@/lib/labels";
-import { managedModules, useModuleAccess } from "@/lib/module-access";
+import { managedModules, useModuleAccess, canSeeInspectionPanel } from "@/lib/module-access";
 import "./home.css";
 
 const SHORTCUTS = [
@@ -100,8 +100,11 @@ export function HomePage() {
 
   if (!user) return null;
 
+  const vePainel = canSeeInspectionPanel(user.permission);
   const atalhos = SHORTCUTS.filter((s) => {
     const nivel = modules?.[s.module];
+    /* O painel, só para quem o lê (P-2). [C4-13] */
+    if (s.href === "/fiscalizacao" && !vePainel) return false;
     return nivel === "read" || nivel === "write";
   });
 
@@ -221,9 +224,11 @@ export function HomePage() {
         <section className="home-block" aria-label={tituloConformidade}>
           <h2>
             {tituloConformidade}{" "}
-            <Link to="/fiscalizacao" className="home-block-link">
-              ver o painel da fiscalização
-            </Link>
+            {vePainel && (
+              <Link to="/fiscalizacao" className="home-block-link">
+                ver o painel da fiscalização
+              </Link>
+            )}
           </h2>
           <CardList cards={data.compliance} />
         </section>
@@ -235,7 +240,7 @@ export function HomePage() {
           <p className="muted">
             Inventário avaliado, documentos emitidos e ordens de serviço no
             lugar.{" "}
-            {leDocumentos && <Link to="/fiscalizacao">Conferir item a item</Link>}
+            {leDocumentos && vePainel && <Link to="/fiscalizacao">Conferir item a item</Link>}
           </p>
         </section>
       )}

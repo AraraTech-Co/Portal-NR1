@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
 import { ContextoDaConta } from "./ContextoDaConta";
 import { NAV_GROUPS, type NavGroup } from "./nav";
-import { canOpenModule } from "@/lib/module-access";
+import { canOpenModule, canSeeInspectionPanel } from "@/lib/module-access";
 import "./sidebar.css";
 
 const COLLAPSED_KEY = "nr1.nav.collapsed";
@@ -104,8 +104,11 @@ export function Sidebar({ mobileOpen, onCloseMobile }: Props) {
       </Link>
 
       {NAV_GROUPS.map((group: NavGroup) => {
-        const visibleItems = group.items.filter((item) =>
-          canOpenModule(user, item.moduleId),
+        const visibleItems = group.items.filter(
+          (item) =>
+            canOpenModule(user, item.moduleId) &&
+            /* O painel, só para quem o lê (P-2). [C4-13] */
+            (item.href !== "/fiscalizacao" || canSeeInspectionPanel(user?.permission)),
         );
         if (visibleItems.length === 0) return null;
 

@@ -39,8 +39,11 @@ export class User extends Model<IUser> {
        *
        * - Uma filial: matrícula ou CPF de ficha daquela filial. Login e
        *   e-mail não (vão por "Externo").
-       * - "Externo": login, e-mail ou CPF. Matrícula é recusada pelo
-       *   formato do que foi digitado, sem consultar o banco.
+       * - "Externo": login, e-mail ou CPF. Só dígitos que não formam CPF
+       *   valem como login quando existe um login exatamente assim (o
+       *   convite usa a matrícula como login, e quem não tem filial na ficha
+       *   entra por aqui); se não existe, é matrícula, e matrícula pede a
+       *   filial. Decisão D4-1 do Léo, 12/11/2026. [C4-1]
        * - Filial inválida: ninguém.
        *
        * Quem decide entre vários é a senha; nenhuma resposta muda conforme o
@@ -70,8 +73,11 @@ export class User extends Model<IUser> {
         if (id.kind === "cpf") {
           return this.custom.read.byProfileField({ taxId: id.value });
         }
-        // Só dígitos e não é CPF: é matrícula, e matrícula pede a filial.
-        if (/^\d+$/.test(id.value)) return [];
+        /*
+          Só dígitos e não é CPF: vale como login se existir um login
+          exatamente assim; senão é matrícula, que pede a filial. A resposta
+          de quem não acha é a mesma de senha errada. [C4-1]
+        */
         const porLogin = await this.read.one({ login: id.value });
         return porLogin ? [porLogin] : [];
       },

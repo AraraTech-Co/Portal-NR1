@@ -260,8 +260,12 @@ describe("IDOR: por id, fora do escopo responde igual a inexistente [C2-13]", ()
       (id) => request(app).patch(`/api/employee-profiles/${id}`).set(as(admRC.token)).send({ phone: "19911112222" }),
       fichaB.id,
     );
-    // O mesmo na própria unidade passa (canário).
-    expect((await request(app).get(`/api/medical-certificates/${regRC.atestadoId}/file`).set(as(admRC.token))).status).toBe(200);
+    /*
+      Antes era o canário ("na própria unidade passa"). Desde a C4-15 (P-6), o
+      ADM loja não abre o arquivo do atestado de ninguém, nem na unidade dele;
+      o recorte do arquivo para quem abre (o RH) segue no teste [C4-15].
+    */
+    expect((await request(app).get(`/api/medical-certificates/${regRC.atestadoId}/file`).set(as(admRC.token))).status).toBe(404);
   });
 
   it("criar para pessoa de Barueri responde igual a pessoa inexistente", async () => {

@@ -138,3 +138,10 @@ const UNIT_COPY_ROLES: readonly string[] = ["master", "sst"];
 export function canCopyBetweenUnits(permission: string | undefined): boolean {
   return UNIT_COPY_ROLES.includes(permission ?? "");
 }
+
+/** Painel da fiscalização — espelho do servidor (`INSPECTION_PANEL_ROLES`). [C4-13] */
+const INSPECTION_PANEL_ROLES: readonly string[] = ["master", "owner", "sst", "rh", "fiscal"];
+
+export function canSeeInspectionPanel(permission: string | undefined): boolean {
+  return INSPECTION_PANEL_ROLES.includes(permission === "user" ? "colaborador" : (permission ?? ""));
+}

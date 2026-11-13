@@ -285,16 +285,9 @@ describe("quem vê o painel [S7-B]", () => {
     expect((completo.body.events as unknown[]).length).toBeGreaterThan(0);
   });
 
-  it("o colaborador vê a lacuna em número, nunca o nome do colega, e não vê o histórico", async () => {
+  it("o colaborador não vê o painel nem o histórico (decisão P-2) [C4-13]", async () => {
     const res = await painel(colaborador.token);
-    expect(res.status).toBe(200);
-    expect(res.body.people_detail).toBe(false);
-
-    const treinamentos = acha(res.body.checks as Check[], "treinamentos");
-    for (const item of treinamentos.items) {
-      expect(item.detail ?? "").toMatch(/de \d+ com certificado|nenhum trabalhador/);
-    }
-
+    expect(res.status).toBe(403);
     const hist = await request(app)
       .get("/api/fiscalizacao/historico")
       .set(as(colaborador.token));

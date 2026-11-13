@@ -4,7 +4,7 @@ import prisma from "../model/prisma";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
 import { notifyMany } from "../helper/notify";
-import { canSeeAllInModule } from "../helper/module-access";
+import { canSeeAllInModule, canSeeAllServiceOrders } from "../helper/module-access";
 import { mudancasDesdeAEmissao } from "../helper/ordem-desatualizada";
 import { gravarPapel, PAPEL_SELECT, PapelInvalido } from "../helper/papel-anexado";
 import { sendPrivateFile } from "../helper/send-private-file";
@@ -157,10 +157,24 @@ class ServiceOrderController {
       const userId = actorUserId(auth);
       const establishmentId = texto(req.query.establishment_id);
 
+      /*
+        O colaborador vê só a ordem de serviço da própria função; os totais
+        e as funções da empresa ficam com quem cuida (P-2, opção c). [C4-13]
+      */
+      const soAMinha = !canSeeAllServiceOrders(auth.actor!.permission);
+      const minhaFuncao = soAMinha
+        ? (
+            await prisma.employeeProfile.findFirst({
+              where: { organizationId: orgId, userId, dismissedAt: null },
+              select: { jobRoleId: true },
+            })
+          )?.jobRoleId ?? null
+        : null;
       const roles = await prisma.jobRole.findMany({
         where: {
           organizationId: orgId,
           archivedAt: null,
+          ...(soAMinha ? { id: minhaFuncao ?? "__nenhuma__" } : {}),
           ...(establishmentId
             ? { sector: { establishmentId } }
             : {}),
@@ -276,6 +290,11 @@ class ServiceOrderController {
           select: { jobRoleId: true },
         }),
       ]);
+      /* O colaborador abre só a ordem da própria função; a de outra responde como inexistente. [C4-13] */
+      if (!canSeeAllServiceOrders(auth.actor!.permission) && meuPerfil?.jobRoleId !== order.jobRoleId) {
+        res.status(404).json({ message: "Ordem de serviço não encontrada." });
+        return;
+      }
 
       const { acks, ...rest } = order;
       res.json({

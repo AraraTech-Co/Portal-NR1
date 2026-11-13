@@ -235,3 +235,31 @@ export function canReadPayrollData(
 ): boolean {
   return canManagePayrollData(actor.permission) || profile.userId === actor.userId;
 }
+
+/**
+ * Painel da fiscalização: Master, Dono, SST, RH e fiscal. Mostra as
+ * pendências da empresa e o nome dos responsáveis; o colaborador e os
+ * gestores leem o PGR, mas não o painel. Decisão P-2 do Léo. [C4-13]
+ */
+const INSPECTION_PANEL_ROLES: readonly string[] = ["master", "owner", "sst", "rh", "fiscal"];
+
+export function canSeeInspectionPanel(roleKey: string): boolean {
+  return INSPECTION_PANEL_ROLES.includes(normalizeRoleKey(roleKey));
+}
+
+/**
+ * Ordens de serviço de todas as funções: todos menos o colaborador, que vê
+ * só a da própria função (P-2, opção c). [C4-13]
+ */
+export function canSeeAllServiceOrders(roleKey: string): boolean {
+  return normalizeRoleKey(roleKey) !== "colaborador";
+}
+
+/**
+ * Ocorrências: o colaborador vê só as que ele mesmo relatou (decisão P-5 do
+ * Léo, opção c; "caso contrário, mudamos depois"). Os demais papéis seguem o
+ * recorte por unidade da C2-13. [C4-14]
+ */
+export function seesOnlyOwnOccurrences(roleKey: string): boolean {
+  return normalizeRoleKey(roleKey) === "colaborador";
+}

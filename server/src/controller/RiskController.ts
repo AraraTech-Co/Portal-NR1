@@ -6,6 +6,7 @@ import {
 } from "@prisma/client";
 import { Request, Response } from "express";
 import prisma from "../model/prisma";
+import { seesOnlyOwnOccurrences } from "../helper/module-access";
 import { Activity } from "../model/schema/Activity/Activity";
 import { Hazard } from "../model/schema/Hazard/Hazard";
 import { Risk } from "../model/schema/Risk/Risk";
@@ -508,6 +509,10 @@ class RiskController {
           organizationId: orgId,
           riskId: risk.id,
           AND: [collectiveReadScope(escopo, "reportedById")],
+          /* O colaborador, só as que relatou (P-5). [C4-14] */
+          ...(seesOnlyOwnOccurrences((req as AuthRequest).actor!.permission)
+            ? { reportedById: actorUserId(req as AuthRequest) }
+            : {}),
         },
         select: { id: true, description: true },
       });

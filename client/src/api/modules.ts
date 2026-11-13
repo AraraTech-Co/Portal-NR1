@@ -197,6 +197,8 @@ export type MedicalCertificateRow = {
   reason: string | null;
   fileName: string | null;
   has_file: boolean;
+  /** Quem vê o arquivo: a própria pessoa e o RH; o ADM loja não. [C4-15] */
+  can_open_file?: boolean;
   rejectionReason: string | null;
   reviewedAt: string | null;
   readByWorkerAt: string | null;
