@@ -25,6 +25,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { canCopyBetweenUnits, useModuleAccess } from "@/lib/module-access";
 import { useAuth } from "@/auth/AuthContext";
 import { CopiarDeOutraFilial } from "./CopiarDeOutraFilial";
+import { ImportarFuncoes } from "./ImportarFuncoes";
 import { CboDaFuncao } from "./CboDaFuncao";
 import "@/components/form.css";
 import "./operation.css";
@@ -291,6 +292,9 @@ export function OperationPage() {
         title="Operação"
         description="Mapa da empresa: estabelecimento → setor → função → atividade. É a base do inventário de riscos."
       />
+
+      {/* Setores e funções em lote, por planilha (desenho de 13/11). */}
+      {canEdit && establishments.length > 0 && <ImportarFuncoes onDone={reload} />}
 
       {establishments.length === 0 ? (
         <EmptyState

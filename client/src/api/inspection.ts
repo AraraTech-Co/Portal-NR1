@@ -134,6 +134,7 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   "session.signin": "Entrou no portal",
   "training_session.create": "Turma presencial registrada",
   "people.import": "Pessoas cadastradas por planilha",
+  "job_roles.import": "Setores e funções cadastrados por planilha",
   "hr_document.create": "Documento de RH publicado",
   "hr_document.download": "Arquivo de documento pessoal de RH baixado",
   "announcement.create": "Aviso publicado",

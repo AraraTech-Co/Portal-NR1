@@ -1,5 +1,6 @@
 import { Router } from "express";
 import workplace from "../../controller/WorkplaceController";
+import importarFuncoes from "../../controller/JobRoleImportController";
 import { moduleRead, moduleWrite } from "./middleware";
 
 const read = moduleRead("operacao");
@@ -40,6 +41,8 @@ router.get("/api/job-roles", read, (req, res) =>
 router.post("/api/job-roles", write, (req, res) =>
   workplace.createJobRole(req, res),
 );
+/* Setores e funções por planilha, em lote: só cria (desenho de 13/11). */
+router.post("/api/job-roles/importar", write, (req, res) => importarFuncoes.importar(req, res));
 router.patch("/api/job-roles/:id", write, (req, res) =>
   workplace.updateJobRole(req, res),
 );

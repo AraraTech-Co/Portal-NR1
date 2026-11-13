@@ -62,3 +62,13 @@
 .import-divergence input {
   margin-top: 0.2rem;
 }
+
+/* Setores e funções por planilha, recolhido até ser aberto (13/11). */
+.op-importar-funcoes > summary {
+  cursor: pointer;
+  list-style-position: inside;
+}
+
+.op-importar-funcoes[open] > summary {
+  margin-bottom: 0.5rem;
+}

@@ -270,7 +270,12 @@ export function pareceLinhaInteira(nome: string): boolean {
   );
 }
 
-function semAcento(texto: string): string {
+/**
+ * A chave com que a planilha casa nomes (função, filial, setor). A importação
+ * de funções usa a mesma regra no servidor (`chaveDoNome`): com outra chave,
+ * "Caixa" nasceria ao lado de "CAIXA" e as duas ficariam ambíguas aqui.
+ */
+export function semAcento(texto: string): string {
   return texto.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 }
 

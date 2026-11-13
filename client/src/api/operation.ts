@@ -181,3 +181,40 @@ export async function updateActivity(
 export async function archiveActivity(id: string) {
   return request(`/api/activities/${id}`, { method: "DELETE" });
 }
+
+/** Uma linha da planilha de setores e funções, como a tela a lê. */
+export type LinhaDeFuncao = {
+  line: number;
+  filial: string;
+  setor: string;
+  funcao: string;
+  cbo_2002?: string;
+  cbo_94?: string;
+};
+
+export type ResultadoDaImportacaoDeFuncoes = {
+  dry_run: boolean;
+  rows: number;
+  criariam: number;
+  ja_existem: number;
+  repetidas: number;
+  erros: number;
+  setores_criados: number;
+  funcoes_criadas: number;
+  results: Array<{
+    line: number;
+    filial: string | null;
+    setor: string;
+    funcao: string;
+    situacao: "cria_setor_e_funcao" | "cria_funcao" | "ja_existe" | "repetida" | "erro";
+    message: string | null;
+  }>;
+};
+
+/** Setores e funções por planilha: só cria; a prévia não grava (desenho de 13/11). */
+export function importJobRoles(rows: LinhaDeFuncao[], dryRun: boolean) {
+  return request<ResultadoDaImportacaoDeFuncoes>("/api/job-roles/importar", {
+    method: "POST",
+    body: JSON.stringify({ rows, dry_run: dryRun }),
+  });
+}
