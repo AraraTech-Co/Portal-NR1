@@ -14,7 +14,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
 import { PageHeader } from "@/components/PageHeader";
 import { CERTIFICATE_STATUS_LABEL, formatDay } from "@/lib/labels";
-import { useModuleAccess } from "@/lib/module-access";
+import { canChangePersonnelRecord, useModuleAccess } from "@/lib/module-access";
 import { openProtectedFile } from "@/lib/protected-file";
 import "@/components/data-table.css";
 import "@/components/form.css";
@@ -191,6 +191,8 @@ function SendForm({ onSent }: { onSent: () => Promise<void> }) {
 export function MedicalCertificatesPage() {
   const { user } = useAuth();
   const { canWrite: escreve, canManage } = useModuleAccess("atestados");
+  /* Aceitar ou recusar é só do RH, de Master e de Dono (P-6). [C4-15] */
+  const decideAtestado = canChangePersonnelRecord(user?.permission);
   /*
     Quem tem ficha ativa envia o próprio atestado, qualquer que seja o papel:
     a mesma regra da consulta própria. [C4-4]
@@ -339,7 +341,7 @@ export function MedicalCertificatesPage() {
                       </td>
                       <td>
                         <div className="form-actions atestado-actions">
-                          {r.has_file && (
+                          {(r.can_open_file ?? r.has_file) && (
                             <Button
                               type="button"
                               variant="ghost"
@@ -348,7 +350,7 @@ export function MedicalCertificatesPage() {
                               Abrir arquivo
                             </Button>
                           )}
-                          {canManage && pending && !mine && (
+                          {decideAtestado && pending && !mine && (
                             <>
                               <Button
                                 type="button"
@@ -367,7 +369,7 @@ export function MedicalCertificatesPage() {
                               </Button>
                             </>
                           )}
-                          {canManage && pending && mine && (
+                          {decideAtestado && pending && mine && (
                             <span className="muted">Outra pessoa do RH decide o seu.</span>
                           )}
                           {unreadRejection && (

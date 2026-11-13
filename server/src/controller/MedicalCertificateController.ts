@@ -11,7 +11,7 @@ import {
   personRecordScope,
   scopeOfRequest,
 } from "../helper/unit-scope";
-import { canManageModule } from "../helper/module-access";
+import { canChangePersonnelRecord, canManageModule } from "../helper/module-access";
 import {
   assertSize,
   buildPrivateStoragePath,
@@ -40,6 +40,16 @@ function blank(v?: string | null) {
  */
 function isRh(req: AuthRequest): boolean {
   return Boolean(req.actor && canManageModule(req.actor.permission, "atestados"));
+}
+
+/**
+ * O atestado dos outros por inteiro (arquivo, CID e motivo) e a decisão de
+ * aceitar ou recusar: só Master, Dono e RH. O ADM loja, que acompanha a
+ * ausência nas lojas dele, vê pessoa, datas, dias ou horas e situação.
+ * Atestado é dado de saúde. Decisão P-6 do Léo, opção b, "só RH". [C4-15]
+ */
+function cuidaDoAtestadoInteiro(req: AuthRequest): boolean {
+  return Boolean(req.actor && canChangePersonnelRecord(req.actor.permission));
 }
 
 /** O caminho no disco é interno; o arquivo sai por GET /:id/file. [S5-B] */
@@ -72,7 +82,15 @@ class MedicalCertificateController {
         },
       });
       // O caminho no disco é interno; o arquivo sai por /:id/file. [S5-B]
-      res.json({ certificates: rows.map(publicCertificate) });
+      const inteiro = cuidaDoAtestadoInteiro(auth);
+      res.json({
+        certificates: rows.map((r) => {
+          const publico = publicCertificate(r)!;
+          if (inteiro || r.userId === userId) return { ...publico, can_open_file: publico.has_file };
+          /* Do colega, sem dado de saúde: nem CID, nem motivo, nem arquivo. [C4-15] */
+          return { ...publico, cid: null, reason: null, can_open_file: false };
+        }),
+      });
     } catch (err) {
       fail(res, err);
     }
@@ -189,6 +207,11 @@ class MedicalCertificateController {
         res.status(404).json({ message: "Atestado não encontrado." });
         return;
       }
+      /* Aceitar ou recusar é só do RH (e de Master e Dono). [C4-15] */
+      if (!cuidaDoAtestadoInteiro(auth)) {
+        res.status(403).json({ message: "Só o RH aceita ou recusa atestado." });
+        return;
+      }
       if (current.status !== CERTIFICATE_STATUSES.PENDING) {
         res.status(409).json({ message: "Atestado já revisado." });
         return;
@@ -289,7 +312,7 @@ class MedicalCertificateController {
       const alcanca =
         certificate &&
         (certificate.userId === actorUserId(auth) ||
-          (isRh(auth) && managesPersonRecord(await scopeOfRequest(auth), certificate)));
+          (cuidaDoAtestadoInteiro(auth) && managesPersonRecord(await scopeOfRequest(auth), certificate)));
       if (!certificate || !alcanca) {
         res.status(404).json({ message: "Atestado não encontrado." });
         return;
