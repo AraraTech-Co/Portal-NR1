@@ -533,7 +533,7 @@ export function EmployeeFilePage() {
         title={profile.user.name}
         description={
           profile.jobRole
-            ? `${profile.jobRole.name}${profile.jobRole.cbo2002 ? ` (CBO ${profile.jobRole.cbo2002})` : ""} · ${profile.jobRole.sector.name} · ${profile.jobRole.sector.establishment.name}`
+            ? `${profile.jobRole.name}${profile.jobRole.cbo2002 ? ` (CBO 2002 ${profile.jobRole.cbo2002})` : ""} · ${profile.jobRole.sector.name} · ${profile.jobRole.sector.establishment.name}`
             : profile.establishment
               ? `Sem função atribuída · ${profile.establishment.name}`
               : "Sem função atribuída · sem filial"

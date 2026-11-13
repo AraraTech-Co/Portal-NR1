@@ -56,7 +56,12 @@ describe("o lote mostra a filial de cada página", () => {
   const lote = tela("PayslipBatchSection.tsx");
 
   it("nas duas listas, a que fica de fora e a que confere", () => {
-    expect(lote.match(/\{p\.filial && `\$\{p\.filial\} · `\}/g)).toHaveLength(2);
+    expect(lote.match(/\{empresaDaPagina\(p\) && `\$\{empresaDaPagina\(p\)\} · `\}/g)).toHaveLength(2);
+  });
+
+  it("a filial vem com o código; sem a filial, só o código", () => {
+    expect(lote).toMatch(/if \(p\.filial && p\.codigo_empresa\) return `\$\{p\.filial\} \(código \$\{p\.codigo_empresa\}\)`;/);
+    expect(lote).toMatch(/if \(p\.codigo_empresa\) return `empresa código \$\{p\.codigo_empresa\}`;/);
   });
 });
 
@@ -66,5 +71,24 @@ describe("o formulário do atestado segue a regra da rota", () => {
   it("a tela lê send_own_modules, não a consulta própria", () => {
     expect(atestados).toMatch(/send_own_modules \?\? \[\]\)\.includes\("atestados"\)/);
     expect(atestados).not.toMatch(/[^_]own_modules \?\? \[\]\)\.includes\("atestados"\)/);
+  });
+});
+
+describe("segunda rodada de achados (13/11)", () => {
+  it("ocorrência: a unidade é obrigatória e já vem com a filial da ficha", () => {
+    const ocorrencias = tela("OccurrencesPage.tsx");
+    expect(ocorrencias).not.toMatch(/Estabelecimento \(opcional\)/);
+    expect(ocorrencias).toMatch(/<option value="">Escolha onde aconteceu<\/option>/);
+    expect(ocorrencias).toMatch(/if \(!establishmentId\) \{\s*setFormError\("Escolha o estabelecimento onde aconteceu\."\);/);
+    expect(ocorrencias).toMatch(/e\.id === user\?\.work_unit/);
+    expect(ocorrencias).toMatch(/else if \(daFicha\) setEstablishmentId\(daFicha\.id\);/);
+    expect(ocorrencias).not.toMatch(/establishmentId: establishmentId \|\| undefined/);
+  });
+
+  it("CBO: a lista de funções, a ficha e a ordem de serviço dizem CBO 2002", () => {
+    expect(tela("CboDaFuncao.tsx")).toMatch(/`CBO 2002 \$\{cbo2002\}`/);
+    expect(tela("CboDaFuncao.tsx")).not.toMatch(/CBO \{cbo2002/);
+    expect(tela("EmployeeFilePage.tsx")).toMatch(/\(CBO 2002 \$\{profile\.jobRole\.cbo2002\}\)/);
+    expect(tela("ServiceOrderViewPage.tsx")).toMatch(/<dt>CBO 2002<\/dt>/);
   });
 });
