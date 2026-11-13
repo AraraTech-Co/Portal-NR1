@@ -27,6 +27,18 @@ const MONTHS = [
   "Dezembro",
 ];
 
+/**
+ * De que empresa é a página: a filial e o código impresso no cabeçalho. Sem a
+ * filial (de fora da gestão de quem envia, ou código que nenhuma tem), só o
+ * código. Sem os dois, nada.
+ */
+function empresaDaPagina(p: PayslipBatchPart): string | null {
+  if (p.filial && p.codigo_empresa) return `${p.filial} (código ${p.codigo_empresa})`;
+  if (p.filial) return p.filial;
+  if (p.codigo_empresa) return `empresa código ${p.codigo_empresa}`;
+  return null;
+}
+
 const FORA_LABEL: Record<PayslipBatchPart["situacao"], string> = {
   CONFERE: "Confere",
   SEM_CADASTRO: "Sem cadastro",
@@ -315,7 +327,7 @@ export function PayslipBatchSection({
                         {p.registration && ` · matrícula ${p.registration}`}
                       </strong>
                       <span className="muted">
-                        {p.filial && `${p.filial} · `}
+                        {empresaDaPagina(p) && `${empresaDaPagina(p)} · `}
                         {paginas(p.pages)} · {FORA_LABEL[p.situacao]}
                       </span>
                     </div>
@@ -339,7 +351,7 @@ export function PayslipBatchSection({
                     <div className="lote-quem">
                       <strong>{p.user_name}</strong>
                       <span className="muted">
-                        {p.filial && `${p.filial} · `}
+                        {empresaDaPagina(p) && `${empresaDaPagina(p)} · `}
                         matrícula {p.registration} · {paginas(p.pages)}
                         {p.substitui && " · substitui o holerite já publicado"}
                       </span>

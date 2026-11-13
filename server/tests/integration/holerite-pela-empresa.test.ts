@@ -59,7 +59,13 @@ const lote = (pdf: Buffer, extra: Record<string, unknown> = {}) => ({
   ...extra,
 });
 
-type Parte = { situacao: string; user_id: string | null; motivos: string[]; filial: string | null };
+type Parte = {
+  situacao: string;
+  user_id: string | null;
+  motivos: string[];
+  filial: string | null;
+  codigo_empresa: string | null;
+};
 
 async function previa(token: string, paginas: string[][], extra: Record<string, unknown> = {}) {
   const res = await request(app)
@@ -158,9 +164,9 @@ describe("o lote acha a filial pelo código da empresa [C3-3]", () => {
 
   it("sem escolher filial, a mesma matrícula vai para a pessoa da empresa impressa", async () => {
     const partes = await previa(rhToken, [pagina("0682", "000153"), pagina("683", "153")]);
-    expect(partes.map((p) => [p.situacao, p.user_id, p.filial])).toEqual([
-      ["CONFERE", pessoa.daLoja, loja.nome],
-      ["CONFERE", pessoa.daAg, ag.nome],
+    expect(partes.map((p) => [p.situacao, p.user_id, p.filial, p.codigo_empresa])).toEqual([
+      ["CONFERE", pessoa.daLoja, loja.nome, "0682"],
+      ["CONFERE", pessoa.daAg, ag.nome, "683"],
     ]);
   });
 
@@ -185,7 +191,7 @@ describe("o lote acha a filial pelo código da empresa [C3-3]", () => {
     expect(parte.motivos).toEqual([
       "Nenhuma filial tem o código da folha 0999. Preencha o código na filial ou escolha a filial da folha.",
     ]);
-    expect(parte.filial).toBeNull();
+    expect([parte.filial, parte.codigo_empresa]).toEqual([null, "0999"]);
   });
 
   it("página sem o cabeçalho da empresa e sem filial escolhida: pede a filial", async () => {
@@ -207,6 +213,14 @@ describe("o lote acha a filial pelo código da empresa [C3-3]", () => {
       const [parte] = await previa(rhToken, [pagina("0682", "153")]);
       expect(parte.situacao).toBe("SEM_CADASTRO");
       expect(parte.motivos[0]).toContain("Mais de uma filial tem o código da folha 0682");
+      expect([parte.filial, parte.codigo_empresa]).toEqual([null, "0682"]);
+      /*
+        Quem gere só a Loja alcança uma das duas: mesmo assim a página não
+        leva o nome dela, porque o código não diz qual das duas é.
+      */
+      const [doAdm] = await previa(admLoja, [pagina("0682", "153")]);
+      expect(doAdm.motivos[0]).toContain("Mais de uma filial tem o código da folha 0682");
+      expect(doAdm.filial).toBeNull();
     } finally {
       await prisma.establishment.delete({ where: { id: sombra.id } });
     }
