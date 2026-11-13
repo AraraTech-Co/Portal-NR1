@@ -179,6 +179,28 @@ export function canConsultOwn(
   return OWN_CONSULTATION_MODULES.includes(moduleId);
 }
 
+/**
+ * Enviar o PRÓPRIO registro (o atestado): quem escreve no módulo, ou quem
+ * tem ficha ativa e consulta o próprio registro — qualquer papel menos o
+ * fiscal. A porta da rota e a sessão da tela usam esta mesma regra: o
+ * gerente, que LÊ o módulo, passava na rota e não via o formulário. [C4-4]
+ */
+export const OWN_SEND_MODULES: readonly ModuleId[] = ["atestados"];
+
+export function canSendOwn(
+  roleKey: string,
+  moduleId: ModuleId,
+  hasActiveProfile: boolean,
+): boolean {
+  if (canWriteModule(roleKey, moduleId)) return true;
+  return hasActiveProfile && canConsultOwn(roleKey, moduleId, true);
+}
+
+/** Módulos em que a pessoa envia o próprio registro — para a tela. [C4-4] */
+export function ownSendModules(roleKey: string, hasActiveProfile: boolean): ModuleId[] {
+  return OWN_SEND_MODULES.filter((m) => canSendOwn(roleKey, m, hasActiveProfile));
+}
+
 /** Módulos que o papel só alcança pela consulta própria — para o menu. [C2-1] */
 export function ownConsultationOnly(roleKey: string, hasActiveProfile: boolean): ModuleId[] {
   return OWN_CONSULTATION_MODULES.filter(

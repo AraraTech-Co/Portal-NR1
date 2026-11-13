@@ -194,10 +194,12 @@ export function MedicalCertificatesPage() {
   /* Aceitar ou recusar é só do RH, de Master e de Dono (P-6). [C4-15] */
   const decideAtestado = canChangePersonnelRecord(user?.permission);
   /*
-    Quem tem ficha ativa envia o próprio atestado, qualquer que seja o papel:
-    a mesma regra da consulta própria. [C4-4]
+    Quem tem ficha ativa envia o próprio atestado, qualquer que seja o papel.
+    A regra vem da sessão (`send_own_modules`), a mesma da porta da rota: a
+    tela olhava a consulta própria, que deixa de fora quem já LÊ o módulo —
+    e o gerente ficava sem o formulário. [C4-4]
   */
-  const canWrite = escreve || (user?.own_modules ?? []).includes("atestados");
+  const canWrite = escreve || (user?.send_own_modules ?? []).includes("atestados");
   const [rows, setRows] = useState<MedicalCertificateRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

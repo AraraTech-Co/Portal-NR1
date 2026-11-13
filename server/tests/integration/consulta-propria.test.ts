@@ -283,6 +283,36 @@ describe("a sessão diz ao menu o que abre só pela consulta própria [C2-1]", (
   });
 });
 
+describe("a sessão diz à tela onde se envia o próprio atestado [C4-4]", () => {
+  /*
+    A tela mostrava o formulário pela consulta própria, que deixa de fora
+    quem já LÊ o módulo: o gerente passava na rota e não via o formulário.
+    A sessão e a porta da rota agora seguem a mesma regra — e este teste
+    confere as duas juntas, pessoa a pessoa.
+  */
+  it("send_own_modules traz o atestado exatamente para quem a rota aceita", async () => {
+    const esperado: [string, Pessoa, boolean][] = [
+      ["gerente", gerente, true],
+      ["supervisor", supervisor, true],
+      ["sst", sst, true],
+      ["colaborador", colega, true],
+      ["gerente sem ficha", gerenteSemFicha, false],
+      ["sst desligado", sstDesligado, false],
+      ["fiscal", fiscal, false],
+    ];
+    for (const [nome, p, envia] of esperado) {
+      const sessao = await request(app).get("/api/auth").set(as(p.token));
+      expect(sessao.status, nome).toBe(200);
+      expect(sessao.body.user.send_own_modules, nome).toEqual(envia ? ["atestados"] : []);
+      const res = await request(app)
+        .post("/api/medical-certificates")
+        .set(as(p.token))
+        .send({ start_date: "2026-10-06", days: 1 });
+      expect(res.status, `${nome}: ${JSON.stringify(res.body)}`).toBe(envia ? 201 : 403);
+    }
+  });
+});
+
 describe("quem administra o módulo continua vendo a equipe [C2-1]", () => {
   it("o RH lista o holerite e o atestado do colega", async () => {
     const holerites = await request(app).get("/api/payslips").set(as(rh.token));

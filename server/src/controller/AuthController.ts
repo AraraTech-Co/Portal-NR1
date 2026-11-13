@@ -14,7 +14,7 @@ import {
   resolveAccountAccess,
 } from "../helper/account-access";
 import { effectivePermission } from "../helper/auth";
-import { modulesForRole, ownConsultationOnly } from "../helper/module-access";
+import { modulesForRole, ownConsultationOnly, ownSendModules } from "../helper/module-access";
 import { hasActiveProfile } from "../helper/active-profile";
 import { unitScopeOf } from "../helper/unit-scope";
 import type { AuthRequest } from "../types/auth";
@@ -57,8 +57,13 @@ async function consultaPropria(
   permission: string,
   organizationId: string,
   userId: string,
-): Promise<string[]> {
-  return ownConsultationOnly(permission, await hasActiveProfile(organizationId, userId));
+): Promise<{ own_modules: string[]; send_own_modules: string[] }> {
+  const ativa = await hasActiveProfile(organizationId, userId);
+  return {
+    own_modules: ownConsultationOnly(permission, ativa),
+    /* Onde a tela oferece o envio do próprio registro (o atestado). [C4-4] */
+    send_own_modules: ownSendModules(permission, ativa),
+  };
 }
 
 /**
@@ -91,7 +96,7 @@ async function publicUser(actor: NonNullable<AuthRequest["actor"]>) {
     permission: actor.permission,
     must_change_password: actor.mustChangePassword,
     modules: modulesForRole(actor.permission),
-    own_modules: await consultaPropria(actor.permission, actor.organizationId, actor.userId),
+    ...(await consultaPropria(actor.permission, actor.organizationId, actor.userId)),
     ...(await recorteDaSessao(actor.permission, actor.organizationId, actor.userId)),
     ...(await avisoDoLogin(actor.permission)),
     organization: {
@@ -119,7 +124,7 @@ async function sessionUserFromAccess(
     permission,
     must_change_password: access.user.mustChangePassword,
     modules: modulesForRole(permission),
-    own_modules: await consultaPropria(permission, access.organizationId, access.user.id),
+    ...(await consultaPropria(permission, access.organizationId, access.user.id)),
     ...(await recorteDaSessao(permission, access.organizationId, access.user.id)),
     ...(await avisoDoLogin(permission)),
     organization: {
