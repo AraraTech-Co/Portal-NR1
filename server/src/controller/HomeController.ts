@@ -28,6 +28,7 @@ import {
   visibleUnits,
   managedUnitFilter,
   scopeOfRequest,
+  userInScope,
 } from "../helper/unit-scope";
 
 function fail(res: Response, err: unknown) {
@@ -657,7 +658,8 @@ class HomeController {
             training: { organizationId: orgId },
             status: "COMPLETED",
             expiresAt: { lte: limite },
-            ...(veTodos("treinamentos") ? {} : { userId }),
+            /* Quem cuida conta só as filiais que gere (e o próprio). [C4-17] */
+            ...(veTodos("treinamentos") ? { user: userInScope(escopo) } : { userId }),
           },
           select: { expiresAt: true },
           orderBy: { expiresAt: "asc" },
