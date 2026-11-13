@@ -93,6 +93,20 @@ afterAll(async () => {
   delete process.env.LOGIN_ORG_ID;
 });
 
+
+/**
+ * Os 500 da rajada, com o status e o corpo de cada um. Uma resposta 500 caiu
+ * uma vez sob a suíte cheia e não se repetiu sozinha: quando cair de novo, a
+ * causa aparece na falha (suspeita: o pool de conexões do Prisma, P2024).
+ */
+function errosInternos(respostas: { status: number; body?: unknown; text?: string }[]) {
+  const erros = respostas
+    .filter((r) => r.status === 500)
+    .map((r) => ({ status: r.status, body: r.body, text: (r.text ?? "").slice(0, 300) }));
+  if (erros.length > 0) console.warn(`[rajada] ${erros.length} resposta(s) 500: ${JSON.stringify(erros)}`);
+  return erros;
+}
+
 describe("rajada simultânea [C1-7]", () => {
   /*
     A rajada é só de datas erradas, e a certa vem depois, sozinha. Com a
@@ -156,7 +170,7 @@ describe("rajada simultânea [C1-7]", () => {
       `conferências na rajada (leituras de ficha no processo: ${total}; outras: ${JSON.stringify(outras)})`,
     ).toBeLessThanOrEqual(5);
     expect(daConferencia(), "a rajada chega à conferência: as 5 vagas são usadas").toBe(5);
-    expect(respostas.filter((r) => r.status === 500).length, "nenhum erro interno").toBe(0);
+    expect(errosInternos(respostas), "nenhum erro interno").toEqual([]);
     expect(respostas.every((r) => !r.body?.token), "nenhuma errada leva ficha").toBe(true);
 
     /* A certa, depois da rajada: travada, com a mesma resposta de dado errado. */
@@ -220,7 +234,7 @@ describe("rajada simultânea [C1-7]", () => {
       ),
     );
     expect(comparacoes.mock.calls.length, "bcrypt na rajada").toBeLessThanOrEqual(5);
-    expect(respostas.filter((r) => r.status === 500).length, "nenhum erro interno").toBe(0);
+    expect(errosInternos(respostas), "nenhum erro interno").toEqual([]);
     expect(respostas.filter((r) => r.status === 429).length).toBeGreaterThanOrEqual(RAJADA - 5);
     comparacoes.mockRestore();
   });
