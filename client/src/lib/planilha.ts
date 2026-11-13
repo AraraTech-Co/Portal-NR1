@@ -556,6 +556,13 @@ export function lerTabela(
             : `Linha ${numero}: entra sem função — o cargo "${nomeDaFuncao}" ainda não é função. Depois de cadastrar a função com esse nome em Operação, envie a planilha de novo para preenchê-la.`,
         );
         delete row.job_role_id;
+        /*
+          O CBO é do cargo que não virou função: sem a função na linha, o
+          servidor o gravaria na função que a pessoa JÁ tem, de todos que a
+          têm, e ofereceria trocar o CBO dela pelo de outro cargo.
+        */
+        delete row.job_role_cbo2002;
+        delete row.job_role_cbo94;
         semFuncao.push(numero);
       } else if (candidatas.length > 1) {
         const unidades = [
