@@ -253,7 +253,7 @@ describe("a importação grava os dados da folha à parte, e o CBO na função [
     const res = await importar([linhaAna({ competence: "2026-09", address: "Rua Velha, 1" })], false);
     expect(res.body.results[0].status, JSON.stringify(res.body)).toBe("skipped");
     expect(res.body.results[0].message).toContain(
-      "Os dados da folha do portal são de 11/2026, mais novos que os desta planilha: ficaram como estavam.",
+      "Os dados da folha do portal são de 11/2026, mais novos que os desta planilha: ficaram como estavam, e as diferenças desta planilha não são oferecidas.",
     );
     expect((await fichaDe(ANA)).payrollData?.address).toBe("Av. Brasil, 100");
   });

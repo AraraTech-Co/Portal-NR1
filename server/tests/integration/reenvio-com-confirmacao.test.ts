@@ -338,3 +338,45 @@ describe("idade fora do comum avisa, sem bloquear [C4-8]", () => {
     expect(res.body.results[1].message).toBe("Pronto para entrar.");
   });
 });
+
+describe("achados do teste em produção (13/11)", () => {
+  it("pessoa nova com rescisão na folha não é cadastrada, nem na prévia nem ao gravar", async () => {
+    const caio = {
+      name: "CAIO QUE JA SAIU",
+      registration: "000031",
+      tax_id: cpf("246813579"),
+      birth_date: "1990-02-03",
+      admitted_at: "2024-03-01",
+      job_role_id: repositor,
+      payroll: { termination_date: "2026-10-31", termination_cause: "Pedido de demissão" },
+    };
+    for (const dry of [true, false]) {
+      const res = await importar([caio], dry);
+      expect(res.body.results[0], JSON.stringify(res.body)).toMatchObject({
+        status: "error",
+        message: "A planilha traz rescisão em 31/10/2026: quem já saiu e não está no portal não é cadastrado.",
+      });
+      expect(res.body.created).toBe(0);
+    }
+    expect(await prisma.employeeProfile.count({ where: { organizationId: orgId, registration: "000031" } })).toBe(0);
+    /* Sem rescisão, a mesma pessoa entra. */
+    const semRescisao = await importar([{ ...caio, payroll: {} }], true);
+    expect(semRescisao.body.results[0].status).toBe("created");
+  });
+
+  it("planilha de competência mais antiga não oferece diferenças, nem aplica as marcadas", async () => {
+    /* A ficha da Ana guarda a folha de 2026-11. */
+    await importar([ana({ payroll: { competence: "2026-11" } })], false);
+    const velha = await importar(
+      [ana({ job_role_id: repositora, payroll: { competence: "2026-09" }, aceitar: ["job_role"] })],
+      false,
+    );
+    const linha = velha.body.results[0];
+    expect(linha.divergences, JSON.stringify(linha)).toBeUndefined();
+    expect(linha.message).toContain("as diferenças desta planilha não são oferecidas");
+    expect((await estadoDaAna()).jobRoleId).toBe(repositor);
+    /* A mesma troca, na competência atual, é oferecida. */
+    const atual = await importar([ana({ job_role_id: repositora, payroll: { competence: "2026-11" } })], true);
+    expect(atual.body.results[0].divergences.map((d: { campo: string }) => d.campo)).toEqual(["job_role"]);
+  });
+});
