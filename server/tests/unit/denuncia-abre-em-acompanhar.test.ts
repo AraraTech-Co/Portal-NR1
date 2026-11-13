@@ -12,9 +12,9 @@ const tela = readFileSync(
 ).replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
 
 describe("a denúncia abre em Acompanhar pelo aviso [C4-6]", () => {
-  it("o modo inicial é 'track' quando o endereço traz ?acompanhar, e 'new' sem ele", () => {
+  it("o modo inicial é 'track' quando o endereço traz ?acompanhar ou ?minha, e 'new' sem eles", () => {
     const linhas = tela.split("\n").filter((l) => l.includes("useState<Mode>("));
     expect(linhas).toHaveLength(1);
-    expect(linhas[0]).toContain('semEmpresa || searchParams.has("acompanhar") ? "track" : "new"');
+    expect(linhas[0]).toContain('semEmpresa || searchParams.has("acompanhar") || searchParams.has("minha") ? "track" : "new"');
   });
 });
