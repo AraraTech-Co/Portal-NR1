@@ -110,6 +110,8 @@ describe("quem viu relata, quem responde encerra [S3-E]", () => {
       .post("/api/occurrences")
       .set(as(supervisor.token))
       .send({
+        /* A unidade é obrigatória: a de trabalho do supervisor no seed. */
+        establishment_id: "aaaaaaaa-0001-4000-8000-000000000011",
         type: "DANGEROUS_EVENT",
         description: `Quase-acidente ${SUFIXO} ${Math.random()}`,
         occurred_at: "2026-10-05",

@@ -30,8 +30,9 @@ export function CboDaFuncao({
       <div className="op-job-cbo muted">
         {cbo2002 || cbo94 ? (
           <span>
-            CBO {cbo2002 ?? "—"}
-            {cbo94 ? ` · CBO 94 ${cbo94}` : ""}
+            {cbo2002 ? `CBO 2002 ${cbo2002}` : ""}
+            {cbo2002 && cbo94 ? " · " : ""}
+            {cbo94 ? `CBO 94 ${cbo94}` : ""}
           </span>
         ) : (
           <span>Sem CBO</span>

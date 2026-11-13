@@ -192,6 +192,8 @@ type ParteDoLote = {
    * das que quem envia gere — o nome dela não sai.
    */
   filial: string | null;
+  /** O código da empresa impresso no cabeçalho da página (0682), quando se lê. */
+  codigo_empresa: string | null;
   /** Já há holerite dessa pessoa nessa competência: publicar substitui. */
   substitui: boolean;
   motivos: string[];
@@ -368,6 +370,7 @@ async function lerLote(
       user_id: null,
       user_name: null,
       filial: null as string | null,
+      codigo_empresa: part.employerCode,
       substitui: false,
       avisos: [] as string[],
     };
@@ -425,6 +428,8 @@ async function lerLote(
         );
       }
       if (daEmpresa.length > 1) {
+        /* Código ambíguo: nenhuma das filiais é "a" da página. */
+        base.filial = null;
         return semDono(
           `Mais de uma filial tem o código da folha ${empresa.code}. Corrija o código nas filiais ou escolha a filial da folha.`,
         );

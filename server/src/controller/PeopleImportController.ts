@@ -729,13 +729,20 @@ class PeopleImportController {
             });
             /* O CBO é do cargo da planilha; sem cargo na linha, da função que a pessoa tem. */
             const cboFeito = await preencherCbo(jobRoleId ?? jaExiste.jobRoleId, cbo2002, cbo94);
-            const divergencias = this.divergencias({
-              jaExiste,
-              linha: { nome, birthDate, admittedAt, jobRoleId, cbo2002, cbo94 },
-              daFolha,
-              nomeDaFuncao,
-              cboDaFuncao,
-            });
+            /*
+              Planilha de competência mais antiga que a guardada não muda os
+              dados da folha, e também não oferece trocar nome, função,
+              admissão ou desligar: o portal já tem dado mais novo.
+            */
+            const divergencias = folha.antiga
+              ? []
+              : this.divergencias({
+                  jaExiste,
+                  linha: { nome, birthDate, admittedAt, jobRoleId, cbo2002, cbo94 },
+                  daFolha,
+                  nomeDaFuncao,
+                  cboDaFuncao,
+                });
             const aceitar = new Set(
               Array.isArray(linha.aceitar) ? linha.aceitar.filter((c): c is string => typeof c === "string") : [],
             );
@@ -772,7 +779,7 @@ class PeopleImportController {
             if (aviso) registro.message += ` ${aviso}`;
             if (folha.antiga) {
               const [a, m] = folha.antiga.split("-");
-              registro.message += ` Os dados da folha do portal são de ${m}/${a}, mais novos que os desta planilha: ficaram como estavam.`;
+              registro.message += ` Os dados da folha do portal são de ${m}/${a}, mais novos que os desta planilha: ficaram como estavam, e as diferenças desta planilha não são oferecidas.`;
             }
             if (!simulacao && folha.mudou.length > 0) {
               /* A trilha diz o que mudou e de que folha, sem os valores. */
@@ -797,6 +804,18 @@ class PeopleImportController {
             }
             resultados.push(registro);
             continue;
+          }
+
+          /*
+            Pessoa que não está no portal e já tem rescisão na folha não é
+            cadastrada (decisão do Léo, 13/11): entraria ativa e com o
+            primeiro acesso liberado. A rescisão só desliga quem já existe.
+          */
+          const rescisaoDeQuemChega = (daFolha.terminationDate as Date | null | undefined) ?? null;
+          if (rescisaoDeQuemChega) {
+            throw new Error(
+              `A planilha traz rescisão em ${dia(rescisaoDeQuemChega)}: quem já saiu e não está no portal não é cadastrado.`,
+            );
           }
 
           if (taxId) cpfsDaLeva.add(taxId);

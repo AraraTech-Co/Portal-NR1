@@ -81,6 +81,13 @@ beforeAll(async () => {
     .post("/api/occurrences")
     .set(as(sst.token))
     .send({
+      /* A unidade é obrigatória na ocorrência: a do risco escolhido. */
+      establishment_id: (
+        await prisma.risk.findUniqueOrThrow({
+          where: { id: risco },
+          select: { hazard: { select: { activity: { select: { establishmentId: true } } } } },
+        })
+      ).hazard.activity.establishmentId,
       type: "DANGEROUS_EVENT",
       description: `Quase-acidente na placa ${SUFIXO}`,
       occurred_at: new Date("2026-10-22T13:00:00.000Z").toISOString(),

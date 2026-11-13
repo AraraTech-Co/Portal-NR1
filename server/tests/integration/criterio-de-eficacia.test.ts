@@ -166,6 +166,8 @@ describe("a ação não abre sem critério [B3-4-A]", () => {
       .post("/api/occurrences")
       .set(as(sst))
       .send({
+        /* A unidade é obrigatória na ocorrência. */
+        establishment_id: "aaaaaaaa-0001-4000-8000-000000000011",
         type: "DANGEROUS_EVENT",
         description: `Quase-acidente ${SUFIXO}`,
         occurred_at: "2026-10-20T14:30:00.000Z",

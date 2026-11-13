@@ -69,6 +69,8 @@ describe("as citações da NR-1 batem com a norma [B3-4-I]", () => {
       .post("/api/occurrences")
       .set(as(sst))
       .send({
+        /* A unidade é obrigatória na ocorrência. */
+        establishment_id: "aaaaaaaa-0001-4000-8000-000000000011",
         type: "DANGEROUS_EVENT",
         description: `Citação da norma ${Date.now().toString(36)}`,
         occurred_at: new Date().toISOString(),

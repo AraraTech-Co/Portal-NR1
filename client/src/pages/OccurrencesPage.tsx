@@ -1,5 +1,6 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "@/auth/AuthContext";
 import { fetchEstablishments, type Establishment } from "@/api/operation";
 import {
   createOccurrence,
@@ -47,6 +48,7 @@ function isAnalyzed(row: OccurrenceRow): boolean {
 
 export function OccurrencesPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   /* Quem só consulta não vê o formulário que o servidor recusaria. [S1-E] */
   const { canWrite } = useModuleAccess("ocorrencias");
   const [rows, setRows] = useState<OccurrenceRow[]>([]);
@@ -86,6 +88,13 @@ export function OccurrencesPage() {
       .then(([, est, riskData]) => {
         if (cancelled) return;
         setEstablishments(est.establishments);
+        /*
+          A unidade já vem escolhida: a única que há, ou a da ficha de quem
+          registra. Quem tem recorte só registra na sua unidade ou nas que gere.
+        */
+        const daFicha = est.establishments.find((e) => e.id === user?.work_unit);
+        if (est.establishments.length === 1) setEstablishmentId(est.establishments[0]!.id);
+        else if (daFicha) setEstablishmentId(daFicha.id);
         setRisks(riskData.risks);
       })
       .catch((err) => {
@@ -130,6 +139,14 @@ export function OccurrencesPage() {
       setFormError("Conte o que aconteceu.");
       return;
     }
+    /*
+      A unidade é obrigatória (decisão do Léo, 13/11): sem ela, o gestor da
+      filial onde aconteceu não via a ocorrência.
+    */
+    if (!establishmentId) {
+      setFormError("Escolha o estabelecimento onde aconteceu.");
+      return;
+    }
     setSaving(true);
     setFormError(null);
     try {
@@ -137,7 +154,7 @@ export function OccurrencesPage() {
         type: formType,
         description: description.trim(),
         occurredAt,
-        establishmentId: establishmentId || undefined,
+        establishmentId,
         riskId: riskId || undefined,
       });
       navigate(`/ocorrencias/${data.occurrence.id}`);
@@ -218,13 +235,14 @@ export function OccurrencesPage() {
             </label>
             <div className="form-grid cols-2">
               <label className="form-field">
-                Estabelecimento (opcional)
+                Estabelecimento
                 <select
                   value={establishmentId}
                   onChange={(e) => setEstablishmentId(e.target.value)}
                   disabled={saving}
+                  required
                 >
-                  <option value="">—</option>
+                  <option value="">Escolha onde aconteceu</option>
                   {establishments.map((e) => (
                     <option key={e.id} value={e.id}>
                       {e.name}

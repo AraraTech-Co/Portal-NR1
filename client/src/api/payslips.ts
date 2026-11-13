@@ -160,6 +160,8 @@ export type PayslipBatchPart = {
   user_name: string | null;
   /** A filial da página; nula quando não se sabe ou é de fora da gestão. */
   filial: string | null;
+  /** O código da empresa impresso na página (0682), quando se lê. */
+  codigo_empresa: string | null;
   substitui: boolean;
   motivos: string[];
   avisos: string[];

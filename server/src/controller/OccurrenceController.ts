@@ -300,8 +300,17 @@ class OccurrenceController {
         return;
       }
 
+      /*
+        A unidade é obrigatória (decisão do Léo, 13/11): ocorrência sem
+        unidade ficava só com a gestão central, e o gestor da filial de quem
+        registrou não a via.
+      */
+      if (!establishment_id) {
+        res.status(400).json({ message: "Escolha o estabelecimento onde aconteceu." });
+        return;
+      }
       const escopo = await scopeOfRequest(req as AuthRequest);
-      if (establishment_id) {
+      {
         const est = await new Establishment().read.one({
           id: establishment_id,
           organizationId: orgId,

@@ -25,6 +25,8 @@ export type SessionUser = {
   send_own_modules?: string[];
   /** Unidades sob a responsabilidade de gerente, supervisor ou ADM loja. [C2-13] */
   managed_units?: string[];
+  /** A filial da ficha da pessoa (unidade de trabalho), quando há. */
+  work_unit?: string | null;
   /** Recortado por unidade e sem nenhuma atribuída: mostra o aviso. [C2-13] */
   needs_units?: boolean;
   /** Só para o Master: a tela de login não sabe de qual empresa mostrar as filiais. [C3-2b] */

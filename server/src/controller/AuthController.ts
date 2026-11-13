@@ -72,7 +72,12 @@ async function consultaPropria(
  */
 async function recorteDaSessao(permission: string, organizationId: string, userId: string) {
   const escopo = await unitScopeOf({ permission, organizationId, userId });
-  return { managed_units: escopo.managed, needs_units: escopo.needsUnits };
+  return {
+    managed_units: escopo.managed,
+    needs_units: escopo.needsUnits,
+    /* A filial da ficha: o padrão do registro de ocorrência. */
+    work_unit: escopo.work,
+  };
 }
 
 /**

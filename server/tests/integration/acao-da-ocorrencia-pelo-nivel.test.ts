@@ -44,6 +44,8 @@ async function ocorrencia(riskId?: string) {
     .post("/api/occurrences")
     .set(as(sst.token))
     .send({
+      /* A unidade é obrigatória na ocorrência. */
+      establishment_id: "aaaaaaaa-0001-4000-8000-000000000011",
       type: "DANGEROUS_EVENT",
       description: `Quase-acidente ${SUFIXO}`,
       occurred_at: "2026-10-22T13:00:00.000Z",
