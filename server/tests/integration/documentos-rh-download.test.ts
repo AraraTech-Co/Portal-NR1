@@ -14,8 +14,9 @@ import { uploadsRoot } from "../../src/helper/uploads";
  * quem o documento se destina e o RH, com Master e Dono. Documento geral se
  * destina a todos.
  *
- * Empresa própria do teste com a Loja. A Ana e a Bia trabalham na Loja; o
- * Otto é ADM loja da Loja; o Gil é gerente. Uma segunda empresa tem o seu RH.
+ * Empresa própria do teste com a Loja e o Depósito. A Ana e a Bia trabalham
+ * na Loja e o Caio no Depósito; o Otto é ADM loja só da Loja; o Gil é
+ * gerente. Uma segunda empresa tem o seu RH.
  *
  * Apagadas no fim, com os arquivos gravados.
  */
@@ -29,7 +30,9 @@ const usuarios: string[] = [];
 const id: Record<string, string> = {};
 const token: Record<string, string> = {};
 let loja = "";
+let deposito = "";
 let pessoal = "";
+let doCaio = "";
 let geral = "";
 const CONTRATO = Buffer.from("%PDF-1.4 contrato de experiencia da Ana");
 const POLITICA = Buffer.from("%PDF-1.4 politica de uso de EPI");
@@ -84,6 +87,8 @@ beforeAll(async () => {
   await pessoa("Dora", Role.OWNER, e);
   await pessoa("Ana", Role.COLABORADOR, e, loja);
   await pessoa("Bia", Role.COLABORADOR, e, loja);
+  deposito = (await prisma.establishment.create({ data: { organizationId: e.orgId, name: `Deposito ${SUFIXO}` } })).id;
+  await pessoa("Caio", Role.COLABORADOR, e, deposito);
   await pessoa("Gil", Role.GERENTE, e, loja);
   const otto = await pessoa("Otto", Role.ADM_LOJA, e, loja);
   await prisma.managedEstablishment.create({
@@ -107,6 +112,7 @@ beforeAll(async () => {
   };
   pessoal = await publicar("contrato-ana", CONTRATO, id.Ana);
   geral = await publicar("politica-epi", POLITICA);
+  doCaio = await publicar("advertencia-caio", CONTRATO, id.Caio);
 });
 
 afterAll(async () => {
@@ -174,6 +180,17 @@ describe("quem baixa o documento pessoal", () => {
     }
   });
 
+  it("o ADM loja não alcança o documento de quem é de outra filial: 'não encontrado', não 403", async () => {
+    const res = await baixar("Otto", doCaio);
+    expect(res.status).toBe(404);
+    expect(JSON.parse((res.body as Buffer).toString()).message).toBe("Documento não encontrado.");
+    expect(
+      await prisma.auditEvent.count({ where: { action: "hr_document.download", entityId: doCaio } }),
+    ).toBe(0);
+    /* O mesmo documento sai para o RH, que alcança a empresa inteira. */
+    expect((await baixar("Rita", doCaio)).status).toBe(200);
+  });
+
   it("o RH de outra empresa não alcança", async () => {
     expect((await baixar("Fora", pessoal)).status).toBe(404);
     expect((await baixar("Fora", geral)).status).toBe(404);
@@ -204,7 +221,7 @@ describe("a lista diz onde aparece o botão", () => {
 
   it("Ana e RH: os dois arquivos; ADM loja: só o geral; colega: só o geral", async () => {
     expect(await podeNaLista("Ana")).toEqual({ [pessoal]: true, [geral]: true });
-    expect(await podeNaLista("Rita")).toEqual({ [pessoal]: true, [geral]: true });
+    expect(await podeNaLista("Rita")).toEqual({ [pessoal]: true, [geral]: true, [doCaio]: true });
     expect(await podeNaLista("Otto")).toEqual({ [pessoal]: false, [geral]: true });
     expect(await podeNaLista("Bia")).toEqual({ [geral]: true });
   });
