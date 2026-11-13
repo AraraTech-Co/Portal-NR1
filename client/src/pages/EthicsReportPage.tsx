@@ -2,8 +2,12 @@ import { FormEvent, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   acknowledgeEthicsReport,
+  acknowledgeMyEthicsReport,
   createEthicsReport,
   fetchEthicsMeta,
+  fetchMyEthicsReport,
+  fetchMyEthicsReports,
+  sendMyEthicsMessage,
   sendReporterMessage,
   trackEthicsReport,
 } from "@/api/ethics";
@@ -41,7 +45,7 @@ export function EthicsReportPage({
   const { user } = useAuth();
   /* Quem chega pelo aviso de encerramento cai em "Acompanhar"; pelo menu, em "Nova denúncia". [C4-6] */
   const [searchParams] = useSearchParams();
-  const [mode, setMode] = useState<Mode>(semEmpresa || searchParams.has("acompanhar") ? "track" : "new");
+  const [mode, setMode] = useState<Mode>(semEmpresa || searchParams.has("acompanhar") || searchParams.has("minha") ? "track" : "new");
   const [categories, setCategories] = useState<string[]>([]);
   const [category, setCategory] = useState("");
   /** A unidade onde o fato aconteceu: obrigatória; com uma só, já vem escolhida. [C1-3] */
@@ -87,9 +91,49 @@ export function EthicsReportPage({
   const [ackComment, setAckComment] = useState("");
   const [acking, setAcking] = useState(false);
   const [ackError, setAckError] = useState<string | null>(null);
+  /*
+    As próprias denúncias identificadas, na conta (desenho de 13/11): só
+    dentro do portal, com login. A aberta por aqui dispensa protocolo e
+    código; o aviso do comitê chega com "?minha=<id>".
+  */
+  const naConta = Boolean(user) && !publico && !semEmpresa;
+  const [minhas, setMinhas] = useState<Awaited<ReturnType<typeof fetchMyEthicsReports>>["reports"]>([]);
+  const [minhaAberta, setMinhaAberta] = useState<string | null>(null);
   const [answer, setAnswer] = useState("");
   const [answering, setAnswering] = useState(false);
   const [answerError, setAnswerError] = useState<string | null>(null);
+
+  async function carregarMinhas() {
+    if (!naConta) return;
+    try {
+      setMinhas((await fetchMyEthicsReports()).reports);
+    } catch {
+      setMinhas([]);
+    }
+  }
+
+  async function abrirMinha(id: string) {
+    setError(null);
+    setSaving(true);
+    try {
+      setTracked((await fetchMyEthicsReport(id)).report);
+      setMinhaAberta(id);
+      void carregarMinhas();
+    } catch (err) {
+      setTracked(null);
+      setMinhaAberta(null);
+      setError(err instanceof Error ? err.message : "Denúncia não encontrada");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  useEffect(() => {
+    void carregarMinhas();
+    const pedida = searchParams.get("minha");
+    if (naConta && pedida) void abrirMinha(pedida);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [naConta]);
 
   useEffect(() => {
     fetchEthicsMeta(organizationId)
@@ -169,6 +213,7 @@ export function EthicsReportPage({
     setError(null);
     setSaving(true);
     setTracked(null);
+    setMinhaAberta(null);
     try {
       const data = await trackEthicsReport({
         protocol: trackProtocol,
@@ -189,10 +234,16 @@ export function EthicsReportPage({
     setAnswering(true);
     setAnswerError(null);
     try {
-      await sendReporterMessage({ protocol: trackProtocol, access_code: trackCode, body: answer.trim() });
-      setAnswer("");
-      const data = await trackEthicsReport({ protocol: trackProtocol, access_code: trackCode });
-      setTracked(data.report);
+      if (minhaAberta) {
+        await sendMyEthicsMessage(minhaAberta, answer.trim());
+        setAnswer("");
+        setTracked((await fetchMyEthicsReport(minhaAberta)).report);
+      } else {
+        await sendReporterMessage({ protocol: trackProtocol, access_code: trackCode, body: answer.trim() });
+        setAnswer("");
+        const data = await trackEthicsReport({ protocol: trackProtocol, access_code: trackCode });
+        setTracked(data.report);
+      }
     } catch (err) {
       setAnswerError(err instanceof Error ? err.message : "Falha ao enviar");
     } finally {
@@ -206,14 +257,21 @@ export function EthicsReportPage({
     setAcking(true);
     setAckError(null);
     try {
-      await acknowledgeEthicsReport({
-        protocol: trackProtocol,
-        access_code: trackCode,
-        ...(ackComment.trim() ? { comment: ackComment.trim() } : {}),
-      });
-      setAckComment("");
-      const data = await trackEthicsReport({ protocol: trackProtocol, access_code: trackCode });
-      setTracked(data.report);
+      if (minhaAberta) {
+        await acknowledgeMyEthicsReport(minhaAberta, ackComment.trim() || undefined);
+        setAckComment("");
+        setTracked((await fetchMyEthicsReport(minhaAberta)).report);
+        void carregarMinhas();
+      } else {
+        await acknowledgeEthicsReport({
+          protocol: trackProtocol,
+          access_code: trackCode,
+          ...(ackComment.trim() ? { comment: ackComment.trim() } : {}),
+        });
+        setAckComment("");
+        const data = await trackEthicsReport({ protocol: trackProtocol, access_code: trackCode });
+        setTracked(data.report);
+      }
     } catch (err) {
       setAckError(err instanceof Error ? err.message : "Falha ao registrar a ciência");
     } finally {
@@ -531,6 +589,40 @@ export function EthicsReportPage({
           {/* Sem empresa a tela inteira é esta, e o título já o diz: dois
               "Acompanhar denúncia" seguidos só ocupavam espaço. [CB-63] */}
           {!semEmpresa && <h2>Acompanhar denúncia</h2>}
+          {naConta && minhas.length > 0 && (
+            <div className="minhas-denuncias">
+              <h3>Minhas denúncias identificadas</h3>
+              <p className="form-hint">
+                As que você fez com o seu nome abrem aqui, sem protocolo e código.
+                As anônimas não ficam ligadas à sua conta: acompanhe-as pelo
+                protocolo e código, abaixo.
+              </p>
+              <ul className="minhas-lista">
+                {minhas.map((m) => (
+                  <li key={m.id} className="minha-item">
+                    <div className="minha-quem">
+                      <strong>{m.protocol}</strong>
+                      <span className="muted">
+                        {REPORT_CATEGORY_LABEL[m.category] ?? m.category} ·{" "}
+                        {REPORT_STATUS_LABEL[m.status] ?? m.status} · {formatInstant(m.createdAt)}
+                        {m.unread > 0 &&
+                          ` · ${m.unread === 1 ? "1 mensagem nova do comitê" : `${m.unread} mensagens novas do comitê`}`}
+                      </span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant={minhaAberta === m.id ? "primary" : "secondary"}
+                      size="compact"
+                      onClick={() => void abrirMinha(m.id)}
+                      disabled={saving}
+                    >
+                      Abrir
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <p className="muted">
             Use o protocolo e o código de acesso gerados no envio.
           </p>

@@ -223,6 +223,132 @@ async function denunciasFiltradas(
     );
 }
 
+// —— O lado de quem denunciou: o mesmo núcleo pelo protocolo e pela conta ——
+
+type DenunciaComMensagens = NonNullable<Awaited<ReturnType<typeof findByProtocolAndCode>>>;
+
+/**
+ * As denúncias que a pessoa fez identificada, na empresa da sessão. A
+ * anônima não tem vínculo com ninguém e nunca entra. (desenho de 13/11)
+ */
+function minhasDenuncias(auth: AuthRequest) {
+  return {
+    organizationId: actorOrgId(auth),
+    reporterUserId: actorUserId(auth),
+    isAnonymous: false,
+  };
+}
+
+/** Uma delas, com as mensagens; de outra pessoa, anônima ou de outra empresa, nada. */
+async function minhaDenuncia(req: Request): Promise<DenunciaComMensagens | null> {
+  return prisma.ethicsReport.findFirst({
+    where: { id: req.params.id, ...minhasDenuncias(req as AuthRequest) },
+    include: { messages: { orderBy: { createdAt: "asc" } } },
+  });
+}
+
+/** Marca como lidas as mensagens do comitê e devolve a visão pública. */
+async function responderAcompanhamento(res: Response, report: DenunciaComMensagens) {
+  await prisma.ethicsReportMessage.updateMany({
+    where: {
+      reportId: report.id,
+      side: REPORT_AUTHOR_SIDES.COMMITTEE,
+      readByReporterAt: null,
+    },
+    data: { readByReporterAt: new Date() },
+  });
+  res.json({ report: publicReportView(report) });
+}
+
+/** Mensagem de quem denunciou: nunca grava o autor. */
+async function gravarMensagemDoDenunciante(res: Response, report: DenunciaComMensagens, body: string) {
+  if (
+    report.status === REPORT_STATUSES.RESOLVED ||
+    report.status === REPORT_STATUSES.ARCHIVED
+  ) {
+    res.status(409).json({
+      message: "Relato encerrado — não recebe novas mensagens.",
+    });
+    return;
+  }
+
+  const message = await new EthicsReportMessage().create.new({
+    reportId: report.id,
+    side: REPORT_AUTHOR_SIDES.REPORTER,
+    body: body.trim(),
+    authorUserId: null,
+  });
+
+  if (report.status === REPORT_STATUSES.AWAITING_INFO) {
+    await new EthicsReport().update.one(
+      { id: report.id },
+      { status: REPORT_STATUSES.IN_ANALYSIS },
+    );
+  }
+
+  res.status(201).json({
+    message: {
+      id: message.id,
+      side: message.side,
+      body: message.body,
+      createdAt: message.createdAt,
+    },
+  });
+}
+
+/** O comentário da ciência, conferido; `null` quando já respondeu com erro. */
+function comentarioDaCiencia(res: Response, comment: unknown): string | null {
+  if (comment !== undefined && comment !== null && typeof comment !== "string") {
+    res.status(400).json({ message: "O comentário precisa ser texto.", field: "comment" });
+    return null;
+  }
+  const comentario = typeof comment === "string" ? comment.trim() : "";
+  if (comentario.length > ETHICS_ACK_COMMENT_MAX) {
+    res.status(400).json({
+      message: `O comentário pode ter até ${ETHICS_ACK_COMMENT_MAX} caracteres.`,
+      field: "comment",
+    });
+    return null;
+  }
+  return comentario;
+}
+
+/** Ciência do encerramento: uma vez só, e a trilha não diz quem foi. [C1-5] [ADR-16] */
+async function registrarCiencia(res: Response, report: DenunciaComMensagens, comentario: string) {
+  if (
+    report.status !== REPORT_STATUSES.RESOLVED &&
+    report.status !== REPORT_STATUSES.ARCHIVED
+  ) {
+    res.status(409).json({
+      message: "A denúncia ainda não foi encerrada: não há encerramento para dar ciência.",
+    });
+    return;
+  }
+
+  /* `reporterAckAt: null` no filtro: duas ciências ao mesmo tempo, uma vale. */
+  const agora = new Date();
+  const gravou = await prisma.ethicsReport.updateMany({
+    where: { id: report.id, reporterAckAt: null },
+    data: { reporterAckAt: agora, reporterAckComment: comentario || null },
+  });
+  if (gravou.count === 0) {
+    res.status(409).json({ message: "A ciência deste encerramento já foi registrada." });
+    return;
+  }
+
+  /* Sem autor: a trilha registra o fato, não quem o fez. [ADR-16] */
+  await writeAudit({
+    organizationId: report.organizationId,
+    actorId: null,
+    action: "ethics_report.acknowledge",
+    entityType: "EthicsReport",
+    entityId: report.id,
+    after: { comment: Boolean(comentario) },
+  });
+
+  res.json({ reporterAckAt: agora });
+}
+
 class EthicsController {
   /**
    * Abre relato. Anônimo por padrão: não grava reporterUserId.
@@ -454,17 +580,7 @@ class EthicsController {
         res.status(404).json({ message: "Protocolo ou código inválido." });
         return;
       }
-
-      await prisma.ethicsReportMessage.updateMany({
-        where: {
-          reportId: report.id,
-          side: REPORT_AUTHOR_SIDES.COMMITTEE,
-          readByReporterAt: null,
-        },
-        data: { readByReporterAt: new Date() },
-      });
-
-      res.json({ report: publicReportView(report) });
+      await responderAcompanhamento(res, report);
     } catch (err) {
       fail(res, err);
     }
@@ -495,38 +611,7 @@ class EthicsController {
         res.status(404).json({ message: "Protocolo ou código inválido." });
         return;
       }
-      if (
-        report.status === REPORT_STATUSES.RESOLVED ||
-        report.status === REPORT_STATUSES.ARCHIVED
-      ) {
-        res.status(409).json({
-          message: "Relato encerrado — não recebe novas mensagens.",
-        });
-        return;
-      }
-
-      const message = await new EthicsReportMessage().create.new({
-        reportId: report.id,
-        side: REPORT_AUTHOR_SIDES.REPORTER,
-        body: body.trim(),
-        authorUserId: null,
-      });
-
-      if (report.status === REPORT_STATUSES.AWAITING_INFO) {
-        await new EthicsReport().update.one(
-          { id: report.id },
-          { status: REPORT_STATUSES.IN_ANALYSIS },
-        );
-      }
-
-      res.status(201).json({
-        message: {
-          id: message.id,
-          side: message.side,
-          body: message.body,
-          createdAt: message.createdAt,
-        },
-      });
+      await gravarMensagemDoDenunciante(res, report, body);
     } catch (err) {
       fail(res, err);
     }
@@ -550,60 +635,105 @@ class EthicsController {
         res.status(400).json({ message: "Informe protocol e access_code." });
         return;
       }
-      if (comment !== undefined && comment !== null && typeof comment !== "string") {
-        res.status(400).json({ message: "O comentário precisa ser texto.", field: "comment" });
-        return;
-      }
-      const comentario = typeof comment === "string" ? comment.trim() : "";
-      if (comentario.length > ETHICS_ACK_COMMENT_MAX) {
-        res.status(400).json({
-          message: `O comentário pode ter até ${ETHICS_ACK_COMMENT_MAX} caracteres.`,
-          field: "comment",
-        });
-        return;
-      }
+      const comentario = comentarioDaCiencia(res, comment);
+      if (comentario === null) return;
 
       const report = await findByProtocolAndCode(organization_id, protocol, access_code);
       if (!report) {
         res.status(404).json({ message: "Protocolo ou código inválido." });
         return;
       }
-      if (
-        report.status !== REPORT_STATUSES.RESOLVED &&
-        report.status !== REPORT_STATUSES.ARCHIVED
-      ) {
-        res.status(409).json({
-          message: "A denúncia ainda não foi encerrada: não há encerramento para dar ciência.",
-        });
-        return;
-      }
-
-      /* `reporterAckAt: null` no filtro: duas ciências ao mesmo tempo, uma vale. */
-      const agora = new Date();
-      const gravou = await prisma.ethicsReport.updateMany({
-        where: { id: report.id, reporterAckAt: null },
-        data: { reporterAckAt: agora, reporterAckComment: comentario || null },
-      });
-      if (gravou.count === 0) {
-        res.status(409).json({ message: "A ciência deste encerramento já foi registrada." });
-        return;
-      }
-
-      /* Sem autor: a trilha registra o fato, não quem o fez. [ADR-16] */
-      await writeAudit({
-        organizationId: report.organizationId,
-        actorId: null,
-        action: "ethics_report.acknowledge",
-        entityType: "EthicsReport",
-        entityId: report.id,
-        after: { comment: Boolean(comentario) },
-      });
-
-      res.json({ reporterAckAt: agora });
+      await registrarCiencia(res, report, comentario);
     } catch (err) {
       fail(res, err);
     }
   }
+
+  // —— As próprias denúncias identificadas, na conta (desenho de 13/11) ——
+
+  /**
+   * As denúncias que a pessoa fez identificada, nesta empresa. Só o que ela
+   * já vê pelo protocolo: nada do comitê, nem a descrição na lista.
+   */
+  async listMine(req: Request, res: Response) {
+    try {
+      const auth = req as AuthRequest;
+      const rows = await prisma.ethicsReport.findMany({
+        where: minhasDenuncias(auth),
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          protocol: true,
+          category: true,
+          status: true,
+          createdAt: true,
+          reporterAckAt: true,
+          _count: {
+            select: {
+              messages: {
+                where: { side: REPORT_AUTHOR_SIDES.COMMITTEE, readByReporterAt: null },
+              },
+            },
+          },
+        },
+      });
+      res.json({
+        reports: rows.map(({ _count, ...r }) => ({ ...r, unread: _count.messages })),
+      });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
+  /** O acompanhamento de uma delas, sem protocolo e código. */
+  async getMine(req: Request, res: Response) {
+    try {
+      const report = await minhaDenuncia(req);
+      if (!report) {
+        res.status(404).json({ message: "Denúncia não encontrada." });
+        return;
+      }
+      await responderAcompanhamento(res, report);
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
+  /** Responder ao comitê: a posse substitui o código; a mensagem segue sem autor. */
+  async addMyMessage(req: Request, res: Response) {
+    try {
+      const { body } = req.body as { body?: string };
+      if (!body?.trim()) {
+        res.status(400).json({ message: "Escreva a mensagem." });
+        return;
+      }
+      const report = await minhaDenuncia(req);
+      if (!report) {
+        res.status(404).json({ message: "Denúncia não encontrada." });
+        return;
+      }
+      await gravarMensagemDoDenunciante(res, report, body);
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
+  /** Ciência do encerramento pela conta. */
+  async acknowledgeMine(req: Request, res: Response) {
+    try {
+      const comentario = comentarioDaCiencia(res, (req.body as { comment?: unknown }).comment);
+      if (comentario === null) return;
+      const report = await minhaDenuncia(req);
+      if (!report) {
+        res.status(404).json({ message: "Denúncia não encontrada." });
+        return;
+      }
+      await registrarCiencia(res, report, comentario);
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
 
   // —— Comitê ——
 
@@ -1476,9 +1606,12 @@ class EthicsController {
           userId: current.reporterUserId,
           kind: NotificationKind.ETHICS_REPORT_CLOSED,
           title: "Sua denúncia foi encerrada",
-          body: "Veja o resultado e dê ciência pelo acompanhamento, com o protocolo e o código.",
-          /* Direto em "Acompanhar", que é onde a ciência se dá. [C4-6] */
-          link: "/denuncia?acompanhar",
+          body: "Veja o resultado e dê ciência no acompanhamento.",
+          /*
+            Direto na denúncia, na conta: quem se identificou não precisa
+            do protocolo e do código (desenho de 13/11). [C4-6]
+          */
+          link: `/denuncia?minha=${current.id}`,
           entityType: "EthicsReport",
           entityId: current.id,
         });
@@ -1660,7 +1793,8 @@ class EthicsController {
           kind: NotificationKind.ETHICS_MESSAGE,
           title: "O comitê respondeu a sua denúncia",
           body: "Abra o acompanhamento para ler e responder.",
-          link: "/denuncia",
+          /* Direto na denúncia, na conta (desenho de 13/11). */
+          link: `/denuncia?minha=${report.id}`,
           entityType: "EthicsReport",
           entityId: report.id,
         });

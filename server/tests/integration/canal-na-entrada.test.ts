@@ -216,7 +216,8 @@ describe("o canal de denúncia na tela de entrada [CB-63]", () => {
     /* Abre em acompanhar, que é o que funciona sem a empresa. */
     expect(canal).toContain(
       /* Pelo aviso de encerramento também abre em Acompanhar. [C4-6] */
-      'useState<Mode>(semEmpresa || searchParams.has("acompanhar") ? "track" : "new")',
+      /* E pelo aviso da denúncia identificada, que abre na conta (13/11). */
+      'useState<Mode>(semEmpresa || searchParams.has("acompanhar") || searchParams.has("minha") ? "track" : "new")',
     );
     /*
       E as seções do relato novo — o formulário e o recibo com protocolo e

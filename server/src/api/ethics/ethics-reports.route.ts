@@ -46,6 +46,21 @@ router.post("/api/ethics-committee", cuidaDaConta, (req, res) =>
   ethics.setCommittee(req, res),
 );
 
+/*
+  As próprias denúncias identificadas, na conta de quem denunciou (desenho
+  de 13/11). Antes de "/:id": sem isso, "minhas" entraria como id de relato
+  e cairia no gate do comitê.
+*/
+const logado = verify("user");
+router.get("/api/ethics-reports/minhas", logado, (req, res) => ethics.listMine(req, res));
+router.get("/api/ethics-reports/minhas/:id", logado, (req, res) => ethics.getMine(req, res));
+router.post("/api/ethics-reports/minhas/:id/mensagens", logado, (req, res) =>
+  ethics.addMyMessage(req, res),
+);
+router.post("/api/ethics-reports/minhas/:id/ciencia", logado, (req, res) =>
+  ethics.acknowledgeMine(req, res),
+);
+
 // Comitê (matriz módulo comite)
 router.get("/api/ethics-reports", ...committee, (req, res) =>
   ethics.list(req, res),

@@ -82,6 +82,47 @@ export function trackEthicsReport(input: {
   });
 }
 
+/** O acompanhamento, como o protocolo e o código o devolvem. */
+export type AcompanhamentoDaDenuncia = Awaited<ReturnType<typeof trackEthicsReport>>["report"];
+
+/**
+ * As próprias denúncias identificadas, na conta de quem denunciou: sem
+ * protocolo e código. A anônima nunca aparece (desenho de 13/11).
+ */
+export function fetchMyEthicsReports() {
+  return request<{
+    reports: Array<{
+      id: string;
+      protocol: string;
+      category: string;
+      status: string;
+      createdAt: string;
+      reporterAckAt: string | null;
+      /** Mensagens do comitê ainda não lidas. */
+      unread: number;
+    }>;
+  }>("/api/ethics-reports/minhas");
+}
+
+export function fetchMyEthicsReport(id: string) {
+  return request<{ report: AcompanhamentoDaDenuncia }>(`/api/ethics-reports/minhas/${id}`);
+}
+
+/** Resposta ao comitê pela conta: a mensagem continua sem autor. */
+export function sendMyEthicsMessage(id: string, body: string) {
+  return request<{ message: { id: string } }>(`/api/ethics-reports/minhas/${id}/mensagens`, {
+    method: "POST",
+    body: JSON.stringify({ body }),
+  });
+}
+
+export function acknowledgeMyEthicsReport(id: string, comment?: string) {
+  return request<{ reporterAckAt: string }>(`/api/ethics-reports/minhas/${id}/ciencia`, {
+    method: "POST",
+    body: JSON.stringify(comment ? { comment } : {}),
+  });
+}
+
 /** Denunciante responde ao comitê, pelo protocolo e código. Nada o identifica. [S5-P] */
 export function sendReporterMessage(input: { protocol: string; access_code: string; body: string }) {
   return request<{ message: { id: string; side: string; body: string; createdAt: string } }>(
