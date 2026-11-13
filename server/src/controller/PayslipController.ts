@@ -10,7 +10,12 @@ import { notify } from "../helper/notify";
 import { canManageModule } from "../helper/module-access";
 import { randomUUID } from "crypto";
 import { PDFDocument } from "pdf-lib";
-import { checkPayslip, podeJustificar } from "../helper/payslip-check";
+import {
+  checkPayslip,
+  extractEmployer,
+  podeJustificar,
+  samePayrollCode,
+} from "../helper/payslip-check";
 import { canonicalRegistration } from "../helper/auth-attempts";
 import { splitBatchPages } from "../helper/payslip-batch";
 import { extractPdfPages, extractPdfText, MAX_BATCH_PAGES } from "../helper/pdf-text";
@@ -232,45 +237,55 @@ const MOTIVO_DO_PROBLEMA: Record<string, string> = {
     "A mesma matrícula aparece em outro trecho do arquivo. Publique essa pessoa pelo envio individual.",
 };
 
-type FilialDoLote = { id: string; name: string };
+type FilialDoLote = { id: string; name: string; payrollCode: string | null };
+
+/**
+ * As filiais do pedido: a escolhida (ou nenhuma), as ativas da empresa e as
+ * que quem envia alcança. Com mais de uma filial, a página precisa dizer de
+ * qual é — pela escolha na tela ou pelo código da empresa impresso. [C3-3]
+ */
+type FiliaisDoPedido = {
+  escolhida: FilialDoLote | null;
+  /** Mais de uma filial ativa: a matrícula sozinha não diz de quem é. */
+  porFilial: boolean;
+  ativas: FilialDoLote[];
+  alcancadas: FilialDoLote[];
+};
 
 /** As filiais ativas da empresa e as que quem envia alcança. [C3-3] */
 async function filiaisDoLote(escopo: UnitScope, orgId: string) {
   const ativas = await prisma.establishment.findMany({
     where: { organizationId: orgId, archivedAt: null },
     orderBy: { name: "asc" },
-    select: { id: true, name: true },
+    select: { id: true, name: true, payrollCode: true },
   });
   return {
-    obrigatoria: ativas.length > 1,
+    porFilial: ativas.length > 1,
+    ativas,
     alcancadas: escopo.wholeOrg ? ativas : ativas.filter((f) => escopo.managed.includes(f.id)),
   };
 }
 
 /**
- * A filial da folha. Com mais de uma na empresa, é obrigatória: a matrícula
- * 153 da loja e a 153 da AG são pessoas diferentes. Precisa ser ativa, desta
- * empresa e sob a gestão de quem envia; sem ela, com uma filial só, o lote
- * procura na empresa, como antes. [C3-3]
+ * A filial da folha. A matrícula 153 da loja e a 153 da AG são pessoas
+ * diferentes; o que diz a filial é a escolha na tela ou, sem ela, o código
+ * da empresa que a página imprime (0682, 0683), casado com o código da folha
+ * de cada filial. A escolhida precisa ser ativa, desta empresa e sob a
+ * gestão de quem envia. [C3-3]
  */
 async function filialDoLote(
   escopo: UnitScope,
   orgId: string,
   raw: unknown,
-): Promise<FilialDoLote | null> {
+): Promise<FiliaisDoPedido> {
   const valor = typeof raw === "string" ? raw.trim() : "";
-  const { obrigatoria, alcancadas } = await filiaisDoLote(escopo, orgId);
-  if (!valor) {
-    if (obrigatoria) {
-      throw new ErroDoLote(400, "Escolha a filial da folha: a empresa tem mais de uma.");
-    }
-    return null;
-  }
-  const filial = alcancadas.find((f) => f.id === valor);
+  const filiais = await filiaisDoLote(escopo, orgId);
+  if (!valor) return { escolhida: null, ...filiais };
+  const filial = filiais.alcancadas.find((f) => f.id === valor);
   if (!filial) {
     throw new ErroDoLote(400, "Filial inválida: escolha uma das filiais da lista.");
   }
-  return filial;
+  return { escolhida: filial, ...filiais };
 }
 
 /**
@@ -285,7 +300,7 @@ async function filialDoLote(
 async function lerLote(
   escopo: UnitScope,
   orgId: string,
-  filial: FilialDoLote | null,
+  filiais: FiliaisDoPedido,
   data: Buffer,
   referenceMonth: number,
   referenceYear: number,
@@ -313,18 +328,21 @@ async function lerLote(
     Com a filial escolhida, o dono é procurado só nas fichas dela, pela
     chave da matrícula: a 153 da loja não casa com a 153 da AG. [C3-3]
   */
+  const { escolhida } = filiais;
   const fichas = await prisma.employeeProfile.findMany({
-    where: { ...comVinculo, ...(filial ? { establishmentId: filial.id } : {}) },
+    where: { ...comVinculo, ...(escolhida ? { establishmentId: escolhida.id } : {}) },
     select: {
       userId: true,
       registration: true,
       registrationKey: true,
       admittedAt: true,
+      establishmentId: true,
+      establishment: { select: { payrollCode: true } },
       user: { select: { name: true } },
     },
   });
   /* Ficha antiga ainda sem filial: o motivo diz o que completar. [C3-3] */
-  const semFilial = filial
+  const semFilial = escolhida || filiais.porFilial
     ? new Set(
         (
           await prisma.employeeProfile.findMany({
@@ -355,7 +373,59 @@ async function lerLote(
     }
     const registration = part.registration;
     const chave = canonicalRegistration(registration);
-    const donos = fichas.filter((ficha) => ficha.registrationKey === chave);
+    const semDono = (motivo: string) => ({
+      ...base,
+      situacao: "SEM_CADASTRO" as const,
+      motivos: [motivo],
+    });
+
+    /*
+      A empresa que paga decide a filial antes da matrícula: código da
+      folha > matrícula. Página de outra empresa na filial escolhida não
+      confere; sem escolha, o código impresso acha a filial. [C3-3]
+    */
+    const empresa = extractEmployer(part.text);
+    let filial = escolhida;
+    if (filial) {
+      if (empresa && filial.payrollCode && !samePayrollCode(empresa.code, filial.payrollCode)) {
+        return {
+          ...base,
+          situacao: "NAO_CONFERE" as const,
+          motivos: [
+            `Esta página é da empresa código ${empresa.code}, e a filial escolhida, ${filial.name}, tem o código ${filial.payrollCode}.`,
+          ],
+        };
+      }
+    } else if (filiais.porFilial) {
+      if (!empresa) {
+        return semDono(
+          "Não encontrei o código da empresa nesta página. Escolha a filial da folha e confira de novo.",
+        );
+      }
+      const daEmpresa = filiais.ativas.filter(
+        (f) => f.payrollCode && samePayrollCode(f.payrollCode, empresa.code),
+      );
+      if (daEmpresa.length === 0) {
+        return semDono(
+          `Nenhuma filial tem o código da folha ${empresa.code}. Preencha o código na filial ou escolha a filial da folha.`,
+        );
+      }
+      if (daEmpresa.length > 1) {
+        return semDono(
+          `Mais de uma filial tem o código da folha ${empresa.code}. Corrija o código nas filiais ou escolha a filial da folha.`,
+        );
+      }
+      const [daPagina] = daEmpresa;
+      if (!filiais.alcancadas.some((f) => f.id === daPagina.id)) {
+        return semDono("Esta página é de uma filial fora das que você gere.");
+      }
+      filial = daPagina;
+    }
+
+    const donos = fichas.filter(
+      (ficha) =>
+        ficha.registrationKey === chave && (!filial || ficha.establishmentId === filial.id),
+    );
     if (donos.length === 0) {
       return {
         ...base,
@@ -383,6 +453,7 @@ async function lerLote(
       referenceMonth,
       referenceYear,
       admittedAt: dono.admittedAt ?? null,
+      payrollCode: dono.establishment?.payrollCode ?? null,
     });
     return {
       ...base,
@@ -768,7 +839,11 @@ class PayslipController {
           name: true,
           employeeProfiles: {
             where: { organizationId: orgId },
-            select: { registration: true, admittedAt: true },
+            select: {
+              registration: true,
+              admittedAt: true,
+              establishment: { select: { payrollCode: true } },
+            },
             take: 1,
           },
         },
@@ -788,6 +863,7 @@ class PayslipController {
         referenceMonth: reference_month,
         referenceYear: reference_year,
         admittedAt: ficha.admittedAt ?? null,
+        payrollCode: ficha.establishment?.payrollCode ?? null,
       });
       /*
         A conferência pegou um erro real e não pode cair. Mas holerite correto
@@ -862,11 +938,20 @@ class PayslipController {
   async batchEstablishments(req: Request, res: Response) {
     try {
       const auth = req as AuthRequest;
-      const { obrigatoria, alcancadas } = await filiaisDoLote(
+      const { porFilial, alcancadas } = await filiaisDoLote(
         await scopeOfRequest(auth),
         actorOrgId(auth),
       );
-      res.json({ obrigatoria, filiais: alcancadas });
+      /*
+        Com mais de uma filial, a página diz a filial pelo código da empresa;
+        a escolha na tela só é preciso quando falta o código da folha em
+        alguma filial que quem envia alcança (`com_codigo`). [C3-3]
+      */
+      res.json({
+        por_filial: porFilial,
+        com_codigo: alcancadas.every((f) => Boolean(f.payrollCode)),
+        filiais: alcancadas.map((f) => ({ id: f.id, name: f.name })),
+      });
     } catch (err) {
       fail(res, err);
     }
@@ -882,11 +967,11 @@ class PayslipController {
       const pedido = pedidoDoLote(req, res);
       if (!pedido) return;
       const escopo = await scopeOfRequest(req as AuthRequest);
-      const filial = await filialDoLote(escopo, orgId, pedido.establishmentId);
+      const filiais = await filialDoLote(escopo, orgId, pedido.establishmentId);
       const lote = await lerLote(
         escopo,
         orgId,
-        filial,
+        filiais,
         pedido.data,
         pedido.referenceMonth,
         pedido.referenceYear,
@@ -916,11 +1001,11 @@ class PayslipController {
       const pedido = pedidoDoLote(req, res);
       if (!pedido) return;
       const escopo = await scopeOfRequest(auth);
-      const filial = await filialDoLote(escopo, orgId, pedido.establishmentId);
+      const filiais = await filialDoLote(escopo, orgId, pedido.establishmentId);
       const lote = await lerLote(
         escopo,
         orgId,
-        filial,
+        filiais,
         pedido.data,
         pedido.referenceMonth,
         pedido.referenceYear,

@@ -287,10 +287,12 @@ describe("o lote de holerite escolhe a filial [C3-3]", () => {
     ]);
   });
 
-  it("a tela lista as filiais de quem envia e diz se a escolha é obrigatória", async () => {
+  it("a tela lista as filiais de quem envia e diz se a empresa tem mais de uma", async () => {
     const central = await request(app).get("/api/payslips/lote/filiais").set(as(grupo.rhToken));
     expect(central.status, JSON.stringify(central.body)).toBe(200);
-    expect(central.body.obrigatoria).toBe(true);
+    expect(central.body.por_filial).toBe(true);
+    /* As filiais deste teste não têm o código da folha: a tela pede a escolha. */
+    expect(central.body.com_codigo).toBe(false);
     expect(central.body.filiais.map((f: { id: string }) => f.id).sort()).toEqual(
       [loja.id, ag.id].sort(),
     );
@@ -301,16 +303,26 @@ describe("o lote de holerite escolhe a filial [C3-3]", () => {
     expect(recortado.body.filiais.map((f: { id: string }) => f.id)).toEqual([loja.id]);
 
     const unica = await request(app).get("/api/payslips/lote/filiais").set(as(sozinha.rhToken));
-    expect(unica.body.obrigatoria).toBe(false);
+    expect(unica.body.por_filial).toBe(false);
   });
 
-  it("com mais de uma filial, o lote sem filial é recusado antes de ler", async () => {
+  it("com mais de uma filial, sem filial e sem o código da empresa na página, ninguém recebe", async () => {
     const res = await request(app)
       .post("/api/payslips/lote/previa")
       .set(as(grupo.rhToken))
       .send(lote(folha));
-    expect(res.status).toBe(400);
-    expect(res.body.message).toContain("filial");
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    const partes = res.body.parts as Parte[];
+    expect(partes.map((p) => [p.situacao, p.user_id])).toEqual([
+      ["SEM_CADASTRO", null],
+      ["SEM_CADASTRO", null],
+    ]);
+    expect(partes[0]!.motivos.join(" ")).toContain("Escolha a filial da folha");
+    const publicar = await request(app)
+      .post("/api/payslips/lote")
+      .set(as(grupo.rhToken))
+      .send(lote(folha));
+    expect(publicar.status).toBe(422);
   });
 
   it("a matrícula 153 da Loja é da Ana, não do Bruno da AG", async () => {
@@ -405,5 +417,35 @@ describe("o lote de holerite escolhe a filial [C3-3]", () => {
     expect(res.status, JSON.stringify(res.body)).toBe(200);
     const [eva] = res.body.parts as Parte[];
     expect([eva.situacao, eva.user_id]).toEqual(["CONFERE", pessoa["Eva Unica"]]);
+  });
+
+  it("com uma filial só e o código dela preenchido, a página de outra empresa não confere", async () => {
+    await prisma.establishment.update({ where: { id: unicaDaSozinha.id }, data: { payrollCode: "0961" } });
+    try {
+      const comCabecalho = (codigo: string) => [
+        `${codigo} - EMPRESA TESTE LTDA`,
+        "R DAS FLORES, 100 - CENTRO",
+        "11.222.333/0001-44",
+        ...paginaDaFolha("000153", "EVA UNICA", COMPETENCIA).slice(1),
+      ];
+      const res = await request(app)
+        .post("/api/payslips/lote/previa")
+        .set(as(sozinha.rhToken))
+        .send(lote(await pdfDePaginas([comCabecalho("0682")])));
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      const [eva] = res.body.parts as Parte[];
+      expect(eva.situacao).toBe("NAO_CONFERE");
+      expect(eva.motivos).toEqual([
+        "O documento é da empresa código 0682, e a filial da pessoa tem o código 0961.",
+      ]);
+      const certa = await request(app)
+        .post("/api/payslips/lote/previa")
+        .set(as(sozinha.rhToken))
+        .send(lote(await pdfDePaginas([comCabecalho("961")])));
+      expect(certa.status, JSON.stringify(certa.body)).toBe(200);
+      expect((certa.body.parts as Parte[])[0]!.situacao).toBe("CONFERE");
+    } finally {
+      await prisma.establishment.update({ where: { id: unicaDaSozinha.id }, data: { payrollCode: null } });
+    }
   });
 });
