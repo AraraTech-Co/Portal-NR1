@@ -105,6 +105,17 @@ describe("o que já era guardado continua [B2-1-L] [CB-6]", () => {
     ]);
   });
 
+  it("função com o mesmo nome em duas unidades, sem dizer qual: a linha fica de fora", () => {
+    const duas: FuncaoDaEmpresa[] = [
+      ...FUNCOES,
+      { id: "f-torneiro-filial", name: "Torneiro", establishment: { name: "Filial" } },
+    ];
+    const { rows, recusadas } = lerLinhas("nome;funcao\nMaria;Torneiro", duas, EMPRESAS, ROTULOS);
+    expect(rows).toEqual([]);
+    expect(recusadas.map((r) => [r.linha, r.nome])).toEqual([[2, "Maria"]]);
+    expect(recusadas[0]!.motivos[0]).toContain("existe em Matriz e Filial");
+  });
+
   it("aviso de linha que entrou não é recusa: o vínculo desconhecido segue com a pessoa", () => {
     const { rows, problems, recusadas } = ler("nome;vinculo\nMaria;Cooperado");
     expect(problems.join(" ")).toContain('vínculo "Cooperado" desconhecido');

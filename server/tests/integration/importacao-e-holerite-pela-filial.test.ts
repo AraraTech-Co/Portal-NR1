@@ -352,6 +352,8 @@ describe("o lote de holerite escolhe a filial [C3-3]", () => {
     expect([bruno.situacao, bruno.user_id]).toEqual(["CONFERE", pessoa["Bruno AG"]]);
     expect(carla.situacao).toBe("SEM_CADASTRO");
     expect(carla.motivos.join(" ")).toContain(ag.nome);
+    /* Sem dono e sem código impresso, a página é da filial escolhida. */
+    expect((carla as Parte & { filial: string | null }).filial).toBe(ag.nome);
   });
 
   it("a ficha sem filial não recebe, e o motivo diz o que completar", async () => {
