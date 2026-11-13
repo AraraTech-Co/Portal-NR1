@@ -27,7 +27,8 @@ function tom(status: string): "success" | "warning" | "danger" | "neutral" {
 export function IdeasPage() {
   const { rows, loading, error, reload } = useResourceList(fetchIdeas);
   /* Ideia é de quem faz o trabalho: escrever basta. [OB-4] */
-  const { canWrite, canManage } = useModuleAccess("ideias");
+  /* Quem lê as ideias também envia a sua, como o SST (P-0b). [C4-16] */
+  const { canRead: canWrite, canManage } = useModuleAccess("ideias");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [resposta, setResposta] = useState<Record<string, string>>({});
