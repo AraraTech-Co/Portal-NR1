@@ -1,3 +1,4 @@
+import fs from "fs";
 import { Request, Response } from "express";
 import prisma from "../model/prisma";
 import { HrDocument } from "../model/schema/HrDocument/HrDocument";
@@ -10,10 +11,15 @@ import {
   profileScope,
   scopeOfRequest,
 } from "../helper/unit-scope";
-import { canManageModule, isReadOnlyRole } from "../helper/module-access";
+import {
+  canChangePersonnelRecord,
+  canManageModule,
+  isReadOnlyRole,
+} from "../helper/module-access";
 import {
   assertSize,
   buildPrivateStoragePath,
+  resolveStoragePath,
   writeEvidenceFile,
 } from "../helper/uploads";
 import {
@@ -43,6 +49,23 @@ function isRh(req: AuthRequest): boolean {
  */
 function isAuditor(req: AuthRequest): boolean {
   return Boolean(req.actor && isReadOnlyRole(req.actor.permission));
+}
+
+/**
+ * Quem baixa o arquivo (decisão do Léo, 12/11): a pessoa a quem o documento
+ * se destina e o RH, com Master e Dono. Documento geral se destina a todos.
+ * A consulta (fiscal) vê o documento geral e quem deu ciência, mas não é
+ * destinatária: não baixa (hoje o módulo nem abre para ela; a regra fica
+ * aqui para quando abrir). Documento pessoal só sai para RH, Master e Dono —
+ * a gerência que vê a linha não leva o arquivo. O alcance da ficha é
+ * conferido antes, por quem chama: a lista só traz o que se alcança e o
+ * download responde "não encontrado" fora dele.
+ */
+function podeBaixar(auth: AuthRequest, doc: { targetUserId: string | null }): boolean {
+  if (isAuditor(auth)) return false;
+  const userId = actorUserId(auth);
+  if (doc.targetUserId === null || doc.targetUserId === userId) return true;
+  return Boolean(auth.actor && canChangePersonnelRecord(auth.actor.permission));
 }
 
 class HrDocumentController {
@@ -94,6 +117,8 @@ class HrDocumentController {
           ...d,
           my_ack: d.acks[0] ?? null,
           acks: undefined,
+          /* A tela mostra "Baixar" só onde o arquivo sai. */
+          can_download: podeBaixar(auth, d),
         })),
       });
     } catch (err) {
@@ -159,6 +184,69 @@ class HrDocumentController {
       });
 
       res.json({ document: doc });
+    } catch (err) {
+      fail(res, err);
+    }
+  }
+
+  /**
+   * O arquivo do documento. Pessoal fora do alcance responde como
+   * inexistente, como na leitura [C2-13]; visível e sem direito ao arquivo,
+   * diz quem baixa. Quem não é o destinatário e baixa um documento pessoal
+   * fica na auditoria.
+   */
+  async download(req: Request, res: Response) {
+    try {
+      const auth = req as AuthRequest;
+      const orgId = actorOrgId(auth);
+      const userId = actorUserId(auth);
+      const escopo = await scopeOfRequest(auth);
+      const doc = await prisma.hrDocument.findFirst({
+        where: { id: req.params.id, organizationId: orgId },
+        select: {
+          id: true,
+          targetUserId: true,
+          establishmentId: true,
+          storagePath: true,
+          fileName: true,
+        },
+      });
+      const deOutraPessoa = Boolean(doc && doc.targetUserId !== null && doc.targetUserId !== userId);
+      const ve =
+        doc !== null &&
+        (!deOutraPessoa || (isRh(auth) && !isAuditor(auth) && managesPersonRecord(escopo, doc)));
+      if (!doc || !ve) {
+        res.status(404).json({ message: "Documento não encontrado." });
+        return;
+      }
+      if (!podeBaixar(auth, doc)) {
+        res.status(403).json({
+          message: "O arquivo sai só para a pessoa a quem o documento se destina e para o RH.",
+        });
+        return;
+      }
+      const abs = resolveStoragePath(doc.storagePath);
+      if (!fs.existsSync(abs)) {
+        res.status(404).json({ message: "Arquivo não encontrado." });
+        return;
+      }
+      if (deOutraPessoa) {
+        await writeAudit({
+          organizationId: orgId,
+          actorId: userId,
+          action: "hr_document.download",
+          entityType: "HrDocument",
+          entityId: doc.id,
+        });
+      } else {
+        /* Baixar é ler: a pessoa fica com a leitura marcada, como ao abrir. */
+        await prisma.hrDocumentAck.upsert({
+          where: { documentId_userId: { documentId: doc.id, userId } },
+          create: { documentId: doc.id, userId },
+          update: {},
+        });
+      }
+      res.download(abs, doc.fileName);
     } catch (err) {
       fail(res, err);
     }

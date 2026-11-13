@@ -104,8 +104,11 @@ export const fetchHrDocuments = () =>
       createdAt: string;
       target: { name: string } | null;
       publishedBy: { name: string };
+      fileName: string;
       my_ack: { acknowledgedAt: string | null } | null;
       _count: { acks: number };
+      /** O arquivo sai para a pessoa destinatária e para o RH. */
+      can_download: boolean;
     }>;
   }>("/api/hr-documents").then((d) => d.documents);
 
