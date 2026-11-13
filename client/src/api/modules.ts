@@ -102,7 +102,12 @@ export const fetchHrDocuments = () =>
       title: string;
       kind: string;
       createdAt: string;
-      target: { name: string } | null;
+      target: { id: string; name: string } | null;
+      /** O destino "uma filial" diz qual. Nulo no geral da empresa. */
+      establishment: { id: string; name: string } | null;
+      requiresAck: boolean;
+      /** É de quem se espera a ciência: a pessoa, a empresa ou a filial dela. */
+      can_ack: boolean;
       publishedBy: { name: string };
       fileName: string;
       my_ack: { acknowledgedAt: string | null } | null;
@@ -111,6 +116,27 @@ export const fetchHrDocuments = () =>
       can_download: boolean;
     }>;
   }>("/api/hr-documents").then((d) => d.documents);
+
+/** Publica para uma pessoa, uma filial ou a empresa inteira (sem os dois). */
+export const publishHrDocument = (input: {
+  kind: string;
+  title: string;
+  description?: string;
+  requires_ack: boolean;
+  target_user_id?: string;
+  establishment_id?: string;
+  file_name: string;
+  mime_type: string;
+  content_base64: string;
+}) =>
+  request<{ document: { id: string } }>("/api/hr-documents", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+
+/** Ciência formal de quem recebe. */
+export const acknowledgeHrDocument = (id: string) =>
+  request<{ ack: unknown }>(`/api/hr-documents/${id}/ack`, { method: "POST" });
 
 export const fetchPayslips = () =>
   request<{

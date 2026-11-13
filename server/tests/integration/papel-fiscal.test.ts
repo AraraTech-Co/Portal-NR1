@@ -147,12 +147,12 @@ describe("o que o fiscal vê", () => {
     const geral = await request(app)
       .post("/api/hr-documents")
       .set(as(rh.token))
-      .send({ kind: "TERM", title: "Ordem de serviço de segurança — estoque", requires_ack: true, file_name: "os.pdf", mime_type: "application/pdf" });
+      .send({ kind: "TERM", title: "Ordem de serviço de segurança — estoque", requires_ack: true, file_name: "os.pdf", mime_type: "application/pdf", content_base64: Buffer.from("%PDF-1.4 teste").toString("base64") });
     expect(geral.status).toBe(201);
     const pessoal = await request(app)
       .post("/api/hr-documents")
       .set(as(rh.token))
-      .send({ kind: "WARNING", title: "Advertência", target_user_id: colaborador.user.id, file_name: "adv.pdf", mime_type: "application/pdf" });
+      .send({ kind: "WARNING", title: "Advertência", target_user_id: colaborador.user.id, file_name: "adv.pdf", mime_type: "application/pdf", content_base64: Buffer.from("%PDF-1.4 teste").toString("base64") });
     expect(pessoal.status).toBe(201);
 
     const ack = await request(app).post(`/api/hr-documents/${geral.body.document.id}/ack`).set(as(colaborador.token));

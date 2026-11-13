@@ -1959,6 +1959,9 @@ enum NotificationKind {
   /// Avaliações copiadas de outra filial aguardam a validação de quem não
   /// copiou. [C3-8]
   UNIT_COPY_AWAITING_VALIDATION
+  /// Documento do RH publicado para a pessoa, a filial dela ou a empresa.
+  /// [Item 10, 13/11]
+  HR_DOCUMENT_PUBLISHED
 }
 
 model Notification {
