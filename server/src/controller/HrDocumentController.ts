@@ -103,6 +103,23 @@ function documentosVisiveis(auth: AuthRequest, escopo: UnitScope): Prisma.HrDocu
   return { OR: visiveis };
 }
 
+/**
+ * A pessoa RECEBE o documento: é dela, é da empresa inteira, ou é da filial
+ * onde ela trabalha. Ver não basta — quem gere a filial, a central e quem já
+ * saiu da filial veem o documento sem ser destinatários. A ciência é prova
+ * de recebimento: a lista (`can_ack`) e a rota de ciência usam esta mesma
+ * regra.
+ */
+function recebe(
+  auth: AuthRequest,
+  escopo: UnitScope,
+  doc: { targetUserId: string | null; establishmentId: string | null },
+): boolean {
+  if (isAuditor(auth)) return false;
+  if (doc.targetUserId !== null) return doc.targetUserId === actorUserId(auth);
+  return doc.establishmentId === null || doc.establishmentId === escopo.work;
+}
+
 /** O tipo do arquivo pelo conteúdo, não pelo que o navegador declara. */
 function tipoPeloConteudo(data: Buffer): string | null {
   if (data.length >= 4 && data.subarray(0, 4).toString("latin1") === "%PDF") return "application/pdf";
@@ -153,11 +170,7 @@ class HrDocumentController {
             "Dar ciência" só para quem recebe: o documento é dela, da
             empresa inteira ou da filial onde ela trabalha.
           */
-          can_ack:
-            d.requiresAck &&
-            !isAuditor(auth) &&
-            (d.targetUserId === userId ||
-              (d.targetUserId === null && (d.establishmentId === null || d.establishmentId === escopo.work))),
+          can_ack: d.requiresAck && recebe(auth, escopo, d),
         })),
       });
     } catch (err) {
@@ -460,19 +473,21 @@ class HrDocumentController {
       const auth = req as AuthRequest;
       const orgId = actorOrgId(auth);
       const userId = actorUserId(auth);
+      const escopo = await scopeOfRequest(auth);
       const doc = await prisma.hrDocument.findFirst({
         where: {
           id: req.params.id,
           organizationId: orgId,
-          AND: [documentosVisiveis(auth, await scopeOfRequest(auth))],
+          AND: [documentosVisiveis(auth, escopo)],
         },
-        select: { id: true, targetUserId: true, requiresAck: true },
+        select: { id: true, targetUserId: true, establishmentId: true, requiresAck: true },
       });
       if (!doc) {
         res.status(404).json({ message: "Documento não encontrado." });
         return;
       }
-      if (doc.targetUserId && doc.targetUserId !== userId) {
+      /* Ver não é receber: a ciência é só de quem recebe, como o botão. */
+      if (!recebe(auth, escopo, doc)) {
         res.status(403).json({ message: "Documento não é para você." });
         return;
       }

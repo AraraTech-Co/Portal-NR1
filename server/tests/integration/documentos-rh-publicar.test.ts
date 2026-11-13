@@ -111,6 +111,8 @@ beforeAll(async () => {
   await pessoa("Dora", Role.OWNER);
   await pessoa("Sara", Role.SST);
   await pessoa("Fred", Role.FISCAL);
+  /* O Gil gere a A sem trabalhar nela: vê o geral da A, mas não o recebe. */
+  await pessoa("Gil", Role.GERENTE, undefined, lojaA);
   await pessoa("Otto", Role.ADM_LOJA, { loja: lojaA }, lojaA);
   await pessoa("Ana", Role.COLABORADOR, { loja: lojaA });
   await pessoa("Bia", Role.COLABORADOR, { loja: lojaB });
@@ -233,6 +235,49 @@ describe("quem vê o documento de uma filial", () => {
     const daEmpresa = (await publicar("Rita", { requires_ack: true })).body.document.id;
     const res = await request(app).get("/api/hr-documents").set(as(token.Bia!));
     expect((res.body.documents as { id: string; can_ack: boolean }[]).find((d) => d.id === daEmpresa)?.can_ack).toBe(true);
+  });
+
+  it("ver não é receber: quem só gere a filial e a central não dão ciência no geral dela", async () => {
+    const outro = (await publicar("Rita", { establishment_id: lojaA, requires_ack: true })).body.document.id;
+    for (const quem of ["Gil", "Rita", "Sara"]) {
+      expect(await lista(quem), quem).toContain(outro);
+      const res = await request(app).post(`/api/hr-documents/${outro}/ack`).set(as(token[quem]!));
+      expect(res.status, quem).toBe(403);
+      expect(res.body.message, quem).toBe("Documento não é para você.");
+    }
+    expect(
+      await prisma.hrDocumentAck.count({
+        where: { documentId: outro, userId: { in: [id.Gil!, id.Rita!, id.Sara!] }, acknowledgedAt: { not: null } },
+      }),
+    ).toBe(0);
+    /* Quem trabalha na filial dá. */
+    expect((await request(app).post(`/api/hr-documents/${outro}/ack`).set(as(token.Ana!))).status).toBe(200);
+  });
+
+  it("o documento pessoal de outra pessoa: o RH vê, mas a ciência é só da dona", async () => {
+    const pessoal = (await publicar("Rita", { target_user_id: id.Ana, requires_ack: true })).body.document.id;
+    const daRita = await request(app).get("/api/hr-documents").set(as(token.Rita!));
+    expect((daRita.body.documents as { id: string; can_ack: boolean }[]).find((d) => d.id === pessoal)?.can_ack).toBe(false);
+    const res = await request(app).post(`/api/hr-documents/${pessoal}/ack`).set(as(token.Rita!));
+    expect(res.status).toBe(403);
+    expect((await request(app).post(`/api/hr-documents/${pessoal}/ack`).set(as(token.Ana!))).status).toBe(200);
+  });
+
+  it("quem só leu o geral da filial antiga e mudou de filial ainda o vê, mas não dá mais ciência nele", async () => {
+    const lido = (await publicar("Rita", { establishment_id: lojaA, requires_ack: true })).body.document.id;
+    expect((await request(app).get(`/api/hr-documents/${lido}`).set(as(token.Ana!))).status).toBe(200);
+    const ficha = await prisma.employeeProfile.findFirstOrThrow({ where: { organizationId: orgId, userId: id.Ana } });
+    await prisma.employeeProfile.update({ where: { id: ficha.id }, data: { establishmentId: lojaB } });
+    try {
+      expect(await lista("Ana")).toContain(lido);
+      expect((await request(app).post(`/api/hr-documents/${lido}/ack`).set(as(token.Ana!))).status).toBe(403);
+      const linha = await prisma.hrDocumentAck.findUniqueOrThrow({
+        where: { documentId_userId: { documentId: lido, userId: id.Ana! } },
+      });
+      expect(linha.acknowledgedAt).toBeNull();
+    } finally {
+      await prisma.employeeProfile.update({ where: { id: ficha.id }, data: { establishmentId: lojaA } });
+    }
   });
 
   it("a Ana dá ciência e baixa; o fiscal nem abre o módulo", async () => {
