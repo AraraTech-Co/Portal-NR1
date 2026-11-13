@@ -253,13 +253,20 @@ beforeAll(async () => {
   regRC = await registrosDe(rioClaro, colabRC);
   regB = await registrosDe(barueri, colabB);
 
+  /*
+    A unidade passou a ser obrigatória no registro; as ocorrências antigas
+    sem unidade continuam no banco e ficam com a gestão central. A deste
+    teste nasce pela API e perde a unidade no banco, como as antigas.
+  */
   ocorrenciaSemUnidade = ok(
     await request(app).post("/api/occurrences").set(as(sst.token)).send({
       type: "ACCIDENT",
       description: `Sem unidade ${SUFIXO}`,
       occurred_at: "2026-11-03T10:00:00.000Z",
+      establishment_id: rioClaro.id,
     }),
   ).occurrence.id;
+  await prisma.occurrence.update({ where: { id: ocorrenciaSemUnidade }, data: { establishmentId: null } });
   acaoManual = ok(
     await request(app).post("/api/actions").set(as(sst.token)).send({
       title: `Ação manual ${SUFIXO}`,

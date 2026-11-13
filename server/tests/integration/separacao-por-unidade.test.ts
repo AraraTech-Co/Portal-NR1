@@ -157,7 +157,7 @@ describe("a ocorrência fica na sua unidade [S3-D] [S2-F]", () => {
     expect(ok.status).toBe(200);
   });
 
-  it("ocorrência sem unidade aceita qualquer risco da empresa", async () => {
+  it("ocorrência sem unidade é recusada: a unidade é obrigatória (decisão de 13/11)", async () => {
     const a = await unidadeComRisco("Epsilon");
     const res = await request(app)
       .post("/api/occurrences")
@@ -168,7 +168,9 @@ describe("a ocorrência fica na sua unidade [S3-D] [S2-F]", () => {
         occurred_at: "2026-10-07",
         risk_id: a.riskId,
       });
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe("Escolha o estabelecimento onde aconteceu.");
+    expect(await prisma.occurrence.count({ where: { description: `Sem unidade ${SUFIXO}` } })).toBe(0);
   });
 });
 
