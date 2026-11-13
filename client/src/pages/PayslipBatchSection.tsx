@@ -315,6 +315,7 @@ export function PayslipBatchSection({
                         {p.registration && ` · matrícula ${p.registration}`}
                       </strong>
                       <span className="muted">
+                        {p.filial && `${p.filial} · `}
                         {paginas(p.pages)} · {FORA_LABEL[p.situacao]}
                       </span>
                     </div>
@@ -338,6 +339,7 @@ export function PayslipBatchSection({
                     <div className="lote-quem">
                       <strong>{p.user_name}</strong>
                       <span className="muted">
+                        {p.filial && `${p.filial} · `}
                         matrícula {p.registration} · {paginas(p.pages)}
                         {p.substitui && " · substitui o holerite já publicado"}
                       </span>
