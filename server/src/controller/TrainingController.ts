@@ -3,6 +3,7 @@ import { Request, Response } from "express";
 import prisma from "../model/prisma";
 import { Training } from "../model/schema/Training/Training";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
+import { peopleInScope, scopeOfRequest, userInScope } from "../helper/unit-scope";
 import { writeAudit } from "../helper/audit";
 import { notify, notifyMany } from "../helper/notify";
 import { formatCalendarDayTime } from "../helper/calendar-day";
@@ -81,9 +82,27 @@ class TrainingController {
           },
         },
       });
+      /*
+        Gerente, supervisor e ADM loja contam só as pessoas das filiais que
+        gerem (e a própria): a contagem da empresa toda contava a unidade B
+        para o gerente da A. [C4-17]
+      */
+      const escopo = await scopeOfRequest(auth);
+      const contagem = escopo.wholeOrg
+        ? null
+        : new Map(
+            (
+              await prisma.trainingEnrollment.groupBy({
+                by: ["trainingId"],
+                where: { trainingId: { in: rows.map((r) => r.id) }, user: userInScope(escopo) },
+                _count: { _all: true },
+              })
+            ).map((g) => [g.trainingId, g._count._all]),
+          );
       res.json({
         trainings: rows.map(({ enrollments, ...t }) => ({
           ...t,
+          ...(contagem ? { _count: { ...t._count, enrollments: contagem.get(t.id) ?? 0 } } : {}),
           my_enrollment: enrollments[0] ?? null,
         })),
       });
@@ -232,8 +251,10 @@ class TrainingController {
         res.status(404).json({ message: "Treinamento não encontrado." });
         return;
       }
+      /* Quem fez, só nas filiais geridas (e o próprio). [C4-17] */
+      const escopo = await scopeOfRequest(auth);
       const rows = await prisma.trainingEnrollment.findMany({
-        where: { trainingId: training.id },
+        where: { trainingId: training.id, user: userInScope(escopo) },
         orderBy: [{ completedAt: "desc" }, { startedAt: "desc" }],
         select: {
           id: true,
@@ -323,7 +344,11 @@ class TrainingController {
       */
       const cuida =
         auth.actor && canSeeAllInModule(auth.actor.permission, "treinamentos");
-      if (enrollment.userId !== userId && !cuida) {
+      /* O de pessoa de outra filial responde como o de outra pessoa. [C4-17] */
+      const noRecorte =
+        enrollment.userId === userId ||
+        (cuida && (await peopleInScope(await scopeOfRequest(auth), [enrollment.userId])));
+      if (enrollment.userId !== userId && (!cuida || !noRecorte)) {
         res.status(403).json({ message: "Este certificado é de outra pessoa." });
         return;
       }
@@ -851,6 +876,11 @@ class TrainingController {
         res.status(400).json({ message: "Há pessoas na lista que não são da empresa." });
         return;
       }
+      /* Presença só de quem está nas filiais que o ator gere. [C4-17] */
+      if (!(await peopleInScope(await scopeOfRequest(auth), ids))) {
+        res.status(403).json({ message: "Há pessoas na lista fora das filiais que você gere." });
+        return;
+      }
 
       await prisma.$transaction(async (tx) => {
         for (const entrada of lista) {
@@ -1035,6 +1065,11 @@ class TrainingController {
         });
         return;
       }
+      /* Turma e convocação só de quem está nas filiais que o ator gere. [C4-17] */
+      if (!(await peopleInScope(await scopeOfRequest(auth), todos))) {
+        res.status(403).json({ message: "Há pessoas na lista fora das filiais que você gere." });
+        return;
+      }
 
       const session = await prisma.$transaction(async (tx) => {
         const criada = await tx.trainingSession.create({
@@ -1182,12 +1217,15 @@ class TrainingController {
         res.status(404).json({ message: "Treinamento não encontrado." });
         return;
       }
+      /* A lista de presença, só com as pessoas das filiais geridas. [C4-17] */
+      const escopo = await scopeOfRequest(auth);
       const rows = await prisma.trainingSession.findMany({
         where: { trainingId: training.id },
         orderBy: { heldAt: "desc" },
         include: {
           recordedBy: { select: { id: true, name: true } },
           attendances: {
+            where: { user: userInScope(escopo) },
             include: { user: { select: { id: true, name: true } } },
           },
           /* A lista de presença assinada, quando anexada. [CB-74] */

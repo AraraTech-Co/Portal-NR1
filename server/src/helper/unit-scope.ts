@@ -154,6 +154,33 @@ export function profileScope(scope: UnitScope): Record<string, unknown> {
   };
 }
 
+/**
+ * Filtro Prisma para um `User` no recorte: a própria pessoa e quem tem ficha
+ * ativa numa filial gerida. Para registros sem unidade gravada, como a
+ * matrícula num treinamento e a presença na turma. [C4-17]
+ */
+export function userInScope(scope: UnitScope): Record<string, unknown> {
+  if (scope.wholeOrg) return {};
+  return {
+    OR: [
+      { id: scope.userId },
+      ...(scope.managed.length
+        ? [
+            {
+              employeeProfiles: {
+                some: {
+                  organizationId: scope.organizationId,
+                  dismissedAt: null,
+                  establishmentId: { in: scope.managed },
+                },
+              },
+            },
+          ]
+        : []),
+    ],
+  };
+}
+
 /** Resposta única para "não existe" e "fora do seu escopo" — não revela qual dos dois. */
 export const NOT_FOUND_BODY = { message: "Registro não encontrado." } as const;
 
