@@ -31,6 +31,8 @@ describe("HR documents", () => {
         requires_ack: true,
         file_name: "termo.pdf",
         mime_type: "application/pdf",
+        /* O arquivo é obrigatório e o tipo é conferido pelo conteúdo. */
+        content_base64: Buffer.from("%PDF-1.4 teste").toString("base64"),
       });
     expect(created.status).toBe(201);
     expect(created.body.document.requiresAck).toBe(true);

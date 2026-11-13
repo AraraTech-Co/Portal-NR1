@@ -1,15 +1,17 @@
 import fs from "fs";
 import { Request, Response } from "express";
+import { NotificationKind, Prisma } from "@prisma/client";
 import prisma from "../model/prisma";
 import { HrDocument } from "../model/schema/HrDocument/HrDocument";
 import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
+import { notify } from "../helper/notify";
 import {
   currentUnitOf,
   managesPerson,
-  managesPersonRecord,
   profileScope,
   scopeOfRequest,
+  type UnitScope,
 } from "../helper/unit-scope";
 import {
   canChangePersonnelRecord,
@@ -68,6 +70,64 @@ function podeBaixar(auth: AuthRequest, doc: { targetUserId: string | null }): bo
   return Boolean(auth.actor && canChangePersonnelRecord(auth.actor.permission));
 }
 
+/**
+ * Quem vê o documento — a mesma regra na lista, no detalhe, no download e
+ * na ciência. Há três destinos: a empresa (sem pessoa e sem filial), uma
+ * filial (sem pessoa, com a filial) e uma pessoa. [Item 10, 13/11]
+ *
+ * - O RH, o Master e o Dono, que veem a empresa inteira: todos.
+ * - O RH com recorte (ADM loja): os gerais que alcança, os seus e os
+ *   registros das filiais que gere. [C2-13]
+ * - A gestão central sem o módulo de pessoal (SST) e a consulta: todo
+ *   geral, de qualquer filial — a fiscalização pede o que cada filial recebeu.
+ * - Os demais: o geral da empresa, o da filial onde trabalham ou que geram,
+ *   os seus, e o geral de outra filial que já abriram ou em que deram ciência
+ *   — a leitura é a prova do recebimento e não some quando a pessoa muda de
+ *   filial.
+ */
+function documentosVisiveis(auth: AuthRequest, escopo: UnitScope): Prisma.HrDocumentWhereInput {
+  const userId = actorUserId(auth);
+  if (isAuditor(auth)) return { targetUserId: null };
+  if (isRh(auth) && escopo.wholeOrg) return {};
+  if (escopo.wholeOrg) return { OR: [{ targetUserId: null }, { targetUserId: userId }] };
+  const unidades = [...new Set([...(escopo.work ? [escopo.work] : []), ...escopo.managed])];
+  const visiveis: Prisma.HrDocumentWhereInput[] = [
+    { targetUserId: null, establishmentId: null },
+    ...(unidades.length ? [{ targetUserId: null, establishmentId: { in: unidades } }] : []),
+    { targetUserId: userId },
+    { targetUserId: null, acks: { some: { userId } } },
+  ];
+  if (isRh(auth) && escopo.managed.length) {
+    visiveis.push({ establishmentId: { in: escopo.managed } });
+  }
+  return { OR: visiveis };
+}
+
+/**
+ * A pessoa RECEBE o documento: é dela, é da empresa inteira, ou é da filial
+ * onde ela trabalha. Ver não basta — quem gere a filial, a central e quem já
+ * saiu da filial veem o documento sem ser destinatários. A ciência é prova
+ * de recebimento: a lista (`can_ack`) e a rota de ciência usam esta mesma
+ * regra.
+ */
+function recebe(
+  auth: AuthRequest,
+  escopo: UnitScope,
+  doc: { targetUserId: string | null; establishmentId: string | null },
+): boolean {
+  if (isAuditor(auth)) return false;
+  if (doc.targetUserId !== null) return doc.targetUserId === actorUserId(auth);
+  return doc.establishmentId === null || doc.establishmentId === escopo.work;
+}
+
+/** O tipo do arquivo pelo conteúdo, não pelo que o navegador declara. */
+function tipoPeloConteudo(data: Buffer): string | null {
+  if (data.length >= 4 && data.subarray(0, 4).toString("latin1") === "%PDF") return "application/pdf";
+  if (data.length >= 4 && data[0] === 0x89 && data.subarray(1, 4).toString("latin1") === "PNG") return "image/png";
+  if (data.length >= 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff) return "image/jpeg";
+  return null;
+}
+
 class HrDocumentController {
   async list(req: Request, res: Response) {
     try {
@@ -81,22 +141,7 @@ class HrDocumentController {
         where: {
           organizationId: orgId,
           ...(kind && isHrDocumentKind(kind) ? { kind } : {}),
-          ...(isAuditor(auth)
-            ? { targetUserId: null }
-            : !isRh(auth)
-              ? {
-                  OR: [{ targetUserId: null }, { targetUserId: userId }],
-                }
-              : escopo.wholeOrg
-                ? {}
-                : /* Pessoal de terceiro: só das unidades geridas. [C2-13] */
-                  {
-                    OR: [
-                      { targetUserId: null },
-                      { targetUserId: userId },
-                      { establishmentId: { in: escopo.managed } },
-                    ],
-                  }),
+          AND: [documentosVisiveis(auth, escopo)],
         },
         orderBy: { createdAt: "desc" },
         /* O caminho interno do arquivo não sai do servidor. [C2-13] */
@@ -104,6 +149,8 @@ class HrDocumentController {
         include: {
           publishedBy: { select: { id: true, name: true } },
           target: { select: { id: true, name: true } },
+          /* O destino "uma filial" mostra qual. */
+          establishment: { select: { id: true, name: true } },
           acks: {
             where: { userId },
             select: { readAt: true, acknowledgedAt: true },
@@ -119,6 +166,11 @@ class HrDocumentController {
           acks: undefined,
           /* A tela mostra "Baixar" só onde o arquivo sai. */
           can_download: podeBaixar(auth, d),
+          /*
+            "Dar ciência" só para quem recebe: o documento é dela, da
+            empresa inteira ou da filial onde ela trabalha.
+          */
+          can_ack: d.requiresAck && recebe(auth, escopo, d),
         })),
       });
     } catch (err) {
@@ -133,7 +185,7 @@ class HrDocumentController {
       const userId = actorUserId(auth);
       const escopo = await scopeOfRequest(auth);
       const doc = await prisma.hrDocument.findFirst({
-        where: { id: req.params.id, organizationId: orgId },
+        where: { id: req.params.id, organizationId: orgId, AND: [documentosVisiveis(auth, escopo)] },
         omit: { storagePath: true },
         include: {
           publishedBy: { select: { id: true, name: true } },
@@ -155,15 +207,8 @@ class HrDocumentController {
             : { where: { userId } },
         },
       });
+      /* Fora do alcance responde como inexistente. [C2-13] */
       if (!doc) {
-        res.status(404).json({ message: "Documento não encontrado." });
-        return;
-      }
-      const deOutraPessoa = doc.targetUserId !== null && doc.targetUserId !== userId;
-      const alcanca =
-        !deOutraPessoa || (isRh(auth) && !isAuditor(auth) && managesPersonRecord(escopo, doc));
-      /* Documento pessoal fora do alcance responde como inexistente. [C2-13] */
-      if (!alcanca) {
         res.status(404).json({ message: "Documento não encontrado." });
         return;
       }
@@ -202,7 +247,7 @@ class HrDocumentController {
       const userId = actorUserId(auth);
       const escopo = await scopeOfRequest(auth);
       const doc = await prisma.hrDocument.findFirst({
-        where: { id: req.params.id, organizationId: orgId },
+        where: { id: req.params.id, organizationId: orgId, AND: [documentosVisiveis(auth, escopo)] },
         select: {
           id: true,
           targetUserId: true,
@@ -212,10 +257,7 @@ class HrDocumentController {
         },
       });
       const deOutraPessoa = Boolean(doc && doc.targetUserId !== null && doc.targetUserId !== userId);
-      const ve =
-        doc !== null &&
-        (!deOutraPessoa || (isRh(auth) && !isAuditor(auth) && managesPersonRecord(escopo, doc)));
-      if (!doc || !ve) {
+      if (!doc) {
         res.status(404).json({ message: "Documento não encontrado." });
         return;
       }
@@ -252,6 +294,16 @@ class HrDocumentController {
     }
   }
 
+  /**
+   * Publica para uma pessoa, uma filial ou a empresa inteira. [Item 10, 13/11]
+   *
+   * - Pessoal e de toda a empresa: só RH, Master e Dono. O ADM loja publica
+   *   só o geral de uma filial que gere — o "geral" sem filial chegaria a
+   *   todas as filiais, o alcance mais largo para quem tem o mais estreito.
+   * - O arquivo é obrigatório e o tipo é conferido pelo conteúdo.
+   * - Quem recebe é avisado: a pessoa, quem tem ficha ativa na filial ou na
+   *   empresa — de uma vez, sem quem publicou.
+   */
   async create(req: Request, res: Response) {
     try {
       const auth = req as AuthRequest;
@@ -263,8 +315,8 @@ class HrDocumentController {
         description,
         requires_ack,
         target_user_id,
+        establishment_id,
         file_name,
-        mime_type,
         content_base64,
       } = req.body as {
         kind?: string;
@@ -272,15 +324,13 @@ class HrDocumentController {
         description?: string;
         requires_ack?: boolean;
         target_user_id?: string;
+        establishment_id?: string;
         file_name?: string;
-        mime_type?: string;
         content_base64?: string;
       };
 
-      if (!title?.trim() || !file_name?.trim() || !mime_type) {
-        res.status(400).json({
-          message: "Informe title, file_name e mime_type.",
-        });
+      if (!title?.trim() || !file_name?.trim()) {
+        res.status(400).json({ message: "Informe o título e o arquivo do documento." });
         return;
       }
 
@@ -295,27 +345,58 @@ class HrDocumentController {
         });
         return;
       }
+      if (target_user_id && establishment_id) {
+        res.status(400).json({ message: "Escolha uma pessoa ou uma filial, não as duas." });
+        return;
+      }
+
+      const escopo = await scopeOfRequest(auth);
+      const daEmpresaInteira = Boolean(auth.actor && canChangePersonnelRecord(auth.actor.permission));
+      if (target_user_id && !daEmpresaInteira) {
+        res.status(403).json({ message: "Documento pessoal só o RH, o Master ou o Dono publicam." });
+        return;
+      }
+      if (!target_user_id && !establishment_id && !(daEmpresaInteira && escopo.wholeOrg)) {
+        res.status(403).json({
+          message: "Escolha a filial: você publica só para as filiais que gere.",
+        });
+        return;
+      }
 
       if (target_user_id) {
         const m = await prisma.membership.findFirst({
           where: { userId: target_user_id, organizationId: orgId },
         });
         /* Fora da gestão de quem publica responde como destinatário inexistente. [C2-13] */
-        if (!m || !(await managesPerson(await scopeOfRequest(auth), target_user_id))) {
+        if (!m || !(await managesPerson(escopo, target_user_id))) {
           res.status(400).json({ message: "Destinatário inválido." });
           return;
         }
       }
+      if (establishment_id) {
+        const filial = await prisma.establishment.findFirst({
+          where: { id: establishment_id, organizationId: orgId, archivedAt: null },
+          select: { id: true },
+        });
+        if (!filial || !(escopo.wholeOrg || escopo.managed.includes(filial.id))) {
+          res.status(400).json({ message: "Filial inválida." });
+          return;
+        }
+      }
 
-      const data = content_base64
-        ? Buffer.from(content_base64, "base64")
-        : Buffer.alloc(0);
-      assertSize(data.length || 0);
-      const { storagePath, absolutePath } = buildPrivateStoragePath(
-        orgId,
-        "hr-documents",
-        mime_type,
-      );
+      const data = content_base64 ? Buffer.from(content_base64, "base64") : Buffer.alloc(0);
+      if (data.length === 0) {
+        res.status(400).json({ message: "Anexe o arquivo do documento." });
+        return;
+      }
+      assertSize(data.length);
+      /* O tipo declarado pelo navegador não prova nada: vale o conteúdo. */
+      const mimeType = tipoPeloConteudo(data);
+      if (!mimeType) {
+        res.status(400).json({ message: "O arquivo precisa ser PDF, PNG ou JPG." });
+        return;
+      }
+      const { storagePath, absolutePath } = buildPrivateStoragePath(orgId, "hr-documents", mimeType);
       writeEvidenceFile(absolutePath, data);
 
       const document = await new HrDocument().create.new({
@@ -325,12 +406,17 @@ class HrDocumentController {
         description: blank(description),
         storagePath,
         fileName: file_name.trim(),
-        mimeType: mime_type,
+        mimeType,
         sizeBytes: data.length,
         requiresAck: Boolean(requires_ack),
         targetUserId: target_user_id ?? null,
-        /* Pessoal: a unidade do destinatário quando nasce. Geral: sem unidade. [C2-13] */
-        establishmentId: target_user_id ? await currentUnitOf(orgId, target_user_id) : null,
+        /*
+          Pessoal: a unidade do destinatário quando nasce [C2-13]. Geral de
+          uma filial: a filial. Geral da empresa: sem unidade.
+        */
+        establishmentId: target_user_id
+          ? await currentUnitOf(orgId, target_user_id)
+          : (establishment_id ?? null),
         publishedById: userId,
       });
 
@@ -341,6 +427,38 @@ class HrDocumentController {
         entityType: "HrDocument",
         entityId: document.id,
       });
+
+      const aviso = {
+        organizationId: orgId,
+        kind: NotificationKind.HR_DOCUMENT_PUBLISHED,
+        title: document.requiresAck ? "Documento do RH para dar ciência" : "Documento novo do RH",
+        body: document.title,
+        link: "/documentos-rh",
+        entityType: "HrDocument",
+        entityId: document.id,
+      };
+      if (target_user_id) {
+        if (target_user_id !== userId) await notify({ ...aviso, userId: target_user_id });
+      } else {
+        try {
+          const fichas = await prisma.employeeProfile.findMany({
+            where: {
+              organizationId: orgId,
+              dismissedAt: null,
+              userId: { not: userId },
+              ...(establishment_id ? { establishmentId: establishment_id } : {}),
+              user: { memberships: { some: { organizationId: orgId } } },
+            },
+            select: { userId: true },
+          });
+          await prisma.notification.createMany({
+            data: [...new Set(fichas.map((f) => f.userId))].map((uid) => ({ ...aviso, userId: uid })),
+            skipDuplicates: true,
+          });
+        } catch {
+          /* um aviso que falha não desfaz a publicação */
+        }
+      }
 
       const { storagePath: _interno, ...publico } = document;
       res.status(201).json({ document: publico });
@@ -355,15 +473,21 @@ class HrDocumentController {
       const auth = req as AuthRequest;
       const orgId = actorOrgId(auth);
       const userId = actorUserId(auth);
-      const doc = await new HrDocument().read.one({
-        id: req.params.id,
-        organizationId: orgId,
+      const escopo = await scopeOfRequest(auth);
+      const doc = await prisma.hrDocument.findFirst({
+        where: {
+          id: req.params.id,
+          organizationId: orgId,
+          AND: [documentosVisiveis(auth, escopo)],
+        },
+        select: { id: true, targetUserId: true, establishmentId: true, requiresAck: true },
       });
       if (!doc) {
         res.status(404).json({ message: "Documento não encontrado." });
         return;
       }
-      if (doc.targetUserId && doc.targetUserId !== userId) {
+      /* Ver não é receber: a ciência é só de quem recebe, como o botão. */
+      if (!recebe(auth, escopo, doc)) {
         res.status(403).json({ message: "Documento não é para você." });
         return;
       }
