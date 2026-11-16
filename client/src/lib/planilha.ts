@@ -41,6 +41,8 @@ export type FuncaoDaEmpresa = {
   establishment?: { id?: string; name: string } | null;
   /** Para sugerir "mesmo CBO" no bloco de cargos sem função. [C6-2] */
   cbo2002?: string | null;
+  /** Os cargos da folha juntados a esta função, pela chave do cargo. [C6-4] */
+  aliases?: { chave: string }[];
 };
 
 /**
@@ -63,6 +65,13 @@ export type CargoSemFuncao = {
   linhas: number[];
   /** "Mesmo CBO de …": outro cargo do bloco ou função da filial. Só sugere. */
   sugestoes: string[];
+  /**
+   * O CBO 94 da função criada: só quando todas as linhas concordam e o valor
+   * não é o padrão do sistema de folha (D6-3). [C6-7]
+   */
+  cbo94: string | null;
+  /** O aviso do CBO 94 padrão, quando houver (o mesmo em todo o bloco). [C6-7] */
+  avisoCbo94?: string;
 };
 
 /**
@@ -91,6 +100,8 @@ export type Lido = {
   recusadas: LinhaRecusada[];
   /** Os cargos sem função, agrupados, para o bloco da prévia. [C6-2] */
   cargosSemFuncao: CargoSemFuncao[];
+  /** "O CBO 94 … aparece para cargos diferentes e não foi usado." [C6-7] */
+  avisoCbo94?: string;
   /** O número da linha no Excel de cada linha de `rows`, na mesma ordem. */
   numeros: number[];
   /** Em que modelo a planilha veio. [PF-1] */
@@ -360,10 +371,19 @@ function semGenero(grafia: string): string {
 }
 
 function agruparCargosSemFuncao(
-  linhas: { filialId: string | null; filial: string; grafia: string; cbo2002: string | null; linha: number }[],
+  linhas: {
+    filialId: string | null;
+    filial: string;
+    grafia: string;
+    cbo2002: string | null;
+    cbo94: string | null;
+    linha: number;
+  }[],
   funcoes: FuncaoDaEmpresa[],
+  cbo94Padrao: Set<string>,
+  avisoCbo94: string | undefined,
 ): CargoSemFuncao[] {
-  const grupos = new Map<string, CargoSemFuncao & { _contagem: Map<string, number> }>();
+  const grupos = new Map<string, CargoSemFuncao & { _contagem: Map<string, number>; _cbo94: Set<string> }>();
   for (const l of linhas) {
     const chave = chaveDoCargo(l.grafia);
     if (!chave) continue;
@@ -381,13 +401,16 @@ function agruparCargosSemFuncao(
           cbo2002: [] as string[],
           linhas: [] as number[],
           sugestoes: [] as string[],
+          cbo94: null as string | null,
+          ...(avisoCbo94 ? { avisoCbo94 } : {}),
         },
-        { _contagem: new Map<string, number>() },
+        { _contagem: new Map<string, number>(), _cbo94: new Set<string>() },
       );
     g._contagem.set(l.grafia, (g._contagem.get(l.grafia) ?? 0) + 1);
     g.pessoas += 1;
     g.linhas.push(l.linha);
     if (l.cbo2002 && !g.cbo2002.includes(l.cbo2002)) g.cbo2002.push(l.cbo2002);
+    g._cbo94.add(l.cbo94 ?? "");
     grupos.set(k, g);
   }
   const lista = [...grupos.values()];
@@ -402,6 +425,9 @@ function agruparCargosSemFuncao(
     const masculina =
       g.variacoes.length > 1 ? g.variacoes.find((v) => chaveDoCargo(v.grafia) === semGenero(v.grafia)) : undefined;
     g.nome = nomeDeFuncao((masculina ?? g.variacoes[0]!).grafia);
+    /* O CBO 94 vai para a função só quando todas as linhas trazem o mesmo, e não é o padrão. */
+    const unico = g._cbo94.size === 1 ? [...g._cbo94][0]! : "";
+    g.cbo94 = unico && !cbo94Padrao.has(unico) ? unico : null;
   }
   /* "Mesmo CBO de …": só quando o cargo tem um CBO 2002, e só sugere. */
   for (const g of lista) {
@@ -420,7 +446,7 @@ function agruparCargosSemFuncao(
     }
   }
   return lista
-    .map(({ _contagem, ...g }) => g)
+    .map(({ _contagem, _cbo94, ...g }) => g)
     .sort((a, b) => a.filial.localeCompare(b.filial) || b.pessoas - a.pessoas || a.nome.localeCompare(b.nome));
 }
 
@@ -497,9 +523,12 @@ export function lerTabela(
     Nunca por semelhança de digitação nem pelo CBO. [C6-1]
   */
   const porNome = new Map<string, FuncaoDaEmpresa[]>();
+  /* O apelido só entra quando nenhuma função casa pela chave. [C6-4] */
+  const porApelido = new Map<string, FuncaoDaEmpresa[]>();
   for (const f of funcoes) {
     const chave = chaveDoCargo(f.name);
     porNome.set(chave, [...(porNome.get(chave) ?? []), f]);
+    for (const a of f.aliases ?? []) porApelido.set(a.chave, [...(porApelido.get(a.chave) ?? []), f]);
   }
   const empresaPorNome = new Map(empresas.map((c) => [semAcento(c.name), c.id]));
   const vinculos = new Map(
@@ -525,7 +554,19 @@ export function lerTabela(
   /* O nome de cada linha, para a recusa aparecer com ele na prévia. */
   const nomeDaLinha = new Map<number, string>();
   /* Os cargos que não casaram, linha a linha, para o bloco da prévia. [C6-2] */
-  const semFuncao: { filialId: string | null; filial: string; grafia: string; cbo2002: string | null; linha: number }[] = [];
+  const semFuncao: {
+    filialId: string | null;
+    filial: string;
+    grafia: string;
+    cbo2002: string | null;
+    cbo94: string | null;
+    linha: number;
+  }[] = [];
+  /*
+    O CBO 94 de cada linha, com o CBO 2002 dela: o mesmo CBO 94 para CBO 2002
+    diferentes é o padrão do sistema de folha, não o do cargo (D6-3). [C6-7]
+  */
+  const cbo2002DoCbo94 = new Map<string, Set<string>>();
   const matriculaVista = new Map<string, number>();
 
   if (colunasIgnoradas.length > 0) {
@@ -564,6 +605,11 @@ export function lerTabela(
       continue;
     }
     nomeDaLinha.set(numero, row.name);
+    {
+      const c94 = (row as LinhaLocal).job_role_cbo94?.trim();
+      const c2002 = (row as LinhaLocal).job_role_cbo2002?.trim();
+      if (c94 && c2002) cbo2002DoCbo94.set(c94, new Set([...(cbo2002DoCbo94.get(c94) ?? []), c2002]));
+    }
 
     /*
       Linha copiada do Excel que perde as tabulações vira uma coluna só: o
@@ -648,19 +694,21 @@ export function lerTabela(
     }
     if (row.job_role_id) {
       const nomeDaFuncao = row.job_role_id;
-      let candidatas = porNome.get(chaveDoCargo(nomeDaFuncao)) ?? [];
-      if (filial) {
-        const daFilial = filial;
-        candidatas = candidatas.filter((f) =>
-          f.establishment?.id
-            ? f.establishment.id === daFilial.id
-            : semAcento(f.establishment?.name ?? "") === semAcento(daFilial.name),
-        );
-      } else if (unidade) {
-        candidatas = candidatas.filter(
-          (f) => semAcento(f.establishment?.name ?? "") === semAcento(unidade),
-        );
-      }
+      const daLinha = (lista: FuncaoDaEmpresa[]) => {
+        if (filial) {
+          const daFilial = filial;
+          return lista.filter((f) =>
+            f.establishment?.id
+              ? f.establishment.id === daFilial.id
+              : semAcento(f.establishment?.name ?? "") === semAcento(daFilial.name),
+          );
+        }
+        if (unidade) return lista.filter((f) => semAcento(f.establishment?.name ?? "") === semAcento(unidade));
+        return lista;
+      };
+      const chaveDaLinha = chaveDoCargo(nomeDaFuncao);
+      let candidatas = daLinha(porNome.get(chaveDaLinha) ?? []);
+      if (candidatas.length === 0) candidatas = daLinha(porApelido.get(chaveDaLinha) ?? []);
       /*
         A função tem o nome exato do cargo da planilha (decisão do Léo,
         12/11). Cargo que não casa deixava a pessoa entrar sem função, com um
@@ -678,6 +726,7 @@ export function lerTabela(
           filial: filial?.name ?? unidade ?? "",
           grafia: nomeDaFuncao,
           cbo2002: (row as LinhaLocal).job_role_cbo2002?.trim() || null,
+          cbo94: (row as LinhaLocal).job_role_cbo94?.trim() || null,
           linha: numero,
         });
         continue;
@@ -809,11 +858,22 @@ export function lerTabela(
   }
   const recusadas = [...porLinha.values()].sort((a, b) => a.linha - b.linha);
 
+  /* O CBO 94 padrão não vai para a função de ninguém, nem na carga. [C6-7] */
+  const cbo94Padrao = new Set([...cbo2002DoCbo94].filter(([, cbos]) => cbos.size > 1).map(([c94]) => c94));
+  for (const row of rows) {
+    const c94 = (row as LinhaLocal).job_role_cbo94?.trim();
+    if (c94 && cbo94Padrao.has(c94)) delete (row as LinhaLocal).job_role_cbo94;
+  }
+  const avisoCbo94 = cbo94Padrao.size
+    ? `O CBO 94 ${[...cbo94Padrao].map((c) => `"${c}"`).join(", ")} aparece para cargos diferentes e não foi usado.`
+    : undefined;
+
   return {
     rows,
     problems,
     recusadas,
-    cargosSemFuncao: agruparCargosSemFuncao(semFuncao, funcoes),
+    avisoCbo94,
+    cargosSemFuncao: agruparCargosSemFuncao(semFuncao, funcoes, cbo94Padrao, avisoCbo94),
     numeros,
     modelo: daFolha ? "folha" : "csv",
   };

@@ -82,3 +82,17 @@
   font-size: 0.85rem;
   color: var(--sem-warning-fg);
 }
+
+/* As ações de cada cargo sem função: escolha, nome e setor. [C6-3] */
+.cargo-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  align-items: center;
+  min-width: 14rem;
+}
+
+.cargo-acoes select,
+.cargo-acoes input {
+  max-width: 100%;
+}

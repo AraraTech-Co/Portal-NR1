@@ -211,6 +211,7 @@ model Organization {
   employeeProfiles EmployeeProfile[]
   employeePayrollData EmployeePayrollData[]
   holidays            Holiday[]
+  jobRoleAliases      JobRoleAlias[]
   ideas           Idea[]
   announcements   Announcement[]
   hrDocuments     HrDocument[]
@@ -465,6 +466,7 @@ model Establishment {
   copiesTo            EstablishmentCopy[] @relation("CopyTarget")
 
   holidays       Holiday[]
+  jobRoleAliases JobRoleAlias[]
 
   @@index([organizationId, archivedAt])
 }
@@ -527,6 +529,8 @@ model JobRole {
   employees    EmployeeProfile[]
   requirements JobRoleRequirement[]
   serviceOrders ServiceOrder[]
+  /// Os cargos da folha juntados a esta função. [C6-4]
+  aliases       JobRoleAlias[]
 
   @@index([organizationId, archivedAt])
   @@index([sectorId])
@@ -2932,4 +2936,26 @@ model Holiday {
   establishment Establishment? @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, establishmentId])
+}
+
+/// O apelido de um cargo da folha: "juntar COM OP CAIXA com Caixa" fica
+/// guardado por filial, e a próxima planilha casa sozinha. A planilha casa
+/// primeiro a função pela chave; o apelido só entra quando nenhuma casa.
+/// Função arquivada deixa de valer pela leitura. [C6-4]
+model JobRoleAlias {
+  id              String   @id @default(uuid())
+  organizationId  String
+  establishmentId String
+  /// A chave do cargo (`chaveDoCargo`), não a grafia.
+  chave           String
+  jobRoleId       String
+  createdById     String
+  createdAt       DateTime @default(now())
+
+  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  establishment Establishment @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+  jobRole       JobRole       @relation(fields: [jobRoleId], references: [id], onDelete: Cascade)
+
+  @@unique([establishmentId, chave])
+  @@index([jobRoleId])
 }

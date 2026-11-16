@@ -25,6 +25,7 @@ import {
   type LinhaRecusada,
 } from "@/lib/planilha";
 import { useModuleAccess } from "@/lib/module-access";
+import { CargosSemFuncaoBloco } from "./CargosSemFuncao";
 import { importarEmLotes } from "@/lib/importar-em-lotes";
 import { PlanilhaIlegivel, gerarXlsx, lerXlsx, pareceOfficeProtegido, pareceXlsx } from "@/lib/xlsx";
 
@@ -131,6 +132,15 @@ export function ImportPeople() {
   const editaOperacao = useModuleAccess("operacao").canWrite;
   const editaConta = useModuleAccess("conta").canWrite;
   const criaFuncoes = editaOperacao && editaConta;
+  /* O aviso do CBO 94 padrão da folha, guardado na conferência. [C6-7] */
+  const [avisoCbo94, setAvisoCbo94] = useState<string | undefined>(undefined);
+  /*
+    Depois de criar as funções, a lista é recarregada e a prévia conferida
+    de novo, já com as funções novas: sem isso, os erros ficariam na tela.
+    [C6-3]
+  */
+  const [reconferir, setReconferir] = useState(false);
+  const [estruturaCriada, setEstruturaCriada] = useState<string | null>(null);
   const [relatorio, setRelatorio] = useState<ImportReport | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
@@ -185,15 +195,32 @@ export function ImportPeople() {
     );
   }
 
+  useEffect(() => {
+    if (!reconferir) return;
+    setReconferir(false);
+    void conferir();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reconferir, lido]);
+
   async function conferir() {
     setErro(null);
     setRelatorio(null);
     setAceitos({});
     setRecusadas(lido.recusadas);
     setCargosSemFuncao(lido.cargosSemFuncao);
+    setAvisoCbo94(lido.avisoCbo94);
     setOcupado(true);
     try {
-      setPrevia(await enviar(true));
+      /*
+        Todas as linhas de fora (na primeira carga, nenhuma função existe): a
+        prévia existe mesmo assim, sem ir ao servidor, para o bloco de cargos
+        sem função aparecer. Antes, o Conferir nem se habilitava. [C6-2]
+      */
+      setPrevia(
+        lido.rows.length === 0
+          ? { dry_run: true, rows: 0, created: 0, completed: 0, skipped: 0, errors: 0, results: [] }
+          : await enviar(true),
+      );
     } catch (err) {
       setErro(err instanceof Error ? err.message : "Falha ao conferir");
     } finally {
@@ -282,6 +309,8 @@ export function ImportPeople() {
             setRelatorio(null);
             setRecusadas([]);
             setCargosSemFuncao([]);
+            setAvisoCbo94(undefined);
+            setEstruturaCriada(null);
             setErroDoArquivo(null);
             setAceitos({});
             setTexto("");
@@ -377,7 +406,7 @@ export function ImportPeople() {
         <Button
           type="button"
           variant="secondary"
-          disabled={ocupado || lido.rows.length === 0}
+          disabled={ocupado || (lido.rows.length === 0 && lido.recusadas.length === 0)}
           onClick={() => void conferir()}
         >
           {ocupado && !relatorio ? "Conferindo…" : "Conferir antes de cadastrar"}
@@ -438,69 +467,24 @@ export function ImportPeople() {
               matrícula, CPF ou nascimento na ficha não consegue entrar sozinho.
             </p>
           )}
+          {previa && avisoCbo94 && <p className="import-warning">{avisoCbo94}</p>}
+          {previa && estruturaCriada && (
+            <p className="form-success" role="status">
+              {estruturaCriada}
+            </p>
+          )}
           {previa && cargosSemFuncao.length > 0 && (
-            <section className="cargos-sem-funcao" aria-labelledby="cargos-sem-funcao-titulo">
-              <h3 id="cargos-sem-funcao-titulo">
-                Cargos sem função nesta planilha: {cargosSemFuncao.length}
-              </h3>
-              <p className="muted">
-                As pessoas destes cargos ficam de fora até a função existir. Nada foi gravado ainda.
-              </p>
-              {!criaFuncoes && (
-                <p className="import-warning">
-                  Quem cuida da Operação (Master ou Dono) cria estas funções.
-                </p>
-              )}
-              <div className="data-table-wrap">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Filial</th>
-                      <th>Cargo</th>
-                      <th>Variações</th>
-                      <th>CBO 2002</th>
-                      <th>Pessoas</th>
-                      <th>Sugestão</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {cargosSemFuncao.map((c) => (
-                      <tr key={`${c.filialId ?? c.filial}:${c.chave}`}>
-                        <td>{c.filial || <span className="muted">—</span>}</td>
-                        <td>
-                          <strong>{c.nome}</strong>
-                        </td>
-                        <td>
-                          {c.variacoes.length > 1 ? (
-                            c.variacoes.map((v) => `${v.grafia} (${v.linhas})`).join(", ")
-                          ) : (
-                            <span className="muted">—</span>
-                          )}
-                        </td>
-                        <td>
-                          {c.cbo2002.length === 0 ? (
-                            <span className="muted">—</span>
-                          ) : (
-                            c.cbo2002.join(", ")
-                          )}
-                          {c.cbo2002.length > 1 && (
-                            <div className="import-row-warning">CBO diferente entre as linhas: confira</div>
-                          )}
-                        </td>
-                        <td>{c.pessoas}</td>
-                        <td>
-                          {c.sugestoes.length > 0 ? (
-                            c.sugestoes.join("; ")
-                          ) : (
-                            <span className="muted">—</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
+            <CargosSemFuncaoBloco
+              cargos={cargosSemFuncao}
+              funcoes={funcoes}
+              podeCriar={criaFuncoes}
+              onCriado={async (resumo) => {
+                setEstruturaCriada(resumo);
+                const d = await fetchJobRoles();
+                setFuncoes(d.job_roles);
+                setReconferir(true);
+              }}
+            />
           )}
           <div className="data-table-wrap">
             <table className="data-table">

@@ -32,7 +32,7 @@ function cpf(): string {
   return d.join("");
 }
 
-function linha(cod: string, cargo: string, cbo2002: string): string[] {
+function linha(cod: string, cargo: string, cbo2002: string, cbo94 = "0.11-05"): string[] {
   seq += 1;
   const valores: Record<string, string> = {
     "Cód. Empresa": cod,
@@ -43,7 +43,7 @@ function linha(cod: string, cargo: string, cbo2002: string): string[] {
     "Data Nasc.": "30827",
     Admissão: "43270",
     Cargo: cargo,
-    "CBO 94": "0.11-05",
+    "CBO 94": cbo94,
     "CBO 2002": cbo2002,
   };
   return CABECALHO_DA_FOLHA.map((c) => valores[c] ?? "");
@@ -156,5 +156,33 @@ describe("o nome da função criada (D6-2)", () => {
     expect(nomeDeFuncao("LIDER AUX ADMINISTRATIVO RH")).toBe("Lider Aux Administrativo Rh");
     expect(nomeDeFuncao("  auxiliar   de limpeza ")).toBe("Auxiliar de Limpeza");
     expect(nomeDeFuncao("DE MANUTENCAO")).toBe("De Manutencao");
+  });
+});
+
+describe("o CBO 94 padrão da folha (D6-3)", () => {
+  it("o mesmo CBO 94 para CBO 2002 diferentes não vai para função nenhuma, e a prévia avisa", () => {
+    const lido = ler(
+      [
+        linha("0682", "CAIXA", "4211-25"),
+        linha("0682", "REPOSITOR", "5211-25"),
+      ],
+      [{ id: "f-rep", name: "Repositor", establishment: { id: LOJA.id, name: LOJA.name } }],
+    );
+    expect(lido.avisoCbo94).toBe('O CBO 94 "0.11-05" aparece para cargos diferentes e não foi usado.');
+    expect(lido.rows.map((r) => r.job_role_cbo94)).toEqual([undefined]);
+    expect(lido.cargosSemFuncao[0]!.cbo94).toBeNull();
+  });
+
+  it("CBO 94 coerente (um para um CBO 2002) segue: vai na linha e na função criada", () => {
+    const lido = ler(
+      [
+        linha("0682", "CAIXA", "4211-25", "4-22.15"),
+        linha("0682", "REPOSITOR", "5211-25", "4-12.10"),
+      ],
+      [{ id: "f-rep", name: "Repositor", establishment: { id: LOJA.id, name: LOJA.name } }],
+    );
+    expect(lido.avisoCbo94).toBeUndefined();
+    expect(lido.rows.map((r) => r.job_role_cbo94)).toEqual(["4-12.10"]);
+    expect(lido.cargosSemFuncao[0]!.cbo94).toBe("4-22.15");
   });
 });

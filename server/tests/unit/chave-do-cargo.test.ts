@@ -75,6 +75,19 @@ describe("a planilha casa o cargo pela chave, dentro da filial", () => {
     ]);
   });
 
+  it("o apelido casa quando nenhuma função casa, e só na filial dele", () => {
+    const caixa = { ...f("f-caixa", "Caixa", LOJA), aliases: [{ chave: "com op caixo" }] };
+    const lido = ler([caixa], "Ana;COM OP CAIXA;Loja\nBia;COM OP CAIXA;AG");
+    expect(lido.rows.map((r) => r.job_role_id)).toEqual(["f-caixa"]);
+    expect(lido.problems).toEqual(['Linha 3: função "COM OP CAIXA" não existe na filial "AG". Veja Cargos sem função, acima.']);
+  });
+
+  it("a função ganha do apelido: com a função Com Op Caixa e o apelido para Caixa, casa a função", () => {
+    const caixa = { ...f("f-caixa", "Caixa", LOJA), aliases: [{ chave: "com op caixo" }] };
+    const lido = ler([caixa, f("f-com", "Com Op Caixa", LOJA)], "Ana;COM OP CAIXA;Loja");
+    expect(lido.rows.map((r) => r.job_role_id)).toEqual(["f-com"]);
+  });
+
   it("a mesma função em outra filial não atrapalha: casa a da filial da linha", () => {
     const lido = ler([f("f-loja", "Repositor", LOJA), f("f-ag", "Repositora", AG)], "Ana;REPOSITORA;AG");
     expect(lido.rows.map((r) => r.job_role_id)).toEqual(["f-ag"]);

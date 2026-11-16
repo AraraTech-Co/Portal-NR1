@@ -33,6 +33,8 @@ export type JobRole = {
   /** Para não casar função pelo nome na empresa inteira. [CB-6] */
   sector_name?: string;
   establishment?: { id: string; name: string };
+  /** Os cargos da folha juntados a esta função (chave do cargo). [C6-4] */
+  aliases?: { id: string; chave: string }[];
 };
 
 export type Activity = {

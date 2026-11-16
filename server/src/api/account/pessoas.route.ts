@@ -2,6 +2,7 @@ import { Router } from "express";
 import { verifyModule } from "../../model/lib/Auth";
 import people from "../../controller/PeopleAccessController";
 import peopleImport from "../../controller/PeopleImportController";
+import estrutura from "../../controller/PayrollStructureController";
 import activation from "../../controller/AccountActivationController";
 import managedUnits from "../../controller/ManagedUnitsController";
 
@@ -34,6 +35,16 @@ router.put("/api/pessoas-acessos/:userId/unidades", conta, (req, res) =>
 /** Cadastro em massa a partir de planilha colada. [S1-A] */
 router.post("/api/pessoas-acessos/importar", conta, (req, res) =>
   peopleImport.importPeople(req, res),
+);
+/*
+  Criar as funções que faltam a partir da prévia: mexe na Operação e no
+  cadastro, então pede as duas — pela matriz, Master e Dono. [C6-3]
+*/
+router.post(
+  "/api/pessoas-acessos/importar/estrutura",
+  verifyModule("operacao", "write"),
+  conta,
+  (req, res) => estrutura.criar(req, res),
 );
 
 /*

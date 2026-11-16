@@ -1,5 +1,6 @@
 import { Router } from "express";
 import workplace from "../../controller/WorkplaceController";
+import estrutura from "../../controller/PayrollStructureController";
 import { moduleRead, moduleWrite } from "./middleware";
 
 const read = moduleRead("operacao");
@@ -39,6 +40,10 @@ router.get("/api/job-roles", read, (req, res) =>
 );
 router.post("/api/job-roles", write, (req, res) =>
   workplace.createJobRole(req, res),
+);
+/* Remover o apelido: a mesma regra de quem junta, Operação e Conta. [C6-4] */
+router.delete("/api/job-roles/:id/apelidos/:aliasId", write, moduleWrite("conta"), (req, res) =>
+  estrutura.removerApelido(req, res),
 );
 router.patch("/api/job-roles/:id", write, (req, res) =>
   workplace.updateJobRole(req, res),
