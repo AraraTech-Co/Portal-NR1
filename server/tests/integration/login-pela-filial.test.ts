@@ -298,6 +298,49 @@ describe("o que cada escolha aceita (R3)", () => {
   });
 });
 
+describe("o login e a matrícula na mesma filial", () => {
+  it("login igual à matrícula (o do convite): uma conta só, e a trava é da conta", async () => {
+    const MATRICULA = `11${NUM}`;
+    const conv = await pessoa("convite", filialA, MATRICULA);
+    await prisma.user.update({ where: { id: conv.userId }, data: { login: MATRICULA } });
+    const daFilial = identifierKey(`filial:${filialA}:${canonicalRegistration(MATRICULA)}`);
+    const chaves = [accountKey(conv.userId), daFilial];
+    await prisma.authLockout.deleteMany({ where: { key: { in: chaves } } });
+
+    const certa = await entrar(MATRICULA, filialA);
+    expect(certa.status, JSON.stringify(certa.body)).toBe(200);
+    expect(certa.body.user.login).toBe(MATRICULA);
+
+    const errada = await entrar(MATRICULA, filialA, "senha-errada-1");
+    expect(errada.status).toBe(401);
+    expect(errada.body).toEqual(NEGADO_LOGIN);
+    const travas = await prisma.authLockout.findMany({ where: { key: { in: chaves } }, select: { key: true, failures: true } });
+    expect(travas, "a falha conta na conta, não na filial").toEqual([{ key: accountKey(conv.userId), failures: 1 }]);
+    await prisma.authLockout.deleteMany({ where: { key: { in: chaves } } });
+  });
+
+  it("o login de uma pessoa igual à matrícula de outra: cada uma entra com a própria senha", async () => {
+    const MATRICULA_Y = `12${NUM}`;
+    const y = await pessoa("y", filialA, MATRICULA_Y);
+    const x = await pessoa("x", filialA, `13${NUM}`);
+    const SENHA_X = `${SENHA}-x`;
+    await prisma.user.update({
+      where: { id: x.userId },
+      data: { login: MATRICULA_Y, passwordHash: await bcrypt.hash(SENHA_X, 4) },
+    });
+
+    const comoY = await entrar(MATRICULA_Y, filialA);
+    expect(comoY.status, JSON.stringify(comoY.body)).toBe(200);
+    expect(comoY.body.user.login).toBe(y.login);
+    const comoX = await entrar(MATRICULA_Y, filialA, SENHA_X);
+    expect(comoX.status, JSON.stringify(comoX.body)).toBe(200);
+    expect(comoX.body.user.login).toBe(MATRICULA_Y);
+    const errada = await entrar(MATRICULA_Y, filialA, "senha-errada-2");
+    expect(errada.status).toBe(401);
+    expect(errada.body).toEqual(NEGADO_LOGIN);
+  });
+});
+
 describe("o tempo de resposta não diz quem existe (R1)", () => {
   it("sem ninguém para comparar, o bcrypt roda mesmo assim", async () => {
     const inativa = await pessoa("inativa", filialA, `8${NUM}`);
