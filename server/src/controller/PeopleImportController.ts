@@ -446,9 +446,8 @@ class PeopleImportController {
       }
       /*
         O formulário cadastra uma pessoa, e ela tem de conseguir entrar: o
-        primeiro acesso pede a data de nascimento com o CPF ou a matrícula,
-        que são também o que reconhece quem já está no portal. Decisão do
-        Léo em 16/11. A planilha segue como está.
+        primeiro acesso pede a matrícula, o CPF e a data de nascimento, os
+        três na mesma ficha. A planilha segue como está.
       */
       if (via === "formulario") {
         if (linhas.length > 1) {
@@ -460,8 +459,12 @@ class PeopleImportController {
           res.status(400).json({ message: "Informe a data de nascimento: é com ela que a pessoa faz o primeiro acesso." });
           return;
         }
-        if (!texto(pessoa.tax_id) && !texto(pessoa.registration)) {
-          res.status(400).json({ message: "Informe o CPF ou a matrícula: é por eles que a pessoa entra no portal." });
+        if (!texto(pessoa.tax_id)) {
+          res.status(400).json({ message: "Informe o CPF: o primeiro acesso pede matrícula, CPF e data de nascimento." });
+          return;
+        }
+        if (!texto(pessoa.registration)) {
+          res.status(400).json({ message: "Informe a matrícula: o primeiro acesso pede matrícula, CPF e data de nascimento." });
           return;
         }
       }

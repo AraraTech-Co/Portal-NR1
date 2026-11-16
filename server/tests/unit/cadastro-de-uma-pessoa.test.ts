@@ -11,15 +11,19 @@ import {
 } from "../../../client/src/lib/cadastro-de-uma-pessoa";
 
 /** O formulário "Cadastrar uma pessoa" de Conta e usuários. */
-const ok = { ...FORMULARIO_VAZIO, nome: "Ana", nascimento: "1990-05-10", cpf: "52998224725" };
+const ok = { ...FORMULARIO_VAZIO, nome: "Ana", nascimento: "1990-05-10", cpf: "52998224725", matricula: "1023" };
 
 describe("o que o formulário exige", () => {
-  it("nome, nascimento e CPF ou matrícula", () => {
+  it("nome, nascimento, CPF e matrícula: o primeiro acesso pede os três últimos", () => {
     expect(faltaNoFormulario(ok, 1)).toBeNull();
     expect(faltaNoFormulario({ ...ok, nome: " " }, 1)).toBe("Informe o nome.");
     expect(faltaNoFormulario({ ...ok, nascimento: "" }, 1)).toMatch(/^Informe a data de nascimento/);
-    expect(faltaNoFormulario({ ...ok, cpf: "" }, 1)).toMatch(/^Informe o CPF ou a matrícula/);
-    expect(faltaNoFormulario({ ...ok, cpf: "", matricula: "1023" }, 1)).toBeNull();
+    expect(faltaNoFormulario({ ...ok, cpf: " " }, 1)).toBe(
+      "Informe o CPF: o primeiro acesso pede matrícula, CPF e data de nascimento.",
+    );
+    expect(faltaNoFormulario({ ...ok, matricula: " " }, 1)).toBe(
+      "Informe a matrícula: o primeiro acesso pede matrícula, CPF e data de nascimento.",
+    );
   });
 
   it("a filial com mais de uma na empresa, e a contratada para terceirizado", () => {
@@ -85,6 +89,11 @@ describe("a tela", () => {
   it("a mensagem final usa o login da resposta do cadastro", () => {
     expect(tela).toMatch(/const r = await cadastrarUmaPessoa\(pessoaDoFormulario\(form\), false\);\s*const resultado = r\.results\[0\]!;/);
     expect(tela).toMatch(/Login: \$\{resultado\.login\}/);
+  });
+
+  it("CPF e matrícula obrigatórios também no campo da tela", () => {
+    expect(tela).toMatch(/onChange=\{\(e\) => mudar\("cpf", e\.target\.value\)\} inputMode="numeric" required \/>/);
+    expect(tela).toMatch(/onChange=\{\(e\) => mudar\("matricula", e\.target\.value\)\} required \/>/);
   });
 
   it("as funções e os papéis vêm filtrados, e a tela está em Conta e usuários", () => {
