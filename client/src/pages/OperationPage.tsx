@@ -31,7 +31,8 @@ import { CboDaFuncao } from "./CboDaFuncao";
 import "@/components/form.css";
 import "./operation.css";
 import { LoadingState } from "@/components/LoadingState";
-import { ActivityCard, ApelidosDaFuncao, EstablishmentCard, NameActions } from "./OperationEditors";
+import { ActivityCard, EstablishmentCard, NameActions } from "./OperationEditors";
+import { ApelidosDaFuncao } from "./ApelidosDaFuncao";
 
 function Column({
   title,

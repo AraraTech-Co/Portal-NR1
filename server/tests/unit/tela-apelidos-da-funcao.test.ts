@@ -13,7 +13,8 @@ const ler = (arquivo: string) =>
 
 describe("os apelidos na função", () => {
   const pagina = ler("pages/OperationPage.tsx");
-  const editores = ler("pages/OperationEditors.tsx");
+  /* Fora do OperationEditors, onde toda pergunta de arquivar vem depois da conferência. [B3-1-C] */
+  const editores = ler("pages/ApelidosDaFuncao.tsx");
   const api = ler("api/operation.ts");
 
   it("a lista mostra a grafia da folha, não a chave", () => {
