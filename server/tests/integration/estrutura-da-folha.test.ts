@@ -90,14 +90,14 @@ afterAll(async () => {
   if (!orgId) return;
   await prisma.auditEvent.deleteMany({ where: { organizationId: orgId } });
   await prisma.jobRoleAlias.deleteMany({ where: { organizationId: orgId } });
-  await prisma.accountMembership.deleteMany({ where: { accountId: contaId } });
-  await prisma.membership.deleteMany({ where: { organizationId: orgId } });
+  await prisma.accountMembership.deleteMany({ where: { userId: { in: usuarios } } });
+  await prisma.membership.deleteMany({ where: { organizationId: { in: [orgId, outraOrg].filter(Boolean) } } });
   await prisma.token.deleteMany({ where: { userId: { in: usuarios } } });
   await prisma.user.deleteMany({ where: { id: { in: usuarios } } });
   await prisma.jobRole.deleteMany({ where: { organizationId: orgId } });
   await prisma.sector.deleteMany({ where: { organizationId: orgId } });
   await prisma.establishment.deleteMany({ where: { organizationId: { in: [orgId, outraOrg].filter(Boolean) } } });
-  await prisma.account.deleteMany({ where: { id: contaId } });
+  await prisma.account.deleteMany({ where: { organizationId: { in: [orgId, outraOrg].filter(Boolean) } } });
   await prisma.organization.deleteMany({ where: { id: { in: [orgId, outraOrg].filter(Boolean) } } });
 });
 
@@ -332,6 +332,25 @@ describe("dois cliques ao mesmo tempo", () => {
 });
 
 describe("o apelido na lista de funções e a remoção", () => {
+  it("o Master de outra empresa não remove o apelido desta: 404, e o apelido fica", async () => {
+    const apelido = await prisma.jobRoleAlias.create({
+      data: { organizationId: orgId, establishmentId: loja, chave: "caixa fora", grafia: "CAIXA FORA", jobRoleId: caixa, createdById: usuarios[0]! },
+    });
+    const contaDeFora = await prisma.account.create({ data: { organizationId: outraOrg, name: `Conta de fora ${SUFIXO}` } });
+    const login = `estr.fora.${SUFIXO}`;
+    const user = await prisma.user.create({ data: { login, name: `Fora ${SUFIXO}`, passwordHash: await bcrypt.hash(SENHA, 4) } });
+    usuarios.push(user.id);
+    await prisma.membership.create({ data: { userId: user.id, organizationId: outraOrg, role: Role.MASTER } });
+    await prisma.accountMembership.create({ data: { accountId: contaDeFora.id, userId: user.id, role: AccountRole.USER } });
+    const entrada = await request(app).post("/api/auth").send({ login, password: SENHA });
+    expect(entrada.status, JSON.stringify(entrada.body)).toBe(200);
+
+    const res = await request(app).delete(`/api/job-roles/${caixa}/apelidos/${apelido.id}`).set(as(entrada.body.token));
+    expect(res.status).toBe(404);
+    expect(await prisma.jobRoleAlias.count({ where: { id: apelido.id } })).toBe(1);
+    await prisma.jobRoleAlias.delete({ where: { id: apelido.id } });
+  });
+
   it("GET /api/job-roles traz os apelidos; o SST não remove; o Master remove", async () => {
     const lista = await request(app).get("/api/job-roles").set(as(token.Mia!));
     const doCaixa = (lista.body.job_roles as { id: string; aliases: { id: string; chave: string; grafia: string }[] }[]).find(
