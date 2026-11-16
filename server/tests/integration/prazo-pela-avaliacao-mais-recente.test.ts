@@ -52,7 +52,7 @@ async function risco(nome: string) {
   const est = (
     await request(app)
       .post("/api/establishments")
-      .set(as(sst))
+      .set(as(owner))
       .send({ name: `${nome} ${SUFIXO}` })
   ).body.establishment;
   const setor = (

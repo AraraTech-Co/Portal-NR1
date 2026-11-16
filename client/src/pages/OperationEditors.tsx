@@ -25,10 +25,13 @@ function formatCnpj(value: string | null): string | null {
 export function EstablishmentCard({
   establishment,
   canEdit,
+  editaCadastro,
   onChanged,
 }: {
   establishment: Establishment;
   canEdit: boolean;
+  /** CNPJ, razão social, código da folha, endereço e arquivar: só Master e Dono. [C6-11] */
+  editaCadastro: boolean;
   onChanged: () => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
@@ -57,17 +60,23 @@ export function EstablishmentCard({
     setError(null);
     try {
       const originalCnpj = formatCnpj(establishment.taxId) ?? "";
+      /* Quem não cuida do cadastro da filial só troca o nome. [C6-11] */
+      const cadastrais = editaCadastro
+        ? {
+            // CNPJ só vai quando mudou: o que veio da carga pode estar fora do padrão.
+            ...(cnpj.trim() !== originalCnpj ? { tax_id: cnpj.trim() || null } : {}),
+            ...(address.trim() !== (establishment.address ?? "") ? { address: address.trim() || null } : {}),
+            ...(legalName.trim() !== (establishment.legalName ?? "")
+              ? { legal_name: legalName.trim() || null }
+              : {}),
+            ...(payrollCode.trim() !== (establishment.payrollCode ?? "")
+              ? { payroll_code: payrollCode.trim() || null }
+              : {}),
+          }
+        : {};
       await updateEstablishment(establishment.id, {
         ...(name.trim() !== establishment.name ? { name: name.trim() } : {}),
-        // CNPJ só vai quando mudou: o que veio da carga pode estar fora do padrão.
-        ...(cnpj.trim() !== originalCnpj ? { tax_id: cnpj.trim() || null } : {}),
-        ...(address.trim() !== (establishment.address ?? "") ? { address: address.trim() || null } : {}),
-        ...(legalName.trim() !== (establishment.legalName ?? "")
-          ? { legal_name: legalName.trim() || null }
-          : {}),
-        ...(payrollCode.trim() !== (establishment.payrollCode ?? "")
-          ? { payroll_code: payrollCode.trim() || null }
-          : {}),
+        ...cadastrais,
       });
       setEditing(false);
       await onChanged();
@@ -95,7 +104,11 @@ export function EstablishmentCard({
       {editing && (
         <Dialog
           title={`Editar ${establishment.name}`}
-          description="O endereço vai no PGR e na ordem de serviço. Com razão social e CNPJ, os documentos desta filial saem em nome dela."
+          description={
+            editaCadastro
+              ? "O endereço vai no PGR e na ordem de serviço. Com razão social e CNPJ, os documentos desta filial saem em nome dela."
+              : "O CNPJ, a razão social, o código da folha e o endereço da filial são mudados pelo Master ou pelo Dono."
+          }
           onClose={() => setEditing(false)}
         >
           <form className="form-grid" onSubmit={onSave}>
@@ -103,37 +116,41 @@ export function EstablishmentCard({
               Nome
               <input value={name} onChange={(e) => setName(e.target.value)} required />
             </label>
-            <label className="form-field">
-              CNPJ
-              <input value={cnpj} onChange={(e) => setCnpj(e.target.value)} inputMode="numeric" placeholder="00.000.000/0000-00" />
-            </label>
-            <label className="form-field">
-              Razão social
-              <input
-                value={legalName}
-                onChange={(e) => setLegalName(e.target.value)}
-                maxLength={200}
-                placeholder="Como no cartão CNPJ desta filial"
-              />
-              <span className="form-hint">
-                Em branco, o PGR e a ordem de serviço desta filial saem com o
-                nome da empresa. Exige o CNPJ da filial.
-              </span>
-            </label>
-            <label className="form-field">
-              Código da folha
-              <input
-                value={payrollCode}
-                onChange={(e) => setPayrollCode(e.target.value)}
-                maxLength={20}
-                placeholder="0682"
-              />
-              <span className="form-hint">O número que a folha de pagamento imprime para esta filial.</span>
-            </label>
-            <label className="form-field">
-              Endereço
-              <textarea value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Rua, número, bairro, cidade/UF" />
-            </label>
+            {editaCadastro && (
+              <>
+                <label className="form-field">
+                  CNPJ
+                  <input value={cnpj} onChange={(e) => setCnpj(e.target.value)} inputMode="numeric" placeholder="00.000.000/0000-00" />
+                </label>
+                <label className="form-field">
+                  Razão social
+                  <input
+                    value={legalName}
+                    onChange={(e) => setLegalName(e.target.value)}
+                    maxLength={200}
+                    placeholder="Como no cartão CNPJ desta filial"
+                  />
+                  <span className="form-hint">
+                    Em branco, o PGR e a ordem de serviço desta filial saem com o
+                    nome da empresa. Exige o CNPJ da filial.
+                  </span>
+                </label>
+                <label className="form-field">
+                  Código da folha
+                  <input
+                    value={payrollCode}
+                    onChange={(e) => setPayrollCode(e.target.value)}
+                    maxLength={20}
+                    placeholder="0682"
+                  />
+                  <span className="form-hint">O número que a folha de pagamento imprime para esta filial.</span>
+                </label>
+                <label className="form-field">
+                  Endereço
+                  <textarea value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Rua, número, bairro, cidade/UF" />
+                </label>
+              </>
+            )}
             {error && <p className="form-error" role="alert">{error}</p>}
             <div className="form-actions">
               <Button type="submit" disabled={saving}>
@@ -170,9 +187,11 @@ export function EstablishmentCard({
           <Button type="button" variant="secondary" size="compact" onClick={start}>
             Editar
           </Button>
-          <Button type="button" variant="ghost" size="compact" onClick={() => void onArchive()}>
-            Arquivar
-          </Button>
+          {editaCadastro && (
+            <Button type="button" variant="ghost" size="compact" onClick={() => void onArchive()}>
+              Arquivar
+            </Button>
+          )}
         </div>
       )}
     </div>

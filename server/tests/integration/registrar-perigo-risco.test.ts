@@ -22,16 +22,19 @@ const as = (token: string) => ({ Authorization: `Bearer ${token}` });
 
 let app: Express;
 let sst: { token: string; user: { id: string } };
+/** Cria a filial do teste: só Master e Dono criam filial. [C6-11] */
+let dona: typeof sst;
 let colaborador: string;
 let activityId: string;
 
 beforeAll(async () => {
   app = createApp();
   sst = await entrar(app, "teste.sst");
+  dona = await entrar(app, "teste.owner");
   colaborador = (await entrar(app, "teste.colaborador")).token;
 
   const est = (
-    await request(app).post("/api/establishments").set(as(sst.token)).send({ name: `Perigos ${SUFIXO}` })
+    await request(app).post("/api/establishments").set(as(dona.token)).send({ name: `Perigos ${SUFIXO}` })
   ).body.establishment;
   const sector = (
     await request(app).post("/api/sectors").set(as(sst.token)).send({ establishment_id: est.id, name: "Expedição" })

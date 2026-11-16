@@ -139,6 +139,13 @@ export function canCopyBetweenUnits(permission: string | undefined): boolean {
   return UNIT_COPY_ROLES.includes(permission ?? "");
 }
 
+/** Criar, arquivar e mudar os dados cadastrais da filial — espelho do servidor (`cuidaDaFilial`). [C6-11] */
+const ESTABLISHMENT_ROLES: readonly string[] = ["master", "owner"];
+
+export function cuidaDaFilial(permission: string | undefined): boolean {
+  return ESTABLISHMENT_ROLES.includes(permission ?? "");
+}
+
 /** Painel da fiscalização — espelho do servidor (`INSPECTION_PANEL_ROLES`). [C4-13] */
 const INSPECTION_PANEL_ROLES: readonly string[] = ["master", "owner", "sst", "rh", "fiscal"];
 

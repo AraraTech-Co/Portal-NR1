@@ -52,7 +52,7 @@ async function filialComRisco(nome: string, cnpj: string | null) {
   const est = (
     await request(app)
       .post("/api/establishments")
-      .set(as(sst))
+      .set(as(owner))
       .send({ name: `${nome} ${SUFIXO}`, ...(cnpj ? { tax_id: cnpj } : {}) })
   ).body.establishment;
   const sector = (
@@ -101,7 +101,8 @@ async function filialComRisco(nome: string, cnpj: string | null) {
 }
 
 const editarFilial = (id: string, body: Record<string, unknown>) =>
-  request(app).patch(`/api/establishments/${id}`).set(as(sst)).send(body);
+  /* CNPJ, razão social e código da folha: só Master e Dono. [C6-11] */
+  request(app).patch(`/api/establishments/${id}`).set(as(owner)).send(body);
 
 /* Status conferido aqui: um 407 do proxy local aparece como 407, não como TypeError. */
 const emitirPgr = async (establishment_id: string | null) => {

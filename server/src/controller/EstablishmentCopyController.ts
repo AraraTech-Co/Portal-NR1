@@ -7,6 +7,7 @@ import { writeAudit } from "../helper/audit";
 import { canCopyBetweenUnits } from "../helper/module-access";
 import { notifyMany } from "../helper/notify";
 import type { AuthRequest } from "../types/auth";
+import { chaveDoCargo } from "../helper/chave-do-cargo";
 
 /**
  * Cópia entre filiais. [C3-8]
@@ -158,6 +159,54 @@ function planejarNivel(
 
 const vazio = (): PlanoNivel => ({ criar: [], atualizar: [], conflitos: [], iguais: 0 });
 
+/** "A e B", "A, B e C". */
+function lista(nomes: string[]): string {
+  return nomes.length < 2 ? nomes.join("") : `${nomes.slice(0, -1).join(", ")} e ${nomes[nomes.length - 1]}`;
+}
+
+/**
+ * O que a cópia criaria e o destino já tem com o mesmo nome equivalente
+ * (a chave da C6-1): não cria de novo, e os filhos se ligam ao que existe,
+ * sem trocar nome nem CBO. Duas equivalentes no destino: a cópia não escolhe
+ * uma sozinha, e o item fica de fora. [C6-6]
+ */
+function reaproveitarPorChave(
+  plano: PlanoNivel & { mapa: Map<string, string> },
+  noDestino: { id: string; name: string }[],
+  deFora: Set<string>,
+  motivos: string[],
+  equivalentes: (nome: string, nomes: string) => string,
+): Set<string> {
+  const porChave = new Map<string, { id: string; name: string }[]>();
+  for (const d of noDestino) {
+    const chave = chaveDoCargo(d.name);
+    porChave.set(chave, [...(porChave.get(chave) ?? []), d]);
+  }
+  const reaproveitados = new Set<string>();
+  plano.criar = plano.criar.filter((o) => {
+    const iguais = porChave.get(chaveDoCargo(String(o.name))) ?? [];
+    if (iguais.length === 1) {
+      plano.mapa.set(o.id, iguais[0]!.id);
+      reaproveitados.add(iguais[0]!.id);
+      return false;
+    }
+    if (iguais.length > 1) {
+      deFora.add(o.id);
+      motivos.push(equivalentes(String(o.name), lista(iguais.map((d) => d.name))));
+      return false;
+    }
+    return true;
+  });
+  return reaproveitados;
+}
+
+/** A mesma exigência: pelo treinamento ligado; sem ele, pelo tipo e pelo nome. [C6-6] */
+function chaveDaExigencia(jobRoleId: string, e: Record<string, unknown>): string {
+  return e.trainingId
+    ? `${jobRoleId}|t:${String(e.trainingId)}`
+    : `${jobRoleId}|k:${String(e.kind)}:${chaveDoCargo(String(e.name ?? ""))}`;
+}
+
 /**
  * O plano da cópia, nível a nível. Os ids novos são gerados aqui, para que
  * o filho saiba o id do pai antes de o pai existir (`createMany` por nível).
@@ -166,6 +215,9 @@ async function planejar(db: Db, origemId: string, destinoId: string) {
   const ativo = { archivedAt: null } as const;
   const copia = { copiedFromId: true, copiedAt: true, updatedAt: true } as const;
   const novoId = new Map<string, string>();
+  /** Itens da origem que ficam de fora, e os filhos deles com eles. [C6-6] */
+  const deFora = new Set<string>();
+  const motivos: string[] = [];
   const idNoDestino = (origem: string | null | undefined): string | undefined =>
     origem ? novoId.get(origem) : undefined;
 
@@ -175,11 +227,19 @@ async function planejar(db: Db, origemId: string, destinoId: string) {
     where: { establishmentId: destinoId, copiedFromId: { in: setoresO.map((s) => s.id) } },
   });
   const setores = planejarNivel("setores", setoresO, setoresD as Copiada[], (o) => o.id, (d) => d.copiedFromId!);
-  for (const o of setoresO) novoId.set(o.id, setores.mapa.get(o.id) ?? randomUUID());
+  const setoresQueJaExistiam = reaproveitarPorChave(
+    setores,
+    await db.sector.findMany({ where: { establishmentId: destinoId, ...ativo }, select: { id: true, name: true } }),
+    deFora,
+    motivos,
+    (nome, nomes) => `Há dois setores equivalentes a "${nome}" nesta filial (${nomes}). Arquive um em Operação e copie de novo.`,
+  );
+  const setoresCopiados = setoresO.filter((s) => !deFora.has(s.id));
+  for (const o of setoresCopiados) novoId.set(o.id, setores.mapa.get(o.id) ?? randomUUID());
 
   /* Funções, pelo setor. */
   const funcoesO = await db.jobRole.findMany({
-    where: { sectorId: { in: setoresO.map((s) => s.id) }, ...ativo },
+    where: { sectorId: { in: setoresCopiados.map((s) => s.id) }, ...ativo },
     orderBy: { createdAt: "asc" },
   });
   const funcoesD = await db.jobRole.findMany({
@@ -192,11 +252,24 @@ async function planejar(db: Db, origemId: string, destinoId: string) {
     (o) => `${idNoDestino(o.sectorId as string)}:${o.id}`,
     (d) => `${d.sectorId}:${d.copiedFromId}`,
   );
-  for (const o of funcoesO) novoId.set(o.id, funcoes.mapa.get(o.id) ?? randomUUID());
+  /* A função equivalente vale em qualquer setor da filial, como na planilha. */
+  const funcoesQueJaExistiam = reaproveitarPorChave(
+    funcoes,
+    await db.jobRole.findMany({
+      where: { sector: { establishmentId: destinoId, ...ativo }, ...ativo },
+      select: { id: true, name: true },
+    }),
+    deFora,
+    motivos,
+    (nome, nomes) =>
+      `Há duas funções equivalentes a "${nome}" nesta filial (${nomes}). Arquive uma em Operação e copie de novo.`,
+  );
+  const funcoesCopiadas = funcoesO.filter((f) => !deFora.has(f.id));
+  for (const o of funcoesCopiadas) novoId.set(o.id, funcoes.mapa.get(o.id) ?? randomUUID());
 
   /* Atividades, pelo setor. */
   const atividadesO = await db.activity.findMany({
-    where: { establishmentId: origemId, sectorId: { in: setoresO.map((s) => s.id) }, ...ativo },
+    where: { establishmentId: origemId, sectorId: { in: setoresCopiados.map((s) => s.id) }, ...ativo },
     orderBy: { createdAt: "asc" },
   });
   const atividadesD = await db.activity.findMany({
@@ -215,7 +288,7 @@ async function planejar(db: Db, origemId: string, destinoId: string) {
   const vinculosO = await db.activityJobRole.findMany({
     where: {
       activityId: { in: atividadesO.map((a) => a.id) },
-      jobRoleId: { in: funcoesO.map((f) => f.id) },
+      jobRoleId: { in: funcoesCopiadas.map((f) => f.id) },
     },
   });
   const vinculosD = await db.activityJobRole.findMany({
@@ -309,7 +382,7 @@ async function planejar(db: Db, origemId: string, destinoId: string) {
 
   /* Exigências de treinamento, pela função. */
   const exigenciasO = await db.jobRoleRequirement.findMany({
-    where: { jobRoleId: { in: funcoesO.map((f) => f.id) } },
+    where: { jobRoleId: { in: funcoesCopiadas.map((f) => f.id) } },
     orderBy: { createdAt: "asc" },
   });
   const exigenciasD = await db.jobRoleRequirement.findMany({
@@ -325,6 +398,32 @@ async function planejar(db: Db, origemId: string, destinoId: string) {
     (o) => `${idNoDestino(o.jobRoleId as string)}:${o.id}`,
     (d) => `${d.jobRoleId}:${d.copiedFromId}`,
   );
+  /*
+    A exigência que a função do destino já tem não entra de novo, e nada do
+    que ela já tem muda (validade, descrição). Quem está na função passa a
+    ficar pendente só da que faltava. Vale também entre duas exigências da
+    origem que caem na mesma função. [C6-6, D6-8]
+  */
+  const jaTem = new Set(
+    (
+      await db.jobRoleRequirement.findMany({
+        where: { jobRoleId: { in: [...new Set(funcoesCopiadas.map((f) => idNoDestino(f.id)!))] } },
+        select: { jobRoleId: true, trainingId: true, kind: true, name: true },
+      })
+    ).map((e) => chaveDaExigencia(e.jobRoleId, e)),
+  );
+  let exigenciasAcrescentadas = 0;
+  exigencias.criar = exigencias.criar.filter((o) => {
+    const destino = idNoDestino(o.jobRoleId as string)!;
+    const chave = chaveDaExigencia(destino, o);
+    if (jaTem.has(chave)) {
+      exigencias.iguais++;
+      return false;
+    }
+    jaTem.add(chave);
+    if (funcoesQueJaExistiam.has(destino)) exigenciasAcrescentadas++;
+    return true;
+  });
 
   return {
     novoId,
@@ -332,6 +431,9 @@ async function planejar(db: Db, origemId: string, destinoId: string) {
     niveis: { setores, funcoes, atividades, perigos, riscos, medidas, exigencias },
     vinculos,
     avaliacoes,
+    jaExistia: { setores: setoresQueJaExistiam.size, funcoes: funcoesQueJaExistiam.size },
+    exigenciasAcrescentadas,
+    deFora: motivos,
   };
 }
 
@@ -347,7 +449,13 @@ function resumo(plano: Plano) {
   niveis.vinculos.criar = plano.vinculos.length;
   niveis.avaliacoes.criar = plano.avaliacoes.length;
   const conflitos = (Object.values(plano.niveis) as PlanoNivel[]).flatMap((p) => p.conflitos.map(([, , c]) => c));
-  return { niveis, conflitos };
+  return {
+    niveis,
+    conflitos,
+    ja_existia: plano.jaExistia,
+    exigencias_acrescentadas: plano.exigenciasAcrescentadas,
+    de_fora: plano.deFora,
+  };
 }
 
 async function filiais(orgId: string, origemId: unknown, destinoId: string) {
@@ -601,7 +709,14 @@ class EstablishmentCopyController {
               counts: contagem,
             },
           });
-          return { copia_id: registro.id, contagem, ignorados };
+          return {
+            copia_id: registro.id,
+            contagem,
+            ignorados,
+            ja_existia: plano.jaExistia,
+            exigencias_acrescentadas: plano.exigenciasAcrescentadas,
+            de_fora: plano.deFora,
+          };
         },
         { timeout: TIMEOUT_MS },
       );
@@ -613,7 +728,14 @@ class EstablishmentCopyController {
         entityType: "Establishment",
         entityId: destinoId,
         after: resultado.contagem,
-        context: { origem: origemId, copia_id: resultado.copia_id, conflitos_ignorados: resultado.ignorados.length },
+        context: {
+          origem: origemId,
+          copia_id: resultado.copia_id,
+          conflitos_ignorados: resultado.ignorados.length,
+          ja_existia: resultado.ja_existia,
+          exigencias_acrescentadas: resultado.exigencias_acrescentadas,
+          de_fora: resultado.de_fora.length,
+        },
       });
 
       /*

@@ -309,15 +309,28 @@ class HomeController {
       }
 
       if (cuida("inventario")) {
-        const rascunhos = await prisma.riskAssessment.count({
-          /* Inclui as copiadas de outra filial, que chegam em revisão. [C4-2] */
-          where: { organizationId: orgId, status: { in: [AssessmentStatus.DRAFT, AssessmentStatus.IN_REVIEW] } },
-        });
-        if (rascunhos > 0) {
+        /*
+          Inclui as copiadas de outra filial, que chegam em revisão. [C4-2]
+          Separadas por quem avaliou: quem avaliou não valida, então as
+          suas esperam outra pessoa, e as dos outros são para você. [C6-13]
+        */
+        const aValidar = { organizationId: orgId, status: { in: [AssessmentStatus.DRAFT, AssessmentStatus.IN_REVIEW] } };
+        const suas = await prisma.riskAssessment.count({ where: { ...aValidar, assessorId: userId } });
+        const dosOutros = await prisma.riskAssessment.count({ where: { ...aValidar, assessorId: { not: userId } } });
+        if (suas > 0) {
           mesa.push({
-            id: "avaliacoes_rascunho",
-            label: "Avaliações de risco esperando validação de outra pessoa",
-            count: rascunhos,
+            id: "avaliacoes_suas",
+            label: "Avaliações suas esperando validação de outra pessoa",
+            count: suas,
+            link: "/inventario",
+            tone: "info",
+          });
+        }
+        if (dosOutros > 0) {
+          mesa.push({
+            id: "avaliacoes_para_validar",
+            label: "Avaliações de risco para você validar",
+            count: dosOutros,
             link: "/inventario",
             tone: "info",
           });

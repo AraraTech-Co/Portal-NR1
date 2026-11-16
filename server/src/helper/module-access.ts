@@ -240,6 +240,18 @@ export function canCopyBetweenUnits(roleKey: string): boolean {
 }
 
 /**
+ * Criar e arquivar filial, e mudar o CNPJ, a razão social, o código da folha
+ * e o endereço dela: só o Master e o Dono. Saem no PGR e na ordem de
+ * serviço, e o código da folha liga a planilha à filial. O nome e os
+ * feriados seguem com quem edita a Operação. Decisão D6-5. [C6-11]
+ */
+const ESTABLISHMENT_ROLES: readonly string[] = ["master", "owner"];
+
+export function cuidaDaFilial(roleKey: string): boolean {
+  return ESTABLISHMENT_ROLES.includes(normalizeRoleKey(roleKey));
+}
+
+/**
  * Os dados da planilha da folha (documentos, endereço, dependentes,
  * rescisão): Master, Dono e RH leem e editam os de todos; a própria pessoa
  * lê os seus, sem editar; ninguém mais. Decisão do Leonardo em 12/11/2026,

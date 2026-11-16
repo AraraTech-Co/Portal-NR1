@@ -23,6 +23,8 @@ const as = (token: string) => ({ Authorization: `Bearer ${token}` });
 
 let app: Express;
 let sst: { token: string; user: { id: string } };
+/** Cria a filial do teste: só Master e Dono criam filial. [C6-11] */
+let dona: typeof sst;
 let supervisor: { token: string; user: { id: string } };
 let colaborador: { token: string; user: { id: string } };
 let riskId: string;
@@ -30,7 +32,7 @@ let outroRiskId: string;
 
 async function novoRisco(nome: string) {
   const est = (
-    await request(app).post("/api/establishments").set(as(sst.token)).send({ name: `${nome} ${SUFIXO}` })
+    await request(app).post("/api/establishments").set(as(dona.token)).send({ name: `${nome} ${SUFIXO}` })
   ).body.establishment;
   const sector = (
     await request(app).post("/api/sectors").set(as(sst.token)).send({ establishment_id: est.id, name: "Linha" })
@@ -60,6 +62,7 @@ async function novoRisco(nome: string) {
 beforeAll(async () => {
   app = createApp();
   sst = await entrar(app, "teste.sst");
+  dona = await entrar(app, "teste.owner");
   supervisor = await entrar(app, "teste.supervisor");
   colaborador = await entrar(app, "teste.colaborador");
   riskId = await novoRisco("Alfa");

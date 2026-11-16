@@ -393,7 +393,7 @@ describe("o aviso de uma unidade alcança quem não tem função [CB-60]", () =>
 
     const unidade = await request(app)
       .post("/api/establishments")
-      .set(as(sst.token))
+      .set(as(master.token))
       .send({ name: `Unidade do aviso ${SUFIXO}` });
     expect(unidade.status, JSON.stringify(unidade.body)).toBe(201);
     unidades.push(unidade.body.establishment.id);

@@ -144,6 +144,12 @@
   font-size: 0.875rem;
 }
 
+/* O texto do meio quebra dentro da coluna, sem passar por cima de quem fez. [C6-10] */
+.people-history li > span:nth-child(2) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 640px) {
   .people-history li {
     grid-template-columns: 1fr auto;

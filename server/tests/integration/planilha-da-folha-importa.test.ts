@@ -34,7 +34,8 @@ let orgId = "";
 let contaId = "";
 const usuarios: string[] = [];
 let rhToken = "";
-let sstToken = "";
+/** O código da folha da filial é do Master e do Dono. [C6-11] */
+let donoToken = "";
 const filial: Record<"loja" | "ag" | "fechada", string> = { loja: "", ag: "", fechada: "" };
 const funcao: Record<"repositora" | "auxiliar", string> = { repositora: "", auxiliar: "" };
 
@@ -146,7 +147,7 @@ beforeAll(async () => {
   ).id;
 
   rhToken = await pessoa("Rita", Role.RH);
-  sstToken = await pessoa("Saulo", Role.SST);
+  donoToken = await pessoa("Otto", Role.OWNER);
 });
 
 afterAll(async () => {
@@ -235,7 +236,7 @@ describe("a planilha da folha cadastra pela filial do código [PF-1]", () => {
 
 describe("o código da folha é de uma filial só [PF-1]", () => {
   const editar = (id: string, payroll_code: string | null) =>
-    request(app).patch(`/api/establishments/${id}`).set(as(sstToken)).send({ payroll_code });
+    request(app).patch(`/api/establishments/${id}`).set(as(donoToken)).send({ payroll_code });
 
   it("outra filial com o mesmo código é recusada, também com ou sem os zeros da frente", async () => {
     for (const codigo of ["0682", "682", "000682"]) {

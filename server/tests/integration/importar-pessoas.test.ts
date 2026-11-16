@@ -174,6 +174,22 @@ describe("cadastrar várias pessoas de uma vez [S1-A]", () => {
     );
   });
 
+  it("homônimos na prévia recebem logins diferentes, iguais aos que o cadastro dá [C6-8]", async () => {
+    const homonimos = [101, 202, 303].map((i) => ({
+      name: `Bia Importada ${SUFIXO}`,
+      tax_id: cpfFicticio(Date.now() + i * 104729),
+      job_role_id: JOB_ID,
+    }));
+    const previa = await importar(rh.token, homonimos, true);
+    expect(previa.status).toBe(200);
+    const naPrevia = (previa.body.results as { login: string }[]).map((r) => r.login);
+    expect(new Set(naPrevia).size).toBe(3);
+
+    const res = await importar(rh.token, homonimos);
+    expect(res.status).toBe(201);
+    expect((res.body.results as { login: string }[]).map((r) => r.login)).toEqual(naPrevia);
+  });
+
   it("ninguém importa gente com papel acima do seu, e quem não cuida de Conta não importa", async () => {
     const alto = await importar(rh.token, [
       { name: `Chefe Importada ${SUFIXO}`, org_role: "MASTER" },

@@ -20,10 +20,14 @@ import {
   lerTabela,
   type FilialDaEmpresa,
   type FuncaoDaEmpresa,
+  type CargoSemFuncao,
   type Lido,
   type LinhaRecusada,
 } from "@/lib/planilha";
+import { useModuleAccess } from "@/lib/module-access";
+import { CargosSemFuncaoBloco } from "./CargosSemFuncao";
 import { importarEmLotes } from "@/lib/importar-em-lotes";
+import { avisoDasLinhasDeFora } from "@/lib/linhas-de-fora";
 import { PlanilhaIlegivel, gerarXlsx, lerXlsx, pareceOfficeProtegido, pareceXlsx } from "@/lib/xlsx";
 
 const PAPEIS_DA_PLANILHA = Object.entries(ORG_ROLE_LABEL)
@@ -120,6 +124,24 @@ export function ImportPeople() {
     na tabela da prévia (e do relatório) como Erro, e na contagem.
   */
   const [recusadas, setRecusadas] = useState<LinhaRecusada[]>([]);
+  /*
+    Os cargos que não casaram com nenhuma função, agrupados por filial e
+    chave, guardados na conferência. O bloco só mostra; criar as funções é
+    só de quem cuida da Operação e da Conta (Master e Dono). [C6-2]
+  */
+  const [cargosSemFuncao, setCargosSemFuncao] = useState<CargoSemFuncao[]>([]);
+  const editaOperacao = useModuleAccess("operacao").canWrite;
+  const editaConta = useModuleAccess("conta").canWrite;
+  const criaFuncoes = editaOperacao && editaConta;
+  /* O aviso do CBO 94 padrão da folha, guardado na conferência. [C6-7] */
+  const [avisoCbo94, setAvisoCbo94] = useState<string | undefined>(undefined);
+  /*
+    Depois de criar as funções, a lista é recarregada e a prévia conferida
+    de novo, já com as funções novas: sem isso, os erros ficariam na tela.
+    [C6-3]
+  */
+  const [reconferir, setReconferir] = useState(false);
+  const [estruturaCriada, setEstruturaCriada] = useState<string | null>(null);
   const [relatorio, setRelatorio] = useState<ImportReport | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
@@ -174,14 +196,32 @@ export function ImportPeople() {
     );
   }
 
+  useEffect(() => {
+    if (!reconferir) return;
+    setReconferir(false);
+    void conferir();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reconferir, lido]);
+
   async function conferir() {
     setErro(null);
     setRelatorio(null);
     setAceitos({});
     setRecusadas(lido.recusadas);
+    setCargosSemFuncao(lido.cargosSemFuncao);
+    setAvisoCbo94(lido.avisoCbo94);
     setOcupado(true);
     try {
-      setPrevia(await enviar(true));
+      /*
+        Todas as linhas de fora (na primeira carga, nenhuma função existe): a
+        prévia existe mesmo assim, sem ir ao servidor, para o bloco de cargos
+        sem função aparecer. Antes, o Conferir nem se habilitava. [C6-2]
+      */
+      setPrevia(
+        lido.rows.length === 0
+          ? { dry_run: true, rows: 0, created: 0, completed: 0, skipped: 0, errors: 0, results: [] }
+          : await enviar(true),
+      );
     } catch (err) {
       setErro(err instanceof Error ? err.message : "Falha ao conferir");
     } finally {
@@ -269,6 +309,9 @@ export function ImportPeople() {
             setPrevia(null);
             setRelatorio(null);
             setRecusadas([]);
+            setCargosSemFuncao([]);
+            setAvisoCbo94(undefined);
+            setEstruturaCriada(null);
             setErroDoArquivo(null);
             setAceitos({});
             setTexto("");
@@ -364,7 +407,7 @@ export function ImportPeople() {
         <Button
           type="button"
           variant="secondary"
-          disabled={ocupado || lido.rows.length === 0}
+          disabled={ocupado || (lido.rows.length === 0 && lido.recusadas.length === 0)}
           onClick={() => void conferir()}
         >
           {ocupado && !relatorio ? "Conferindo…" : "Conferir antes de cadastrar"}
@@ -397,14 +440,9 @@ export function ImportPeople() {
           </p>
           {recusadas.length > 0 && (
             <p className="import-warning" role="alert">
-              <strong>
-                {recusadas.length === 1
-                  ? "1 linha da planilha fica de fora"
-                  : `${recusadas.length} linhas da planilha ficam de fora`}
-              </strong>{" "}
-              e não {relatorio ? "foram cadastradas" : "serão cadastradas"}. Estão na tabela abaixo
-              como Erro, com o motivo. Corrija a planilha e envie de novo: quem já entrou não é
-              cadastrado outra vez.
+              <strong>{avisoDasLinhasDeFora(recusadas.length, Boolean(relatorio)).titulo}</strong>{" "}
+              {avisoDasLinhasDeFora(recusadas.length, Boolean(relatorio)).resto} Corrija a planilha e
+              envie de novo: quem já entrou não é cadastrado outra vez.
             </p>
           )}
           {previa && comDiferenca > 0 && (
@@ -424,6 +462,25 @@ export function ImportPeople() {
               Nenhuma senha foi gerada. O prazo é de 30 dias; quem ficar sem
               matrícula, CPF ou nascimento na ficha não consegue entrar sozinho.
             </p>
+          )}
+          {previa && avisoCbo94 && <p className="import-warning">{avisoCbo94}</p>}
+          {previa && estruturaCriada && (
+            <p className="form-success" role="status">
+              {estruturaCriada}
+            </p>
+          )}
+          {previa && cargosSemFuncao.length > 0 && (
+            <CargosSemFuncaoBloco
+              cargos={cargosSemFuncao}
+              funcoes={funcoes}
+              podeCriar={criaFuncoes}
+              onCriado={async (resumo) => {
+                setEstruturaCriada(resumo);
+                const d = await fetchJobRoles();
+                setFuncoes(d.job_roles);
+                setReconferir(true);
+              }}
+            />
           )}
           <div className="data-table-wrap">
             <table className="data-table">

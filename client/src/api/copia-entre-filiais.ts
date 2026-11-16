@@ -57,18 +57,44 @@ export type ConflitoDaCopia = {
   campos: { campo: string; destino: unknown; origem: unknown }[];
 };
 
-export type PreviaDaCopia = {
+/** O que a cópia achou no destino com nome equivalente, e o que ficou de fora. [C6-6] */
+export type JaExistiaNaCopia = {
+  ja_existia: { setores: number; funcoes: number };
+  exigencias_acrescentadas: number;
+  de_fora: string[];
+};
+
+export type PreviaDaCopia = JaExistiaNaCopia & {
   origem: { id: string; name: string };
   destino: { id: string; name: string };
   niveis: Record<NivelDaCopia, { criar: number; atualizar: number; iguais: number }>;
   conflitos: ConflitoDaCopia[];
 };
 
-export type ResultadoDaCopia = {
+export type ResultadoDaCopia = JaExistiaNaCopia & {
   copia_id: string;
   contagem: Record<NivelDaCopia, { criados: number; atualizados: number }>;
   ignorados: ConflitoDaCopia[];
 };
+
+/** As linhas do resumo sobre o que já existia no destino. [C6-6] */
+export function linhasDoQueJaExistia(r: JaExistiaNaCopia): string[] {
+  const { setores, funcoes } = r.ja_existia;
+  const linhas: string[] = [];
+  if (setores + funcoes > 0) {
+    const partes = [
+      setores ? `${setores} ${setores === 1 ? "setor" : "setores"}` : "",
+      funcoes ? `${funcoes} ${funcoes === 1 ? "função" : "funções"}` : "",
+    ].filter(Boolean);
+    linhas.push(
+      `Já existia: ${setores + funcoes} (${partes.join(" e ")}). A cópia liga atividades e riscos ao que já existe, sem trocar nome nem CBO.`,
+    );
+  }
+  if (r.exigencias_acrescentadas > 0) {
+    linhas.push(`Exigências acrescentadas a funções que já existiam: ${r.exigencias_acrescentadas}.`);
+  }
+  return linhas;
+}
 
 export function previaDaCopia(destino: string, origem: string) {
   return request<PreviaDaCopia>(`/api/establishments/${encodeURIComponent(destino)}/copia/previa`, {

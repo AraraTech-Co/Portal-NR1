@@ -30,7 +30,7 @@ let versionReduzidaId: string;
 
 async function novoRisco(nome: string) {
   const est = (
-    await request(app).post("/api/establishments").set(as(sst.token)).send({ name: `${nome} ${SUFIXO}` })
+    await request(app).post("/api/establishments").set(as(owner.token)).send({ name: `${nome} ${SUFIXO}` })
   ).body.establishment;
   const sector = (
     await request(app).post("/api/sectors").set(as(sst.token)).send({ establishment_id: est.id, name: "Oficina" })

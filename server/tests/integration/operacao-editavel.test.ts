@@ -25,11 +25,14 @@ const as = (token: string) => ({ Authorization: `Bearer ${token}` });
 
 let app: Express;
 let sst: { token: string; user: { id: string } };
+/** Cria a filial do teste: só Master e Dono criam filial. [C6-11] */
+let dona: typeof sst;
 let colaborador: string;
 
 beforeAll(async () => {
   app = createApp();
   sst = await entrar(app, "teste.sst");
+  dona = await entrar(app, "teste.owner");
   colaborador = (await entrar(app, "teste.colaborador")).token;
 });
 
@@ -49,13 +52,13 @@ describe("estabelecimento com endereço [S1-H]", () => {
   it("cria com CNPJ válido (guarda só os dígitos) e recusa inválido", async () => {
     const ruim = await request(app)
       .post("/api/establishments")
-      .set(as(sst.token))
+      .set(as(dona.token))
       .send({ name: `Loja ${SUFIXO}`, tax_id: "11.222.333/0001-82" });
     expect(ruim.status).toBe(400);
 
     const ok = await request(app)
       .post("/api/establishments")
-      .set(as(sst.token))
+      .set(as(dona.token))
       .send({ name: `Loja ${SUFIXO}`, tax_id: "11.222.333/0001-81", address: "  Rua das Flores, 10 — Americana/SP " });
     expect(ok.status).toBe(201);
     expect(ok.body.establishment.taxId).toBe("11222333000181");
@@ -66,7 +69,7 @@ describe("estabelecimento com endereço [S1-H]", () => {
   it("edita o endereço e a mudança fica na trilha", async () => {
     const res = await request(app)
       .patch(`/api/establishments/${id}`)
-      .set(as(sst.token))
+      .set(as(dona.token))
       .send({ address: "Av. Brasil, 500 — Americana/SP" });
     expect(res.status).toBe(200);
     expect(res.body.establishment.address).toBe("Av. Brasil, 500 — Americana/SP");
@@ -75,7 +78,7 @@ describe("estabelecimento com endereço [S1-H]", () => {
       where: { action: "establishment.update", entityId: id },
       orderBy: { createdAt: "desc" },
     });
-    expect(trilha?.actorId).toBe(sst.user.id);
+    expect(trilha?.actorId).toBe(dona.user.id);
     expect(trilha?.before).toMatchObject({ address: "Rua das Flores, 10 — Americana/SP" });
     expect(trilha?.after).toMatchObject({ address: "Av. Brasil, 500 — Americana/SP" });
   });
@@ -93,7 +96,7 @@ describe("atividade se corrige e tem descrição [S2-G] [S1-J]", () => {
 
   beforeAll(async () => {
     estId = (
-      await request(app).post("/api/establishments").set(as(sst.token)).send({ name: `Unidade ${SUFIXO}` })
+      await request(app).post("/api/establishments").set(as(dona.token)).send({ name: `Unidade ${SUFIXO}` })
     ).body.establishment.id;
     sectorId = (
       await request(app).post("/api/sectors").set(as(sst.token)).send({ establishment_id: estId, name: "Estoque" })
@@ -141,12 +144,12 @@ describe("atividade se corrige e tem descrição [S2-G] [S1-J]", () => {
     // atividade com perigo, setor com atividade, estabelecimento com setor
     expect((await request(app).delete(`/api/activities/${activityId}`).set(as(sst.token))).status).toBe(409);
     expect((await request(app).delete(`/api/sectors/${sectorId}`).set(as(sst.token))).status).toBe(409);
-    expect((await request(app).delete(`/api/establishments/${estId}`).set(as(sst.token))).status).toBe(409);
+    expect((await request(app).delete(`/api/establishments/${estId}`).set(as(dona.token))).status).toBe(409);
 
     // de baixo para cima, arquiva
     expect((await request(app).delete(`/api/hazards/${hazard.body.hazard.id}`).set(as(sst.token))).status).toBe(200);
     expect((await request(app).delete(`/api/activities/${activityId}`).set(as(sst.token))).status).toBe(200);
     expect((await request(app).delete(`/api/sectors/${sectorId}`).set(as(sst.token))).status).toBe(200);
-    expect((await request(app).delete(`/api/establishments/${estId}`).set(as(sst.token))).status).toBe(200);
+    expect((await request(app).delete(`/api/establishments/${estId}`).set(as(dona.token))).status).toBe(200);
   });
 });

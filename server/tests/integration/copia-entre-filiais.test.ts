@@ -646,9 +646,11 @@ describe("validar a avaliação copiada [C4-2]", () => {
     expect(riscos.body.risks.find((r: { id: string }) => r.id === riscoCopiado).awaiting_validation).toBe(true);
 
     const inicio = await request(app).get("/api/inicio").set(as(token.Tito!));
-    const cartao = inicio.body.desk.find((c: { id: string }) => c.id === "avaliacoes_rascunho");
-    const emRevisao = await prisma.riskAssessment.count({ where: { organizationId: orgDe(), status: "IN_REVIEW" } });
-    const rascunhos = await prisma.riskAssessment.count({ where: { organizationId: orgDe(), status: "DRAFT" } });
+    /* O Tito não copiou: as copiadas são para ele validar. [C6-13] */
+    const cartao = inicio.body.desk.find((c: { id: string }) => c.id === "avaliacoes_para_validar");
+    const dosOutros = { organizationId: orgDe(), assessorId: { not: id.Tito } };
+    const emRevisao = await prisma.riskAssessment.count({ where: { ...dosOutros, status: "IN_REVIEW" } });
+    const rascunhos = await prisma.riskAssessment.count({ where: { ...dosOutros, status: "DRAFT" } });
     expect(emRevisao).toBeGreaterThan(0);
     expect(cartao?.count).toBe(rascunhos + emRevisao);
 

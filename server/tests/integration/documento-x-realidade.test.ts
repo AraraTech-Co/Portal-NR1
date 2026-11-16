@@ -75,7 +75,7 @@ describe("documento vazio não se assina [S2-B]", () => {
       const est = (
         await request(app)
           .post("/api/establishments")
-          .set(as(sst.token))
+          .set(as(owner.token))
           .send({ name: `Unidade crua ${SUFIXO}` })
       ).body.establishment;
       const semPerigo = await request(app)
@@ -95,7 +95,7 @@ describe("documento vazio não se assina [S2-B]", () => {
     const est = (
       await request(app)
         .post("/api/establishments")
-        .set(as(sst.token))
+        .set(as(owner.token))
         .send({ name: `Unidade sem nada ${SUFIXO}` })
     ).body.establishment;
     const res = await request(app)
@@ -125,7 +125,7 @@ describe("o documento emitido envelhece [B2-4-A]", () => {
     const est = (
       await request(app)
         .post("/api/establishments")
-        .set(as(sst.token))
+        .set(as(owner.token))
         .send({ name: `Mudança ${SUFIXO}` })
     ).body.establishment;
     const setor = (
@@ -221,7 +221,7 @@ describe("o que o fiscal lê no painel", () => {
     const est = (
       await request(app)
         .post("/api/establishments")
-        .set(as(sst.token))
+        .set(as(owner.token))
         .send({ name: `Unidade vazia ${SUFIXO}` })
     ).body.establishment;
     const setor = (
@@ -316,7 +316,7 @@ describe("o histórico conta a história certa", () => {
   it("criar unidade, setor, função e atividade entra no histórico [CB-15]", async () => {
     const marca = `Historico ${SUFIXO}`;
     const est = (
-      await request(app).post("/api/establishments").set(as(sst.token)).send({ name: marca })
+      await request(app).post("/api/establishments").set(as(owner.token)).send({ name: marca })
     ).body.establishment;
     const setor = (
       await request(app)
@@ -358,7 +358,7 @@ describe("o histórico conta a história certa", () => {
           establishment_id: (
             await request(app)
               .post("/api/establishments")
-              .set(as(sst.token))
+              .set(as(owner.token))
               .send({ name: `Sem mudança ${SUFIXO}` })
           ).body.establishment.id,
           name: "Setor",

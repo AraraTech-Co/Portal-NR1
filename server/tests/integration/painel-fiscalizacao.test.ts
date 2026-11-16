@@ -39,12 +39,15 @@ type Check = {
 
 let app: Express;
 let sst: { token: string; user: { id: string } };
+/** Cria a filial do teste: só Master e Dono criam filial. [C6-11] */
+let dona: typeof sst;
 let fiscal: { token: string; user: { id: string } };
 let colaborador: { token: string; user: { id: string } };
 
 beforeAll(async () => {
   app = createApp();
   sst = await entrar(app, "teste.sst");
+  dona = await entrar(app, "teste.owner");
   fiscal = await entrar(app, "teste.fiscal");
   colaborador = await entrar(app, "teste.colaborador");
 });
@@ -67,7 +70,7 @@ describe("o painel não esconde lacuna [S7-B]", () => {
     const est = (
       await request(app)
         .post("/api/establishments")
-        .set(as(sst.token))
+        .set(as(dona.token))
         .send({ name: `Filial crua ${SUFIXO}` })
     ).body.establishment;
     const sector = (
@@ -171,7 +174,7 @@ describe("o painel não esconde lacuna [S7-B]", () => {
     const est = (
       await request(app)
         .post("/api/establishments")
-        .set(as(sst.token))
+        .set(as(dona.token))
         .send({ name: `Filial avaliada ${SUFIXO}` })
     ).body.establishment;
     const sector = (

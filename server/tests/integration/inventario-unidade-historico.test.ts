@@ -27,7 +27,7 @@ let outraOrg: string;
 /** Uma unidade inteira: estabelecimento → setor → atividade → perigo → risco. */
 async function montarUnidade(nome: string) {
   const est = (
-    await request(app).post("/api/establishments").set(as(sst.token)).send({ name: `${nome} ${SUFIXO}` })
+    await request(app).post("/api/establishments").set(as(owner.token)).send({ name: `${nome} ${SUFIXO}` })
   ).body.establishment;
   const sector = (
     await request(app).post("/api/sectors").set(as(sst.token)).send({ establishment_id: est.id, name: "Produção" })

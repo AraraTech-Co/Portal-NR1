@@ -37,7 +37,6 @@ const SUPLEMENTO: FilialDaEmpresa = { id: "e-sup", name: "Suplemento", taxId: nu
 const FILIAIS = [LOJA, AG, SUPLEMENTO];
 const FUNCOES: FuncaoDaEmpresa[] = [
   { id: "f-repositor", name: "REPOSITOR", establishment: { id: LOJA.id, name: LOJA.name } },
-  { id: "f-repositora", name: "REPOSITORA", establishment: { id: LOJA.id, name: LOJA.name } },
   { id: "f-aux-adm", name: "AUXILIAR ADMINISTRATIVO", establishment: { id: AG.id, name: AG.name } },
   { id: "f-op-caixa", name: "COM OP CAIXA", establishment: { id: SUPLEMENTO.id, name: SUPLEMENTO.name } },
 ];
@@ -102,7 +101,8 @@ describe("a planilha da folha é lida como sai do sistema de folha [PF-1]", () =
         name: "ANA REPOSITORA",
         registration: "000004",
         tax_id: ANA,
-        job_role_id: "f-repositora",
+        /* A chave do cargo junta REPOSITORA e REPOSITOR. [C6-1] */
+        job_role_id: "f-repositor",
         admitted_at: "2018-06-19",
         birth_date: "1984-05-25",
         bond: "EMPLOYEE",
@@ -216,7 +216,27 @@ describe("a planilha da folha é lida como sai do sistema de folha [PF-1]", () =
     expect(JSON.stringify(lido.rows)).not.toContain("2500");
   });
 
-  it("cargo com outra grafia não casa: REPOSITORA não é REPOSITOR, e a linha fica de fora", () => {
+  it("linha da folha sem Cargo fica de fora, com o motivo, e as outras seguem [C6-12]", () => {
+    const lido = lerTabela(
+      [
+        [...CABECALHO_DA_FOLHA],
+        linhaDaFolha({ codEmpresa: "0682", matricula: "7", nome: "ANA", cpf: ANA, nascimento: "30827", admissao: "43270", cargo: "  " }),
+        linhaDaFolha({ codEmpresa: "0682", matricula: "8", nome: "CAIO", cpf: CAIO, nascimento: "30827", admissao: "43270", cargo: "REPOSITOR" }),
+      ],
+      FUNCOES,
+      [],
+      ROTULOS,
+      FILIAIS,
+    );
+    expect(lido.problems).toEqual([
+      "Linha 2: sem Cargo. Preencha o cargo na folha ou cadastre a pessoa pelo modelo do portal.",
+    ]);
+    expect(lido.recusadas.map((r) => [r.linha, r.nome])).toEqual([[2, "ANA"]]);
+    expect(lido.rows.map((r) => [r.name, r.job_role_id])).toEqual([["CAIO", "f-repositor"]]);
+    expect(lido.cargosSemFuncao).toEqual([]);
+  });
+
+  it("cargo sem função equivalente na filial da linha fica de fora: a AG não tem Repositor", () => {
     const lido = lerTabela(
       [
         [...CABECALHO_DA_FOLHA],
@@ -228,7 +248,7 @@ describe("a planilha da folha é lida como sai do sistema de folha [PF-1]", () =
       FILIAIS,
     );
     expect(lido.problems).toEqual([
-      `Linha 2: função "REPOSITORA" não existe na filial "Administrativo". Cadastre a função com esse nome em Operação ou corrija o cargo na planilha.`,
+      `Linha 2: função "REPOSITORA" não existe na filial "Administrativo". Veja Cargos sem função, acima.`,
     ]);
     expect(lido.rows).toEqual([]);
     expect(lido.recusadas.map((r) => [r.linha, r.nome])).toEqual([[2, "BIA"]]);

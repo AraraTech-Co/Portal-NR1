@@ -8,6 +8,8 @@ import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
 import { cnpjOrNull } from "../helper/cnpj";
 import type { AuthRequest } from "../types/auth";
+import { chaveDoCargo } from "../helper/chave-do-cargo";
+import { cuidaDaFilial } from "../helper/module-access";
 
 function fail(res: Response, err: unknown) {
   const e = err as { status?: number; message?: string };
@@ -24,6 +26,43 @@ function textOrNull(raw: string | null | undefined): string | null {
 }
 
 type Impedimento = { message: string; code: string };
+
+/*
+  Função equivalente na mesma filial: "Repositor" e "Repositora", ou o nome
+  que a folha já usa como apelido de outra função. O servidor recusa com 409
+  e a tela pergunta; confirmado, cria, porque pode haver caso legítimo. [C6-5]
+*/
+async function equivalenteNaFilial(
+  orgId: string,
+  establishmentId: string,
+  nome: string,
+  acao: "Criar" | "Renomear",
+  excetoId?: string,
+): Promise<string | null> {
+  const chave = chaveDoCargo(nome);
+  if (!chave) return null;
+  const outra = excetoId ? { id: { not: excetoId } } : {};
+  const funcoes = await prisma.jobRole.findMany({
+    where: { organizationId: orgId, archivedAt: null, sector: { establishmentId, archivedAt: null } },
+    select: { name: true, sector: { select: { name: true } } },
+  });
+  /* A própria função só casaria com o nome de chave igual, que o renomear não confere. */
+  const igual = funcoes.find((f) => chaveDoCargo(f.name) === chave);
+  if (igual) return `Já existe "${igual.name}" no setor ${igual.sector.name}. ${acao} mesmo assim?`;
+  const apelido = await prisma.jobRoleAlias.findFirst({
+    where: {
+      organizationId: orgId,
+      establishmentId,
+      chave,
+      jobRole: { archivedAt: null, ...outra, sector: { archivedAt: null } },
+    },
+    select: { jobRole: { select: { name: true, sector: { select: { name: true } } } } },
+  });
+  if (apelido) {
+    return `Já existe "${apelido.jobRole.name}" no setor ${apelido.jobRole.sector.name}, que a folha chama de "${nome.trim()}". ${acao} mesmo assim?`;
+  }
+  return null;
+}
 export type Arquivavel = "establishment" | "sector" | "job_role" | "activity";
 
 /*
@@ -231,6 +270,16 @@ class WorkplaceController {
         legal_name?: string | null;
         payroll_code?: string | null;
       };
+      /* Os dados cadastrais da filial são do Master e do Dono; o nome segue com a Operação. [C6-11] */
+      const cadastrais = ["tax_id", "legal_name", "payroll_code", "address"].filter(
+        (campo) => (req.body as Record<string, unknown>)[campo] !== undefined,
+      );
+      if (cadastrais.length > 0 && !cuidaDaFilial((req as AuthRequest).actor?.permission ?? "")) {
+        res.status(403).json({
+          message: "Só o Master e o Dono mudam o CNPJ, a razão social, o código da folha e o endereço da filial.",
+        });
+        return;
+      }
       if (name !== undefined && !name.trim()) {
         res.status(400).json({ message: "O nome não pode ficar vazio." });
         return;
@@ -512,6 +561,8 @@ class WorkplaceController {
               establishment: { select: { id: true, name: true } },
             },
           },
+          /* Os cargos da folha juntados a esta função. [C6-4] */
+          aliases: { select: { id: true, chave: true, grafia: true }, orderBy: { chave: "asc" } },
         },
       });
       res.json({
@@ -529,10 +580,11 @@ class WorkplaceController {
   async createJobRole(req: Request, res: Response) {
     try {
       const orgId = actorOrgId(req as AuthRequest);
-      const { sector_id, name, description } = req.body as {
+      const { sector_id, name, description, confirmar_equivalente } = req.body as {
         sector_id?: string;
         name?: string;
         description?: string;
+        confirmar_equivalente?: boolean;
       };
       if (!sector_id || !name?.trim()) {
         res.status(400).json({ message: "Informe sector_id e name." });
@@ -546,6 +598,13 @@ class WorkplaceController {
       if (!sector) {
         res.status(400).json({ message: "Setor inválido." });
         return;
+      }
+      if (confirmar_equivalente !== true) {
+        const aviso = await equivalenteNaFilial(orgId, sector.establishmentId, name, "Criar");
+        if (aviso) {
+          res.status(409).json({ message: aviso, code: "funcao_equivalente" });
+          return;
+        }
       }
       const ultima = await prisma.jobRole.aggregate({
         where: { organizationId: orgId, sectorId: sector_id, archivedAt: null },
@@ -577,15 +636,34 @@ class WorkplaceController {
         res.status(404).json({ message: "Função não encontrada." });
         return;
       }
-      const { name, description, cbo_2002, cbo_94 } = req.body as {
+      const { name, description, cbo_2002, cbo_94, confirmar_equivalente } = req.body as {
         name?: string;
         description?: string | null;
         cbo_2002?: string | null;
         cbo_94?: string | null;
+        confirmar_equivalente?: boolean;
       };
       if (name !== undefined && !name.trim()) {
         res.status(400).json({ message: "O nome não pode ficar vazio." });
         return;
+      }
+      /* Só quando o nome muda de chave: trocar maiúscula ou acento não avisa. [C6-5] */
+      if (
+        name !== undefined &&
+        confirmar_equivalente !== true &&
+        chaveDoCargo(name) !== chaveDoCargo(existing.name)
+      ) {
+        const setor = await prisma.sector.findUnique({
+          where: { id: existing.sectorId },
+          select: { establishmentId: true },
+        });
+        const aviso = setor
+          ? await equivalenteNaFilial(orgId, setor.establishmentId, name, "Renomear", existing.id)
+          : null;
+        if (aviso) {
+          res.status(409).json({ message: aviso, code: "funcao_equivalente" });
+          return;
+        }
       }
       /* O CBO do cargo, que aparece onde a função aparece. [PF-2] */
       const cbo: { cbo2002?: string | null; cbo94?: string | null } = {};
