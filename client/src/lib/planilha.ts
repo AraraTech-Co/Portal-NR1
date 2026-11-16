@@ -7,6 +7,8 @@
  * de papel e de vínculo chegam por parâmetro. [B3-1-B] [S1-G]
  */
 
+import { chaveDoCargo } from "./chave-do-cargo";
+
 export type LinhaDaPlanilha = {
   name: string;
   registration?: string;
@@ -371,9 +373,14 @@ export function lerTabela(
     Função com o mesmo nome em duas unidades casava pela primeira encontrada
     e ligava a pessoa à unidade errada, sem aviso. [CB-6]
   */
+  /*
+    O cargo casa com a função pela chave do cargo: sem acento, sem
+    pontuação e com o gênero dobrado — "REPOSITORA" casa com "Repositor".
+    Nunca por semelhança de digitação nem pelo CBO. [C6-1]
+  */
   const porNome = new Map<string, FuncaoDaEmpresa[]>();
   for (const f of funcoes) {
-    const chave = semAcento(f.name);
+    const chave = chaveDoCargo(f.name);
     porNome.set(chave, [...(porNome.get(chave) ?? []), f]);
   }
   const empresaPorNome = new Map(empresas.map((c) => [semAcento(c.name), c.id]));
@@ -521,7 +528,7 @@ export function lerTabela(
     }
     if (row.job_role_id) {
       const nomeDaFuncao = row.job_role_id;
-      let candidatas = porNome.get(semAcento(nomeDaFuncao)) ?? [];
+      let candidatas = porNome.get(chaveDoCargo(nomeDaFuncao)) ?? [];
       if (filial) {
         const daFilial = filial;
         candidatas = candidatas.filter((f) =>
@@ -550,6 +557,19 @@ export function lerTabela(
         const unidades = [
           ...new Set(candidatas.map((f) => f.establishment?.name ?? "sem unidade")),
         ];
+        /*
+          Duas funções equivalentes na MESMA filial ("Repositor" e
+          "Repositora" criadas à mão): não dá para escolher por ela. [C6-1]
+        */
+        if (unidades.length === 1) {
+          const nomes = candidatas.map((f) => f.name);
+          problems.push(
+            `Linha ${numero}: há duas funções equivalentes a "${nomeDaFuncao}" nesta filial (${nomes
+              .slice(0, -1)
+              .join(", ")} e ${nomes[nomes.length - 1]}). Arquive uma em Operação e confira de novo.`,
+          );
+          continue;
+        }
         problems.push(
           `Linha ${numero}: a função "${nomeDaFuncao}" existe em ${unidades.join(
             " e ",

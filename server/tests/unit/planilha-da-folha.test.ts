@@ -37,7 +37,6 @@ const SUPLEMENTO: FilialDaEmpresa = { id: "e-sup", name: "Suplemento", taxId: nu
 const FILIAIS = [LOJA, AG, SUPLEMENTO];
 const FUNCOES: FuncaoDaEmpresa[] = [
   { id: "f-repositor", name: "REPOSITOR", establishment: { id: LOJA.id, name: LOJA.name } },
-  { id: "f-repositora", name: "REPOSITORA", establishment: { id: LOJA.id, name: LOJA.name } },
   { id: "f-aux-adm", name: "AUXILIAR ADMINISTRATIVO", establishment: { id: AG.id, name: AG.name } },
   { id: "f-op-caixa", name: "COM OP CAIXA", establishment: { id: SUPLEMENTO.id, name: SUPLEMENTO.name } },
 ];
@@ -102,7 +101,8 @@ describe("a planilha da folha é lida como sai do sistema de folha [PF-1]", () =
         name: "ANA REPOSITORA",
         registration: "000004",
         tax_id: ANA,
-        job_role_id: "f-repositora",
+        /* A chave do cargo junta REPOSITORA e REPOSITOR. [C6-1] */
+        job_role_id: "f-repositor",
         admitted_at: "2018-06-19",
         birth_date: "1984-05-25",
         bond: "EMPLOYEE",
@@ -216,7 +216,7 @@ describe("a planilha da folha é lida como sai do sistema de folha [PF-1]", () =
     expect(JSON.stringify(lido.rows)).not.toContain("2500");
   });
 
-  it("cargo com outra grafia não casa: REPOSITORA não é REPOSITOR, e a linha fica de fora", () => {
+  it("cargo sem função equivalente na filial da linha fica de fora: a AG não tem Repositor", () => {
     const lido = lerTabela(
       [
         [...CABECALHO_DA_FOLHA],
