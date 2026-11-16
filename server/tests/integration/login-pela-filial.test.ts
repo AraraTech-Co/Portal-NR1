@@ -218,11 +218,16 @@ describe("o que cada escolha aceita (R3)", () => {
     expect(naB.body.user.login).toBe(pb.login);
   });
 
-  it("com filial: matrícula ou CPF dessa filial; login e e-mail não", async () => {
+  it("com filial: matrícula, CPF ou login de quem tem ficha nessa filial", async () => {
     expect((await entrar(pa.cpf, filialA)).status).toBe(200);
+    const porLogin = await entrar(pa.login, filialA);
+    expect(porLogin.status, JSON.stringify(porLogin.body)).toBe(200);
+    expect(porLogin.body.user.login).toBe(pa.login);
+    expect((await entrar(pa.login.toUpperCase(), filialA)).status, "o login em maiúsculas").toBe(200);
     const recusas = [
       await entrar(pa.cpf, filialB), // CPF de outra filial
-      await entrar(pa.login, filialA), // login vai por Externo
+      await entrar(pa.login, filialB), // login de quem tem ficha em outra filial
+      await entrar(pa.login, filialA, "senha-errada-mesmo"),
       await entrar(NUM, filialC), // matrícula que não existe nesta filial
       await entrar(NUM, arquivada), // filial arquivada
       await entrar(NUM, filialDeOutra), // filial de outra empresa

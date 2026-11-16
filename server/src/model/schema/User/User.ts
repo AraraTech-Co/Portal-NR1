@@ -37,8 +37,10 @@ export class User extends Model<IUser> {
        * Quem pode ser a pessoa que digitou aquilo, conforme a filial
        * escolhida na tela. [B2-1-F] [C3-2b]
        *
-       * - Uma filial: matrícula ou CPF de ficha daquela filial. Login e
-       *   e-mail não (vão por "Externo").
+       * - Uma filial: matrícula, CPF ou login de quem tem ficha daquela
+       *   filial. O login aparece embaixo do nome em todo o portal, e quem o
+       *   digitava com a filial escolhida não entrava. E-mail não (vai por
+       *   "Externo").
        * - "Externo": login, e-mail ou CPF. Só dígitos que não formam CPF
        *   valem como login quando existe um login exatamente assim (o
        *   convite usa a matrícula como login, e quem não tem filial na ficha
@@ -60,10 +62,17 @@ export class User extends Model<IUser> {
           }
           // Matrícula na filial, pela forma canônica gravada pelo banco:
           // "74", "074" e "000074" dão na mesma. [C3-1] [C3-2]
-          return this.custom.read.byProfileField({
-            registrationKey: canonicalRegistration(id.value),
-            establishmentId: filial.id,
-          });
+          const [porMatricula, porLogin] = await Promise.all([
+            this.custom.read.byProfileField({
+              registrationKey: canonicalRegistration(id.value),
+              establishmentId: filial.id,
+            }),
+            /* O login, só de quem tem ficha nesta filial. */
+            this.custom.read.byProfileField({ user: { login: id.value }, establishmentId: filial.id }),
+          ]);
+          const porId = new Map<string, IUser>();
+          for (const u of [...porMatricula, ...porLogin]) porId.set(u.id, u);
+          return Array.from(porId.values());
         }
 
         if (id.kind === "email") {
