@@ -8,6 +8,7 @@ import { NAV_GROUPS } from "@/layout/nav";
   o dia de calendário, e não como o instante passado para o fuso. [B3-1-E]
 */
 import { avisoDoPapel, formatDay, ORG_ROLE_LABEL, PERMISSION_LABEL } from "@/lib/labels";
+import { comoEntrarComSenhaProvisoria } from "@/lib/senha-provisoria";
 import "@/components/form.css";
 import "./pessoas-acessos.css";
 import { PAPEIS_COM_UNIDADE, UnidadesSobResponsabilidade } from "./UnidadesSobResponsabilidade";
@@ -66,7 +67,7 @@ function isoInDays(days: number): string {
   return new Date(Date.now() - 3 * 3_600_000 + days * 86_400_000).toISOString().slice(0, 10);
 }
 
-type Reset = { userId: string; name: string; password: string; copied: boolean };
+type Reset = { userId: string; name: string; password: string; comoEntrar: string; copied: boolean };
 
 /** O que a pessoa faz em cada tela, agrupado como no menu. */
 function Acessos({ modules }: { modules: Person["modules"] }) {
@@ -190,7 +191,13 @@ export function PessoasEAcessos() {
         `/api/pessoas-acessos/${p.id}/redefinir-senha`,
         { method: "POST" },
       );
-      setReset({ userId: p.id, name: p.name, password: data.temporary_password, copied: false });
+      setReset({
+        userId: p.id,
+        name: p.name,
+        password: data.temporary_password,
+        comoEntrar: comoEntrarComSenhaProvisoria(p),
+        copied: false,
+      });
       await reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao redefinir a senha");
@@ -457,9 +464,9 @@ export function PessoasEAcessos() {
                                 Pronto
                               </Button>
                             </div>
+                            <p>{reset.comoEntrar}</p>
                             <p className="muted">
-                              Passe só para a pessoa. Ela troca no primeiro acesso, e esta senha não
-                              aparece de novo.
+                              Passe só para a pessoa, com o recado acima. Esta senha não aparece de novo.
                             </p>
                           </div>
                         </td>
