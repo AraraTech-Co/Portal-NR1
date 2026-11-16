@@ -1,25 +1,37 @@
 import { Router } from "express";
 import workplace from "../../controller/WorkplaceController";
 import estrutura from "../../controller/PayrollStructureController";
+import type { NextFunction, Request, Response } from "express";
 import { moduleRead, moduleWrite } from "./middleware";
+import { cuidaDaFilial } from "../../helper/module-access";
+import type { AuthRequest } from "../../types/auth";
 
 const read = moduleRead("operacao");
 const write = moduleWrite("operacao");
+
+/** Criar e arquivar filial: só Master e Dono. [C6-11] */
+function filial(req: Request, res: Response, next: NextFunction) {
+  if (cuidaDaFilial((req as AuthRequest).actor?.permission ?? "")) {
+    next();
+    return;
+  }
+  res.status(403).json({ message: "Só o Master e o Dono criam e arquivam filial." });
+}
 
 const router = Router();
 
 router.get("/api/establishments", read, (req, res) =>
   workplace.listEstablishments(req, res),
 );
-router.post("/api/establishments", write, (req, res) =>
+router.post("/api/establishments", write, filial, (req, res) =>
   workplace.createEstablishment(req, res),
 );
 router.patch("/api/establishments/:id", write, (req, res) =>
   workplace.updateEstablishment(req, res),
 );
 /* Conferir antes de pedir confirmação. [B3-1-C] */
-router.get("/api/establishments/:id/pode-arquivar", write, workplace.canArchive("establishment"));
-router.delete("/api/establishments/:id", write, (req, res) =>
+router.get("/api/establishments/:id/pode-arquivar", write, filial, workplace.canArchive("establishment"));
+router.delete("/api/establishments/:id", write, filial, (req, res) =>
   workplace.archiveEstablishment(req, res),
 );
 

@@ -49,7 +49,7 @@ async function funcaoComRisco(nome: string) {
   const est = (
     await request(app)
       .post("/api/establishments")
-      .set(as(sst.token))
+      .set(as(owner.token))
       .send({ name: `${nome} ${SUFIXO}` })
   ).body.establishment;
   const sector = (

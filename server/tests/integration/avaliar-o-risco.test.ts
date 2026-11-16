@@ -40,7 +40,7 @@ async function unidade(nome: string) {
   const est = (
     await request(app)
       .post("/api/establishments")
-      .set(as(sst.token))
+      .set(as(master.token))
       .send({ name: `${nome} ${SUFIXO}` })
   ).body.establishment;
   const setor = (

@@ -23,6 +23,8 @@ const SUFIXO = Date.now().toString(36);
 type Sessao = { token: string };
 let app: Express;
 let sst: Sessao;
+/** Cria a filial do teste: só Master e Dono criam filial. [C6-11] */
+let dona: typeof sst;
 let fiscal: Sessao;
 const participacoes: string[] = [];
 const unidade = { id: "", procedimento: "" };
@@ -55,6 +57,7 @@ async function participacao(assunto: string) {
 beforeAll(async () => {
   app = createApp();
   sst = await entrar("teste.sst");
+  dona = await entrar("teste.owner");
   fiscal = await entrar("teste.fiscal");
 });
 
@@ -96,7 +99,7 @@ describe("o Painel diz que há papel anexado [B4-E]", () => {
   });
 
   it("o último simulado sem ata diz 'sem ata anexada'; com a ata, 'ata anexada'", async () => {
-    const est = await request(app).post("/api/establishments").set(as(sst)).send({ name: `Ata ${SUFIXO}` });
+    const est = await request(app).post("/api/establishments").set(as(dona)).send({ name: `Ata ${SUFIXO}` });
     expect(est.status, JSON.stringify(est.body)).toBe(201);
     unidade.id = est.body.establishment.id;
     const proc = await request(app)

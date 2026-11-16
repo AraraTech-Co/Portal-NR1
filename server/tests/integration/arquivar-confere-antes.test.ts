@@ -36,6 +36,8 @@ const plano = (t: string) => t.replace(/\s+/g, " ");
 
 let app: Express;
 let sst: { token: string };
+/** Cria a filial do teste: só Master e Dono criam filial. [C6-11] */
+let dona: typeof sst;
 let colaborador: { token: string };
 const ids = { est: "", setor: "", funcao: "", funcaoLivre: "", atividade: "" };
 
@@ -51,10 +53,11 @@ const conferir = (caminho: string, id: string, token = sst.token) =>
 beforeAll(async () => {
   app = createApp();
   sst = await entrar("teste.sst");
+  dona = await entrar("teste.owner");
   colaborador = await entrar("teste.colaborador");
 
   const est = (
-    await request(app).post("/api/establishments").set(as(sst.token)).send({ name: `Arquivo ${SUFIXO}` })
+    await request(app).post("/api/establishments").set(as(dona.token)).send({ name: `Arquivo ${SUFIXO}` })
   ).body.establishment;
   const setor = (
     await request(app).post("/api/sectors").set(as(sst.token)).send({ establishment_id: est.id, name: "Usinagem" })
@@ -99,13 +102,15 @@ describe("o servidor diz se pode, sem arquivar [B3-1-C]", () => {
 
   for (const [caminho, chave, codigo, texto] of casos) {
     it(`${caminho}: diz o que impede, e o arquivamento recusa pelo mesmo motivo`, async () => {
-      const res = await conferir(caminho, ids[chave]);
+      /* Filial: só Master e Dono conferem e arquivam. [C6-11] */
+      const quem = caminho === "establishments" ? dona.token : sst.token;
+      const res = await conferir(caminho, ids[chave], quem);
       expect(res.status).toBe(200);
       expect(res.body.can_archive).toBe(false);
       expect(res.body.code).toBe(codigo);
       expect(res.body.message).toMatch(texto);
 
-      const arquivar = await request(app).delete(`/api/${caminho}/${ids[chave]}`).set(as(sst.token));
+      const arquivar = await request(app).delete(`/api/${caminho}/${ids[chave]}`).set(as(quem));
       expect(arquivar.status).toBe(409);
       expect(arquivar.body.code).toBe(codigo);
       expect(arquivar.body.message).toBe(res.body.message);

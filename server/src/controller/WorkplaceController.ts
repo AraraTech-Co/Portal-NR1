@@ -9,6 +9,7 @@ import { writeAudit } from "../helper/audit";
 import { cnpjOrNull } from "../helper/cnpj";
 import type { AuthRequest } from "../types/auth";
 import { chaveDoCargo } from "../helper/chave-do-cargo";
+import { cuidaDaFilial } from "../helper/module-access";
 
 function fail(res: Response, err: unknown) {
   const e = err as { status?: number; message?: string };
@@ -269,6 +270,16 @@ class WorkplaceController {
         legal_name?: string | null;
         payroll_code?: string | null;
       };
+      /* Os dados cadastrais da filial são do Master e do Dono; o nome segue com a Operação. [C6-11] */
+      const cadastrais = ["tax_id", "legal_name", "payroll_code", "address"].filter(
+        (campo) => (req.body as Record<string, unknown>)[campo] !== undefined,
+      );
+      if (cadastrais.length > 0 && !cuidaDaFilial((req as AuthRequest).actor?.permission ?? "")) {
+        res.status(403).json({
+          message: "Só o Master e o Dono mudam o CNPJ, a razão social, o código da folha e o endereço da filial.",
+        });
+        return;
+      }
       if (name !== undefined && !name.trim()) {
         res.status(400).json({ message: "O nome não pode ficar vazio." });
         return;

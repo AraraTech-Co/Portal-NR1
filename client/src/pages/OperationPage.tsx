@@ -23,7 +23,7 @@ import {
 import { Button } from "@/components/Button";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
-import { canCopyBetweenUnits, useModuleAccess } from "@/lib/module-access";
+import { canCopyBetweenUnits, cuidaDaFilial, useModuleAccess } from "@/lib/module-access";
 import { useAuth } from "@/auth/AuthContext";
 import { CopiarDeOutraFilial } from "./CopiarDeOutraFilial";
 import { CboDaFuncao } from "./CboDaFuncao";
@@ -139,6 +139,8 @@ export function OperationPage() {
   /* Copiar a estrutura de outra filial: o SST e o Master. [C3-8] */
   const { user } = useAuth();
   const podeCopiar = canCopyBetweenUnits(user?.permission);
+  /* Criar, arquivar e os dados cadastrais da filial: só Master e Dono. [C6-11] */
+  const editaFilial = canEdit && cuidaDaFilial(user?.permission);
 
   const [establishments, setEstablishments] = useState<Establishment[]>([]);
   const [sectors, setSectors] = useState<Sector[]>([]);
@@ -298,7 +300,7 @@ export function OperationPage() {
           title="Nenhum estabelecimento"
           description="Comece cadastrando o local onde o trabalho acontece."
           action={
-            canEdit ? (
+            editaFilial ? (
               <QuickAdd
                 label="Novo estabelecimento"
                 placeholder="Ex.: Planta Americana"
@@ -335,6 +337,7 @@ export function OperationPage() {
                 key={selectedEstablishment.id}
                 establishment={selectedEstablishment}
                 canEdit={canEdit}
+                editaCadastro={editaFilial}
                 onChanged={reload}
               />
             )}
@@ -346,7 +349,7 @@ export function OperationPage() {
                 onCopied={reload}
               />
             )}
-            {canEdit && (
+            {editaFilial && (
               <QuickAdd
                 label="Novo estabelecimento"
                 placeholder="Nome do local"
