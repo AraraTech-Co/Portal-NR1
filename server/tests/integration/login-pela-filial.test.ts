@@ -218,11 +218,16 @@ describe("o que cada escolha aceita (R3)", () => {
     expect(naB.body.user.login).toBe(pb.login);
   });
 
-  it("com filial: matrícula ou CPF dessa filial; login e e-mail não", async () => {
+  it("com filial: matrícula, CPF ou login de quem tem ficha nessa filial", async () => {
     expect((await entrar(pa.cpf, filialA)).status).toBe(200);
+    const porLogin = await entrar(pa.login, filialA);
+    expect(porLogin.status, JSON.stringify(porLogin.body)).toBe(200);
+    expect(porLogin.body.user.login).toBe(pa.login);
+    expect((await entrar(pa.login.toUpperCase(), filialA)).status, "o login em maiúsculas").toBe(200);
     const recusas = [
       await entrar(pa.cpf, filialB), // CPF de outra filial
-      await entrar(pa.login, filialA), // login vai por Externo
+      await entrar(pa.login, filialB), // login de quem tem ficha em outra filial
+      await entrar(pa.login, filialA, "senha-errada-mesmo"),
       await entrar(NUM, filialC), // matrícula que não existe nesta filial
       await entrar(NUM, arquivada), // filial arquivada
       await entrar(NUM, filialDeOutra), // filial de outra empresa
@@ -290,6 +295,49 @@ describe("o que cada escolha aceita (R3)", () => {
       .send({ ...dados, establishment_id: filialC });
     expect(certa.status, JSON.stringify(certa.body)).toBe(200);
     expect(typeof certa.body.token).toBe("string");
+  });
+});
+
+describe("o login e a matrícula na mesma filial", () => {
+  it("login igual à matrícula (o do convite): uma conta só, e a trava é da conta", async () => {
+    const MATRICULA = `11${NUM}`;
+    const conv = await pessoa("convite", filialA, MATRICULA);
+    await prisma.user.update({ where: { id: conv.userId }, data: { login: MATRICULA } });
+    const daFilial = identifierKey(`filial:${filialA}:${canonicalRegistration(MATRICULA)}`);
+    const chaves = [accountKey(conv.userId), daFilial];
+    await prisma.authLockout.deleteMany({ where: { key: { in: chaves } } });
+
+    const certa = await entrar(MATRICULA, filialA);
+    expect(certa.status, JSON.stringify(certa.body)).toBe(200);
+    expect(certa.body.user.login).toBe(MATRICULA);
+
+    const errada = await entrar(MATRICULA, filialA, "senha-errada-1");
+    expect(errada.status).toBe(401);
+    expect(errada.body).toEqual(NEGADO_LOGIN);
+    const travas = await prisma.authLockout.findMany({ where: { key: { in: chaves } }, select: { key: true, failures: true } });
+    expect(travas, "a falha conta na conta, não na filial").toEqual([{ key: accountKey(conv.userId), failures: 1 }]);
+    await prisma.authLockout.deleteMany({ where: { key: { in: chaves } } });
+  });
+
+  it("o login de uma pessoa igual à matrícula de outra: cada uma entra com a própria senha", async () => {
+    const MATRICULA_Y = `12${NUM}`;
+    const y = await pessoa("y", filialA, MATRICULA_Y);
+    const x = await pessoa("x", filialA, `13${NUM}`);
+    const SENHA_X = `${SENHA}-x`;
+    await prisma.user.update({
+      where: { id: x.userId },
+      data: { login: MATRICULA_Y, passwordHash: await bcrypt.hash(SENHA_X, 4) },
+    });
+
+    const comoY = await entrar(MATRICULA_Y, filialA);
+    expect(comoY.status, JSON.stringify(comoY.body)).toBe(200);
+    expect(comoY.body.user.login).toBe(y.login);
+    const comoX = await entrar(MATRICULA_Y, filialA, SENHA_X);
+    expect(comoX.status, JSON.stringify(comoX.body)).toBe(200);
+    expect(comoX.body.user.login).toBe(MATRICULA_Y);
+    const errada = await entrar(MATRICULA_Y, filialA, "senha-errada-2");
+    expect(errada.status).toBe(401);
+    expect(errada.body).toEqual(NEGADO_LOGIN);
   });
 });
 
