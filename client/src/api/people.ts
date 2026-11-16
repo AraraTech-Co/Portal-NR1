@@ -41,6 +41,8 @@ export type ImportRow = {
   org_role?: string;
   /** A filial da linha; obrigatória com mais de uma na empresa. [C3-3] */
   establishment_id?: string;
+  /** AAAA-MM-DD ou dd/mm/aaaa: o primeiro acesso pede. */
+  birth_date?: string;
 };
 
 export type ImportResult = {
@@ -75,6 +77,14 @@ export type ImportReport = {
   errors: number;
   results: ImportResult[];
 };
+
+/** Uma pessoa pelo formulário de Conta e usuários: a mesma rota, com a origem. */
+export function cadastrarUmaPessoa(pessoa: ImportRow, dryRun: boolean) {
+  return request<ImportReport>("/api/pessoas-acessos/importar", {
+    method: "POST",
+    body: JSON.stringify({ people: [pessoa], dry_run: dryRun, origem: "formulario" }),
+  });
+}
 
 export function importPeople(people: ImportRow[], dryRun: boolean) {
   return request<ImportReport>("/api/pessoas-acessos/importar", {

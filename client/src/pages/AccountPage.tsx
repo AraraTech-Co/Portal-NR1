@@ -25,6 +25,7 @@ import "./conta.css";
 import { LoadingState } from "@/components/LoadingState";
 import { ConsultaAcessos, FiscaisComAcesso } from "./ConsultaAcessos";
 import { ImportPeople } from "./ImportPeople";
+import { CadastrarUmaPessoa } from "./CadastrarUmaPessoa";
 import { EthicsCommitteeSection } from "./EthicsCommitteeSection";
 import { PessoasEAcessos } from "./PessoasEAcessos";
 import { FeriadosDoPrazo } from "./FeriadosDoPrazo";
@@ -55,6 +56,8 @@ export function AccountPage() {
     [S1-K]
   */
   const { user, accounts, switchAccount } = useAuth();
+  /** Muda depois de cadastrar uma pessoa, para a lista de pessoas recarregar. */
+  const [versaoDasPessoas, setVersaoDasPessoas] = useState(0);
   const [links, setLinks] = useState<InviteLink[]>([]);
   const [requests, setRequests] = useState<JoinRequest[]>([]);
   const [assignable, setAssignable] = useState<AssignableRoles>({
@@ -838,7 +841,11 @@ export function AccountPage() {
         </section>
       )}
 
-      {parte === "pessoas" && canManage && <PessoasEAcessos />}
+      {parte === "pessoas" && canManage && <PessoasEAcessos key={versaoDasPessoas} />}
+      {/* Uma pessoa sem planilha; a lista acima recarrega depois. */}
+      {parte === "pessoas" && canManage && (
+        <CadastrarUmaPessoa onCadastrada={() => setVersaoDasPessoas((v) => v + 1)} />
+      )}
       {parte === "pessoas" && canManage && <ImportPeople />}
       {/* Quem é o comitê de ética é decisão de acesso. [CB-27] */}
       {parte === "canal" && canManage && <EthicsCommitteeSection />}

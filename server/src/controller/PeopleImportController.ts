@@ -25,6 +25,12 @@ import {
   type DadosDaFolha,
 } from "../helper/dados-da-folha";
 
+/**
+ * De onde veio o cadastro, na trilha. A planilha grava "import", como nas
+ * trilhas já gravadas; o formulário de uma pessoa, "formulario".
+ */
+type Via = "import" | "formulario";
+
 function fail(res: Response, err: unknown) {
   const e = err as { status?: number; message?: string };
   res.status(e.status || 500).json({ message: e.message || "Erro interno." });
@@ -314,6 +320,7 @@ class PeopleImportController {
   private async aplicarConfirmados(entrada: {
     orgId: string;
     actorId: string;
+    via: Via;
     jaExiste: { id: string; userId: string; admittedAt: Date | null };
     aceitas: Divergencia[];
     linha: {
@@ -404,7 +411,7 @@ class PeopleImportController {
       action: desligou ? "employee_profile.dismiss" : "employee_profile.update",
       entityType: "EmployeeProfile",
       entityId: jaExiste.id,
-      after: { via: "import", confirmed: [...campos], ...(campos.has("rescisao") ? { dismissedAt: rescisao } : {}) },
+      after: { via: entrada.via, confirmed: [...campos], ...(campos.has("rescisao") ? { dismissedAt: rescisao } : {}) },
     });
     return [...campos];
   }
@@ -423,13 +430,40 @@ class PeopleImportController {
       const auth = req as AuthRequest;
       const actor = auth.actor!;
       const orgId = actorOrgId(auth);
-      const body = req.body as { people?: Entrada[]; dry_run?: boolean };
+      const body = req.body as { people?: Entrada[]; dry_run?: boolean; origem?: unknown };
       const linhas = Array.isArray(body.people) ? body.people : null;
       const simulacao = body.dry_run === true;
+
+      if (body.origem !== undefined && body.origem !== "planilha" && body.origem !== "formulario") {
+        res.status(400).json({ message: 'A origem é "planilha" ou "formulario".' });
+        return;
+      }
+      const via: Via = body.origem === "formulario" ? "formulario" : "import";
 
       if (!linhas || linhas.length === 0) {
         res.status(400).json({ message: "Nenhuma linha para importar." });
         return;
+      }
+      /*
+        O formulário cadastra uma pessoa, e ela tem de conseguir entrar: o
+        primeiro acesso pede a data de nascimento com o CPF ou a matrícula,
+        que são também o que reconhece quem já está no portal. Decisão do
+        Léo em 16/11. A planilha segue como está.
+      */
+      if (via === "formulario") {
+        if (linhas.length > 1) {
+          res.status(400).json({ message: "O formulário cadastra uma pessoa por vez." });
+          return;
+        }
+        const pessoa = linhas[0]!;
+        if (!texto(pessoa.birth_date)) {
+          res.status(400).json({ message: "Informe a data de nascimento: é com ela que a pessoa faz o primeiro acesso." });
+          return;
+        }
+        if (!texto(pessoa.tax_id) && !texto(pessoa.registration)) {
+          res.status(400).json({ message: "Informe o CPF ou a matrícula: é por eles que a pessoa entra no portal." });
+          return;
+        }
       }
       if (linhas.length > MAX_ROWS) {
         res.status(400).json({
@@ -485,7 +519,7 @@ class PeopleImportController {
             action: "job_role.update",
             entityType: "JobRole",
             entityId: jobRoleId,
-            after: { via: "import", ...dados },
+            after: { via, ...dados },
           });
         }
         return feitos;
@@ -706,13 +740,13 @@ class PeopleImportController {
           */
           if (porCpf && porMatricula && porCpf.id !== porMatricula.id) {
             throw new Error(
-              `O CPF é de ${porCpf.user.name} e a matrícula é de ${porMatricula.user.name}: confira a planilha. Nada mudou.`,
+              `O CPF é de ${porCpf.user.name} e a matrícula é de ${porMatricula.user.name}: confira os dados. Nada mudou.`,
             );
           }
           const jaExiste = porCpf ?? porMatricula ?? porEmail;
           if (jaExiste && taxId && jaExiste.taxId && jaExiste.taxId !== taxId) {
             throw new Error(
-              `${jaExiste.user.name} tem outro CPF no portal: confira a planilha. Nada mudou.`,
+              `${jaExiste.user.name} tem outro CPF no portal: confira os dados. Nada mudou.`,
             );
           }
           if (
@@ -763,6 +797,7 @@ class PeopleImportController {
             const confirmados = await this.aplicarConfirmados({
               orgId,
               actorId: actor.userId,
+              via,
               jaExiste,
               aceitas: divergencias.filter((d) => aceitar.has(d.campo)),
               linha: { nome, birthDate, admittedAt, jobRoleId, cbo2002, cbo94 },
@@ -803,7 +838,7 @@ class PeopleImportController {
                 action: "employee_payroll_data.update",
                 entityType: "EmployeeProfile",
                 entityId: jaExiste.id,
-                after: { via: "import", fields: folha.mudou, competence: daFolha.competence ?? null },
+                after: { via, fields: folha.mudou, competence: daFolha.competence ?? null },
               });
             }
             if (!simulacao && completado.length > 0) {
@@ -813,7 +848,7 @@ class PeopleImportController {
                 action: "employee_profile.update",
                 entityType: "EmployeeProfile",
                 entityId: jaExiste.id,
-                after: { via: "import", filled: completado },
+                after: { via, filled: completado },
               });
             }
             resultados.push(registro);
@@ -907,7 +942,7 @@ class PeopleImportController {
             action: "employee_profile.create",
             entityType: "User",
             entityId: criado.id,
-            after: { via: "import", registration: matricula, bond },
+            after: { via, registration: matricula, bond },
           });
 
           registro.status = "created";
