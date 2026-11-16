@@ -67,7 +67,10 @@ describe("a página usa as partes [B2-1-I]", () => {
     expect(tela).toContain('{parte === "contas" && !loading && accounts.length > 0 && (');
     expect(tela).toContain('{parte === "entrada" && canDecide && ( <section className="form-section"> <h2>Pedidos de entrada</h2>');
     expect(tela).toContain('{parte === "entrada" && canManage && ( <section className="form-section"> <h2>Links de convite</h2>');
-    expect(tela).toContain('{parte === "pessoas" && canManage && <PessoasEAcessos />}');
+    expect(tela).toContain('{parte === "pessoas" && canManage && <PessoasEAcessos key={versaoDasPessoas} />}');
+    expect(tela).toContain(
+      '{parte === "pessoas" && canManage && ( <CadastrarUmaPessoa onCadastrada={() => setVersaoDasPessoas((v) => v + 1)} /> )}',
+    );
     expect(tela).toContain('{parte === "pessoas" && canManage && <ImportPeople />}');
     expect(tela).toContain('{parte === "canal" && canManage && <EthicsCommitteeSection />}');
     expect(tela).toContain('{parte === "fiscalizacao" && canManage && <FiscaisComAcesso />}');
