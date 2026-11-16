@@ -508,6 +508,20 @@ class PeopleImportController {
       const cpfsDaLeva = new Set<string>();
       const matriculasDaLeva = new Set<string>();
       const emailsDaLeva = new Set<string>();
+      /*
+        Na simulação nada é gravado, então o banco não enxerga o login dado à
+        linha anterior. Os logins da leva ficam reservados aqui, para a prévia
+        dar o mesmo que o cadastro de verdade dá. [C6-8]
+      */
+      const loginsDaLeva = new Set<string>();
+      const loginLivreNaSimulacao = {
+        user: {
+          findUnique: async (args: { where: { login: string } }) =>
+            loginsDaLeva.has(args.where.login)
+              ? { id: "reservado-na-leva" }
+              : prisma.user.findUnique({ where: { login: args.where.login }, select: { id: true } }),
+        },
+      };
 
       for (const [indice, linha] of linhas.entries()) {
         const numero = indice + 1;
@@ -831,7 +845,8 @@ class PeopleImportController {
           await preencherCbo(jobRoleId, cbo2002, cbo94);
           if (simulacao) {
             registro.status = "created";
-            registro.login = await allocateUniqueLogin(base, prisma);
+            registro.login = await allocateUniqueLogin(base, loginLivreNaSimulacao);
+            loginsDaLeva.add(registro.login);
             registro.message = aviso ? `Pronto para entrar. ${aviso}` : "Pronto para entrar.";
             resultados.push(registro);
             continue;
