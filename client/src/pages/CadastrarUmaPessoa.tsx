@@ -122,8 +122,8 @@ export function CadastrarUmaPessoa({ onCadastrada }: { onCadastrada: () => void 
     <section className="form-section">
       <h2>Cadastrar uma pessoa</h2>
       <p className="muted">
-        Para quem não veio na planilha. A pessoa entra com a matrícula ou o CPF e a data de nascimento, e cria a
-        própria senha no primeiro acesso.
+        Para quem não veio na planilha. No primeiro acesso a pessoa informa a matrícula, o CPF e a data de
+        nascimento, e cria a própria senha.
       </p>
       <form className="form-grid" onSubmit={conferir}>
         <div className="form-grid cols-2">
@@ -137,12 +137,11 @@ export function CadastrarUmaPessoa({ onCadastrada }: { onCadastrada: () => void 
           </label>
           <label className="form-field">
             CPF
-            <input value={form.cpf} onChange={(e) => mudar("cpf", e.target.value)} inputMode="numeric" />
+            <input value={form.cpf} onChange={(e) => mudar("cpf", e.target.value)} inputMode="numeric" required />
           </label>
           <label className="form-field">
             Matrícula
-            <input value={form.matricula} onChange={(e) => mudar("matricula", e.target.value)} />
-            <span className="form-hint">Preencha o CPF, a matrícula ou os dois.</span>
+            <input value={form.matricula} onChange={(e) => mudar("matricula", e.target.value)} required />
           </label>
           {filiais.length > 1 && (
             <label className="form-field">

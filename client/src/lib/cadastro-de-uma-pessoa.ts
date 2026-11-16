@@ -2,9 +2,8 @@ import type { ImportRow } from "@/api/people";
 
 /**
  * O formulário "Cadastrar uma pessoa" de Conta e usuários: o que ele exige
- * e como vira a pessoa que a rota de importar recebe. Decisão do Léo em
- * 16/11: nome, nascimento e CPF ou matrícula, para a pessoa conseguir fazer
- * o primeiro acesso e não ser cadastrada duas vezes.
+ * e como vira a pessoa que a rota de importar recebe. Nome, nascimento, CPF
+ * e matrícula: o primeiro acesso pede os três últimos na mesma ficha.
  */
 export type Formulario = {
   nome: string;
@@ -38,7 +37,8 @@ export const FORMULARIO_VAZIO: Formulario = {
 export function faltaNoFormulario(f: Formulario, quantasFiliais: number): string | null {
   if (!f.nome.trim()) return "Informe o nome.";
   if (!f.nascimento.trim()) return "Informe a data de nascimento: é com ela que a pessoa faz o primeiro acesso.";
-  if (!f.cpf.trim() && !f.matricula.trim()) return "Informe o CPF ou a matrícula: é por eles que a pessoa entra no portal.";
+  if (!f.cpf.trim()) return "Informe o CPF: o primeiro acesso pede matrícula, CPF e data de nascimento.";
+  if (!f.matricula.trim()) return "Informe a matrícula: o primeiro acesso pede matrícula, CPF e data de nascimento.";
   if (quantasFiliais > 1 && !f.filialId) return "Escolha a filial.";
   if (f.vinculo === "CONTRACTOR" && !f.contratadaId) return "Escolha a empresa contratada.";
   return null;

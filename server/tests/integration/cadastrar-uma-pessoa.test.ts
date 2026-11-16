@@ -45,12 +45,15 @@ const cadastrar = (quem: string, pessoa: Record<string, unknown>, extra: Record<
 const pessoa = (n: number, extra: Record<string, unknown> = {}) => ({
   name: `Pessoa Formulario ${n} ${SUFIXO}`,
   tax_id: cpfFicticio(Date.now() + n * 104729),
+  registration: `F${n}${SUFIXO}`.slice(0, 12),
   birth_date: "1990-05-10",
   job_role_id: JOB_ID,
   ...extra,
 });
 
 beforeAll(async () => {
+  /* A tela de entrada mostra as filiais desta empresa. */
+  process.env.LOGIN_ORG_ID = ORG_ID;
   app = createApp();
   for (const quem of ["rh", "sst", "supervisor"]) {
     const res = await request(app).post("/api/auth").send({ login: `teste.${quem}`, password: SENHA });
@@ -63,6 +66,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  delete process.env.LOGIN_ORG_ID;
   const users = await prisma.user.findMany({ where: { name: { contains: `Formulario` , endsWith: SUFIXO } }, select: { id: true } });
   const ids = users.map((u) => u.id);
   const fichas = await prisma.employeeProfile.findMany({ where: { userId: { in: ids } }, select: { id: true } });
@@ -125,22 +129,37 @@ describe("o formulário de uma pessoa", () => {
     expect(trilha.after).toMatchObject({ via: "formulario", confirmed: ["birth_date"] });
   });
 
-  it("sem nascimento, ou sem CPF e sem matrícula: 400, com ou sem conferir, e nada gravado", async () => {
+  it("sem nascimento, sem CPF ou sem matrícula: 400, com ou sem conferir, e nada gravado", async () => {
     for (const dry_run of [true, false]) {
       const semNascimento = await cadastrar("rh", pessoa(3, { birth_date: "" }), { dry_run });
       expect(semNascimento.status).toBe(400);
       expect(semNascimento.body.message).toBe("Informe a data de nascimento: é com ela que a pessoa faz o primeiro acesso.");
-      const semIdentidade = await cadastrar("rh", pessoa(4, { tax_id: "  " }), { dry_run });
-      expect(semIdentidade.status).toBe(400);
-      expect(semIdentidade.body.message).toBe("Informe o CPF ou a matrícula: é por eles que a pessoa entra no portal.");
+      const semCpf = await cadastrar("rh", pessoa(4, { tax_id: "  " }), { dry_run });
+      expect(semCpf.status).toBe(400);
+      expect(semCpf.body.message).toBe("Informe o CPF: o primeiro acesso pede matrícula, CPF e data de nascimento.");
+      const semMatricula = await cadastrar("rh", pessoa(5, { registration: undefined }), { dry_run });
+      expect(semMatricula.status).toBe(400);
+      expect(semMatricula.body.message).toBe("Informe a matrícula: o primeiro acesso pede matrícula, CPF e data de nascimento.");
     }
-    expect(await prisma.user.count({ where: { name: { in: [3, 4].map((n) => `Pessoa Formulario ${n} ${SUFIXO}`) } } })).toBe(0);
+    expect(await prisma.user.count({ where: { name: { in: [3, 4, 5].map((n) => `Pessoa Formulario ${n} ${SUFIXO}`) } } })).toBe(0);
   });
 
-  it("com nascimento e só o CPF, ou só a matrícula, entra", async () => {
-    expect((await cadastrar("rh", pessoa(5), { dry_run: true })).body.results[0].status).toBe("created");
-    const soMatricula = pessoa(6, { tax_id: undefined, registration: `F${SUFIXO}`.slice(0, 12) });
-    expect((await cadastrar("rh", soMatricula, { dry_run: true })).body.results[0].status).toBe("created");
+  it("com nascimento, CPF e matrícula, a pessoa cadastrada faz o primeiro acesso", async () => {
+    const p = pessoa(6);
+    const res = await cadastrar("rh", p);
+    expect(res.status).toBe(201);
+    const ficha = await prisma.employeeProfile.findFirstOrThrow({
+      where: { organizationId: ORG_ID, taxId: p.tax_id },
+      select: { establishmentId: true },
+    });
+    const acesso = await request(app).post("/api/auth/primeiro-acesso").send({
+      matricula: p.registration,
+      cpf: p.tax_id,
+      nascimento: p.birth_date,
+      establishment_id: ficha.establishmentId,
+    });
+    expect(acesso.status, JSON.stringify(acesso.body)).toBe(200);
+    expect(typeof acesso.body.token).toBe("string");
   });
 
   it("pela planilha, sem nascimento e sem CPF, segue como antes, e a trilha diz import", async () => {
