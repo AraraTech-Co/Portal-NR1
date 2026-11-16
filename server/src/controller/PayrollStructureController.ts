@@ -121,6 +121,11 @@ class PayrollStructureController {
             filialDaFuncao.set(f.id, f.sector.establishmentId);
           }
           const apelidoPorChave = new Map(apelidos.map((a) => [`${a.establishmentId}:${a.chave}`, a]));
+          /** Apelido de função ativa desta filial com esta chave: o cargo casa por ele na planilha. */
+          const apelidoAtivo = (filialId: string, chave: string) => {
+            const a = apelidoPorChave.get(`${filialId}:${chave}`);
+            return a && !a.jobRole.archivedAt ? a : undefined;
+          };
           const setorDaFilial = new Map(setores.map((s) => [s.id, s.establishmentId]));
           /* A função de cada cargo desta leva, para o "juntar com outro cargo". */
           const funcaoDoCargo = new Map<string, string>();
@@ -167,7 +172,8 @@ class PayrollStructureController {
             const novo = await tx.jobRoleAlias.create({
               data: { organizationId: orgId, establishmentId: filialId, chave, grafia, jobRoleId, createdById: actorId },
             });
-            apelidoPorChave.set(`${filialId}:${chave}`, { ...novo, jobRole: { name: "", archivedAt: null } });
+            const alvo = funcoes.find((f) => f.id === jobRoleId)?.name ?? criados.funcoes.find((f) => f.id === jobRoleId)?.name ?? "";
+            apelidoPorChave.set(`${filialId}:${chave}`, { ...novo, jobRole: { name: alvo, archivedAt: null } });
             criados.apelidos.push({ id: novo.id, chave, jobRoleId });
           };
 
@@ -187,10 +193,35 @@ class PayrollStructureController {
               ...(funcaoPorChave.get(`${l.filialId}:${chaveNome}`) ?? []),
               ...(chaveNome === chaveCargo ? [] : funcaoPorChave.get(`${l.filialId}:${chaveCargo}`) ?? []),
             ];
+            /*
+              Duas funções equivalentes já cadastradas (Repositor e
+              Repositora): a escolha não fica com a primeira da lista. [C6-1]
+            */
+            const distintas = [...new Map(existentes.map((f) => [f.id, f])).values()];
+            if (distintas.length > 1) {
+              const nomes = distintas.map((f) => f.name).sort((a, b) => a.localeCompare(b, "pt-BR"));
+              erro(
+                l.i,
+                `há duas funções equivalentes a "${nome}" nesta filial (${nomes.slice(0, -1).join(", ")} e ${nomes[nomes.length - 1]}). Arquive uma em Operação e confira de novo.`,
+                409,
+              );
+            }
+            /*
+              O nome ou o cargo já é apelido de outra função ativa: criar uma
+              função com essa chave tomaria as pessoas daquele cargo em
+              silêncio, porque a planilha casa a função antes do apelido.
+              [C6-4]
+            */
+            for (const [grafia, chave] of [[nome, chaveNome], [l.cargo, chaveCargo]] as const) {
+              const apelido = apelidoAtivo(l.filialId, chave);
+              if (apelido && !distintas.some((f) => f.id === apelido.jobRoleId)) {
+                erro(l.i, `"${grafia}" já é como a folha chama a função "${apelido.jobRole.name}" nesta filial.`, 409);
+              }
+            }
             let jobRoleId: string;
-            if (existentes.length > 0) {
+            if (distintas.length > 0) {
               /* Já existe: reaproveita, não cria outra (dois cliques, duas abas). */
-              jobRoleId = existentes[0]!.id;
+              jobRoleId = distintas[0]!.id;
               criados.reaproveitadas += 1;
             } else {
               let sectorId = texto(l.e.setor_id);

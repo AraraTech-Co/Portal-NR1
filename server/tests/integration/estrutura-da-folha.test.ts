@@ -31,6 +31,10 @@ let ag = "";
 let frente = "";
 let caixa = "";
 let antiga = "";
+/** Filial de outra empresa e filial arquivada: nenhuma das duas recebe nada. */
+let outraOrg = "";
+let filialDeFora = "";
+let filialArquivada = "";
 const usuarios: string[] = [];
 const token: Record<string, string> = {};
 
@@ -72,6 +76,11 @@ beforeAll(async () => {
   antiga = (
     await prisma.jobRole.create({ data: { organizationId: orgId, sectorId: frente, name: "Antiga", archivedAt: new Date() } })
   ).id;
+  filialArquivada = (
+    await prisma.establishment.create({ data: { organizationId: orgId, name: `Fechada ${SUFIXO}`, archivedAt: new Date() } })
+  ).id;
+  outraOrg = (await prisma.organization.create({ data: { name: `ESTR outra ${SUFIXO}` } })).id;
+  filialDeFora = (await prisma.establishment.create({ data: { organizationId: outraOrg, name: `De fora ${SUFIXO}` } })).id;
   await pessoa("Mia", Role.MASTER);
   await pessoa("Rita", Role.RH);
   await pessoa("Sara", Role.SST);
@@ -87,9 +96,9 @@ afterAll(async () => {
   await prisma.user.deleteMany({ where: { id: { in: usuarios } } });
   await prisma.jobRole.deleteMany({ where: { organizationId: orgId } });
   await prisma.sector.deleteMany({ where: { organizationId: orgId } });
-  await prisma.establishment.deleteMany({ where: { organizationId: orgId } });
+  await prisma.establishment.deleteMany({ where: { organizationId: { in: [orgId, outraOrg].filter(Boolean) } } });
   await prisma.account.deleteMany({ where: { id: contaId } });
-  await prisma.organization.deleteMany({ where: { id: orgId } });
+  await prisma.organization.deleteMany({ where: { id: { in: [orgId, outraOrg].filter(Boolean) } } });
 });
 
 describe("quem cria", () => {
@@ -165,6 +174,15 @@ describe("criar e juntar", () => {
     const dir = (await funcoesAtivas()).find((f) => f.name === "Diretor Administrativo")!;
     const apelido = await prisma.jobRoleAlias.findFirstOrThrow({ where: { establishmentId: ag, chave: "diretor administracao" } });
     expect(apelido.jobRoleId).toBe(dir.id);
+
+    /* De novo: o cargo é apelido da própria função que seria reaproveitada, e nada muda. */
+    const antes = await contagem();
+    const deNovo = await criar("Mia", [
+      { filial_id: ag, cargo: "DIRETOR ADMINISTRACAO", acao: "criar", nome: "Diretor Administrativo", novo_setor: "Diretoria" },
+    ]);
+    expect(deNovo.status, JSON.stringify(deNovo.body)).toBe(201);
+    expect(deNovo.body.funcoes_reaproveitadas).toBe(1);
+    expect(await contagem()).toEqual(antes);
   });
 
   it("juntar COM OP CAIXA com Caixa: o apelido nasce; de novo, nada muda; com outra função ativa, 409", async () => {
@@ -202,6 +220,8 @@ describe("tudo ou nada", () => {
     const antes = await contagem();
     const repDaAg = (await funcoesAtivas()).find((f) => f.name === "Repositor" && f.sector.establishmentId === ag)!;
     for (const ruim of [
+      { filial_id: filialDeFora, cargo: "PEDREIRO", acao: "criar", nome: "Pedreiro", novo_setor: "Obras" },
+      { filial_id: filialArquivada, cargo: "PEDREIRO", acao: "criar", nome: "Pedreiro", novo_setor: "Obras" },
       { filial_id: loja, cargo: "PEDREIRO", acao: "criar", nome: "", novo_setor: "Obras" },
       { filial_id: ag, cargo: "PEDREIRO", acao: "criar", nome: "Pedreiro", setor_id: frente },
       { filial_id: loja, cargo: "SERVENTE", acao: "juntar", juntar_funcao_id: repDaAg.id },
@@ -217,9 +237,75 @@ describe("tudo ou nada", () => {
     expect(await contagem()).toEqual(antes);
   });
 
+  it("setor novo com duas equivalentes na filial: 400, sem escolher um", async () => {
+    await prisma.sector.createMany({
+      data: [
+        { organizationId: orgId, establishmentId: loja, name: "Depósito" },
+        { organizationId: orgId, establishmentId: loja, name: "Deposito" },
+      ],
+    });
+    const antes = await contagem();
+    const res = await criar("Mia", [{ filial_id: loja, cargo: "CONFERENTE", acao: "criar", nome: "Conferente", novo_setor: "DEPOSITO" }]);
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe('Escolha 1: há dois setores equivalentes a "DEPOSITO" nesta filial. Nada foi criado.');
+    expect(await contagem()).toEqual(antes);
+  });
+
   it("mais de 200 escolhas: 400", async () => {
     const muitas = Array.from({ length: 201 }, (_, i) => ({ filial_id: loja, cargo: `CARGO ${i}`, acao: "criar", nome: `Cargo ${i}`, setor_id: frente }));
     expect((await criar("Mia", muitas)).status).toBe(400);
+  });
+});
+
+describe("o criar não passa por cima do que a planilha já casa [C6-4] [C6-1]", () => {
+  it("o nome da função nova é apelido de outra função: 409 com o nome dela, e nada criado", async () => {
+    await prisma.jobRoleAlias.create({
+      data: { organizationId: orgId, establishmentId: loja, chave: "op frente", grafia: "OP FRENTE", jobRoleId: caixa, createdById: usuarios[0]! },
+    });
+    const antes = await contagem();
+    const res = await criar("Mia", [{ filial_id: loja, cargo: "OPERADOR FRENTE", acao: "criar", nome: "Op Frente", setor_id: frente }]);
+    expect(res.status).toBe(409);
+    expect(res.body.message).toBe('Escolha 1: "Op Frente" já é como a folha chama a função "Caixa" nesta filial. Nada foi criado.');
+    expect(await contagem()).toEqual(antes);
+  });
+
+  it("o cargo é apelido de outra função, com o mesmo nome ou com outro: 409", async () => {
+    const antes = await contagem();
+    /* Com o nome igual ao cargo, o aviso cita o nome; com outro nome, cita o cargo. */
+    for (const [nome, citado] of [["Op Frente", "Op Frente"], ["Operador de Frente", "OP FRENTE"]] as const) {
+      const res = await criar("Mia", [{ filial_id: loja, cargo: "OP FRENTE", acao: "criar", nome, setor_id: frente }]);
+      expect(res.status, nome).toBe(409);
+      expect(res.body.message, nome).toBe(`Escolha 1: "${citado}" já é como a folha chama a função "Caixa" nesta filial. Nada foi criado.`);
+    }
+    expect(await contagem()).toEqual(antes);
+  });
+
+  it("o apelido de função arquivada não impede", async () => {
+    await prisma.jobRoleAlias.create({
+      data: { organizationId: orgId, establishmentId: loja, chave: "op velho", grafia: "OP VELHO", jobRoleId: antiga, createdById: usuarios[0]! },
+    });
+    const res = await criar("Mia", [{ filial_id: loja, cargo: "OP VELHO", acao: "criar", nome: "Op Velho", setor_id: frente }]);
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(res.body.funcoes_criadas).toBe(1);
+  });
+
+  it("duas funções equivalentes já na filial: 409 com o texto da C6-1, e o juntar com esse cargo não herda uma delas", async () => {
+    await prisma.jobRole.createMany({
+      data: [
+        { organizationId: orgId, sectorId: frente, name: "Embalador" },
+        { organizationId: orgId, sectorId: frente, name: "Embaladora" },
+      ],
+    });
+    const antes = await contagem();
+    const res = await criar("Mia", [
+      { filial_id: loja, cargo: "EMBALADOR", acao: "criar", nome: "Embalador", setor_id: frente },
+      { filial_id: loja, cargo: "EMPACOTADOR", acao: "juntar", juntar_cargo: "EMBALADOR" },
+    ]);
+    expect(res.status).toBe(409);
+    expect(res.body.message).toBe(
+      'Escolha 1: há duas funções equivalentes a "Embalador" nesta filial (Embalador e Embaladora). Arquive uma em Operação e confira de novo. Nada foi criado.',
+    );
+    expect(await contagem()).toEqual(antes);
   });
 });
 
@@ -254,6 +340,7 @@ describe("o apelido na lista de funções e a remoção", () => {
     expect(doCaixa.aliases.map((a) => [a.chave, a.grafia])).toEqual([
       ["com op caixo", "COM OP CAIXA"],
       ["op estoque", "OP ESTOQUE"],
+      ["op frente", "OP FRENTE"],
     ]);
     const alvo = doCaixa.aliases[0]!;
     expect((await request(app).delete(`/api/job-roles/${caixa}/apelidos/${alvo.id}`).set(as(token.Sara!))).status).toBe(403);
