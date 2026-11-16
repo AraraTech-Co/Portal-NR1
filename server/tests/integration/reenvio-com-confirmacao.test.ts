@@ -296,7 +296,7 @@ describe("matrícula e CPF dizem quem é a pessoa e nunca mudam [PF-3]", () => {
     const res = await importar([ana({ tax_id: cpf("733733733") })], true);
     expect(res.body.results[0]).toMatchObject({
       status: "error",
-      message: "Ana da Silva tem outro CPF no portal: confira a planilha. Nada mudou.",
+      message: "Ana da Silva tem outro CPF no portal: confira os dados. Nada mudou.",
     });
   });
 
@@ -304,7 +304,7 @@ describe("matrícula e CPF dizem quem é a pessoa e nunca mudam [PF-3]", () => {
     const res = await importar([ana({ registration: "000020" })], true);
     expect(res.body.results[0]).toMatchObject({
       status: "error",
-      message: "O CPF é de Ana da Silva e a matrícula é de Bia Souza: confira a planilha. Nada mudou.",
+      message: "O CPF é de Ana da Silva e a matrícula é de Bia Souza: confira os dados. Nada mudou.",
     });
     expect(biaFicha).toBeTruthy();
   });
