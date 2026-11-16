@@ -107,10 +107,11 @@ describe("o bloco de cargos sem função", () => {
     expect(fin.sugestoes).toEqual([]);
   });
 
-  it("cargo vazio não entra no bloco; as linhas com cargo sem função seguem como Erro", () => {
+  it("cargo vazio não entra no bloco e fica de fora com o próprio motivo; as linhas com cargo sem função seguem como Erro", () => {
     expect(bloco.every((c) => c.chave !== "")).toBe(true);
     expect(bloco.reduce((t, c) => t + c.pessoas, 0)).toBe(10);
-    expect(lido.recusadas.map((r) => r.linha)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    expect(lido.recusadas.map((r) => r.linha)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    expect(lido.problems).toContain("Linha 12: sem Cargo. Preencha o cargo na folha ou cadastre a pessoa pelo modelo do portal.");
     expect(lido.problems[0]).toBe('Linha 2: função "REPOSITORA" não existe na filial "Loja". Veja Cargos sem função, acima.');
   });
 

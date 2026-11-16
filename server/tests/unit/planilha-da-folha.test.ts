@@ -216,6 +216,26 @@ describe("a planilha da folha é lida como sai do sistema de folha [PF-1]", () =
     expect(JSON.stringify(lido.rows)).not.toContain("2500");
   });
 
+  it("linha da folha sem Cargo fica de fora, com o motivo, e as outras seguem [C6-12]", () => {
+    const lido = lerTabela(
+      [
+        [...CABECALHO_DA_FOLHA],
+        linhaDaFolha({ codEmpresa: "0682", matricula: "7", nome: "ANA", cpf: ANA, nascimento: "30827", admissao: "43270", cargo: "  " }),
+        linhaDaFolha({ codEmpresa: "0682", matricula: "8", nome: "CAIO", cpf: CAIO, nascimento: "30827", admissao: "43270", cargo: "REPOSITOR" }),
+      ],
+      FUNCOES,
+      [],
+      ROTULOS,
+      FILIAIS,
+    );
+    expect(lido.problems).toEqual([
+      "Linha 2: sem Cargo. Preencha o cargo na folha ou cadastre a pessoa pelo modelo do portal.",
+    ]);
+    expect(lido.recusadas.map((r) => [r.linha, r.nome])).toEqual([[2, "ANA"]]);
+    expect(lido.rows.map((r) => [r.name, r.job_role_id])).toEqual([["CAIO", "f-repositor"]]);
+    expect(lido.cargosSemFuncao).toEqual([]);
+  });
+
   it("cargo sem função equivalente na filial da linha fica de fora: a AG não tem Repositor", () => {
     const lido = lerTabela(
       [

@@ -89,6 +89,15 @@ describe("o que já era guardado continua [B2-1-L] [CB-6]", () => {
     expect(problems.join(" ")).toContain("não parece um nome");
   });
 
+  it("no modelo do portal a função segue opcional: sem a coluna e com a célula vazia, entra [C6-12]", () => {
+    const semColuna = ler("nome;matricula\nMaria;1023");
+    expect(semColuna.problems).toEqual([]);
+    expect(semColuna.rows.map((r) => r.name)).toEqual(["Maria"]);
+    const vazia = ler("nome;funcao\nJoão;");
+    expect(vazia.problems).toEqual([]);
+    expect(vazia.rows.map((r) => r.name)).toEqual(["João"]);
+  });
+
   it("função que não existe deixa a linha de fora, e a prévia a mostra como recusada", () => {
     const { rows, problems, recusadas } = ler("nome;funcao\nMaria;Soldador\nJoão;Torneiro");
     expect(problems.join(" ")).toContain('função "Soldador" não existe');

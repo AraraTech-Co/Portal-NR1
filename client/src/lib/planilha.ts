@@ -692,6 +692,17 @@ export function lerTabela(
       );
       continue;
     }
+    /*
+      Na folha todo mundo tem cargo: sem ele, a pessoa entraria sem função,
+      sem perigos e sem ordem de serviço. No modelo do portal a função segue
+      opcional (RH, SST e gestores podem não ter). [C6-12]
+    */
+    if (daFolha && !row.job_role_id) {
+      problems.push(
+        `Linha ${numero}: sem Cargo. Preencha o cargo na folha ou cadastre a pessoa pelo modelo do portal.`,
+      );
+      continue;
+    }
     if (row.job_role_id) {
       const nomeDaFuncao = row.job_role_id;
       const daLinha = (lista: FuncaoDaEmpresa[]) => {
