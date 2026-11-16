@@ -1,5 +1,5 @@
 import type { PodeArquivar } from "@/lib/arquivar";
-import { request } from "./client";
+import { ApiError, request } from "./client";
 
 export type Establishment = {
   id: string;
@@ -86,11 +86,34 @@ export async function moveJobRole(id: string, para: "cima" | "baixo") {
   });
 }
 
-export async function createJobRole(sectorId: string, name: string) {
+export async function createJobRole(sectorId: string, name: string, confirmarEquivalente = false) {
   return request<{ job_role: JobRole }>("/api/job-roles", {
     method: "POST",
-    body: JSON.stringify({ sector_id: sectorId, name }),
+    body: JSON.stringify({
+      sector_id: sectorId,
+      name,
+      ...(confirmarEquivalente ? { confirmar_equivalente: true } : {}),
+    }),
   });
+}
+
+/**
+ * Cria ou renomeia função perguntando antes quando o servidor acha uma
+ * equivalente na filial (409 "funcao_equivalente"). Recusado o aviso, nada
+ * muda e a mensagem diz isso. [C6-5]
+ */
+export async function comAvisoDeEquivalente(
+  fazer: (confirmar: boolean) => Promise<unknown>,
+  seRecusar: string,
+  confirmar: (pergunta: string) => boolean = (pergunta) => window.confirm(pergunta),
+): Promise<void> {
+  try {
+    await fazer(false);
+  } catch (err) {
+    if (!(err instanceof ApiError) || err.code !== "funcao_equivalente") throw err;
+    if (!confirmar(err.message)) throw new Error(seRecusar);
+    await fazer(true);
+  }
 }
 
 export async function fetchActivities(sectorId?: string) {
@@ -158,7 +181,7 @@ export async function archiveSector(id: string) {
 
 export async function updateJobRole(
   id: string,
-  input: { name?: string; cbo_2002?: string | null; cbo_94?: string | null },
+  input: { name?: string; cbo_2002?: string | null; cbo_94?: string | null; confirmar_equivalente?: true },
 ) {
   return request<{ job_role: JobRole }>(`/api/job-roles/${id}`, {
     method: "PATCH",

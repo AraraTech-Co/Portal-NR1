@@ -5,6 +5,7 @@ import {
   fetchCanArchive,
   createActivity,
   createEstablishment,
+  comAvisoDeEquivalente,
   createJobRole,
   createSector,
   moveJobRole,
@@ -475,7 +476,11 @@ export function OperationPage() {
                         name={j.name}
                         canEdit={canEdit}
                         onRename={async (name) => {
-                          await updateJobRole(j.id, { name });
+                          await comAvisoDeEquivalente(
+                            (confirmar) =>
+                              updateJobRole(j.id, confirmar ? { name, confirmar_equivalente: true } : { name }),
+                            "O nome não foi trocado.",
+                          );
                           await reload();
                         }}
                         onCheckArchive={() => fetchCanArchive("job-roles", j.id)}
@@ -492,7 +497,10 @@ export function OperationPage() {
                     label="Nova função"
                     placeholder="Ex.: Operador"
                     onCreate={async (name) => {
-                      await createJobRole(sectorId, name);
+                      await comAvisoDeEquivalente(
+                        (confirmar) => createJobRole(sectorId, name, confirmar),
+                        "Nada foi criado.",
+                      );
                       await reload();
                     }}
                   />
