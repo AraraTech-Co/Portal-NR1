@@ -20,9 +20,11 @@ import {
   lerTabela,
   type FilialDaEmpresa,
   type FuncaoDaEmpresa,
+  type CargoSemFuncao,
   type Lido,
   type LinhaRecusada,
 } from "@/lib/planilha";
+import { useModuleAccess } from "@/lib/module-access";
 import { importarEmLotes } from "@/lib/importar-em-lotes";
 import { PlanilhaIlegivel, gerarXlsx, lerXlsx, pareceOfficeProtegido, pareceXlsx } from "@/lib/xlsx";
 
@@ -120,6 +122,15 @@ export function ImportPeople() {
     na tabela da prévia (e do relatório) como Erro, e na contagem.
   */
   const [recusadas, setRecusadas] = useState<LinhaRecusada[]>([]);
+  /*
+    Os cargos que não casaram com nenhuma função, agrupados por filial e
+    chave, guardados na conferência. O bloco só mostra; criar as funções é
+    só de quem cuida da Operação e da Conta (Master e Dono). [C6-2]
+  */
+  const [cargosSemFuncao, setCargosSemFuncao] = useState<CargoSemFuncao[]>([]);
+  const editaOperacao = useModuleAccess("operacao").canWrite;
+  const editaConta = useModuleAccess("conta").canWrite;
+  const criaFuncoes = editaOperacao && editaConta;
   const [relatorio, setRelatorio] = useState<ImportReport | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
@@ -179,6 +190,7 @@ export function ImportPeople() {
     setRelatorio(null);
     setAceitos({});
     setRecusadas(lido.recusadas);
+    setCargosSemFuncao(lido.cargosSemFuncao);
     setOcupado(true);
     try {
       setPrevia(await enviar(true));
@@ -269,6 +281,7 @@ export function ImportPeople() {
             setPrevia(null);
             setRelatorio(null);
             setRecusadas([]);
+            setCargosSemFuncao([]);
             setErroDoArquivo(null);
             setAceitos({});
             setTexto("");
@@ -424,6 +437,70 @@ export function ImportPeople() {
               Nenhuma senha foi gerada. O prazo é de 30 dias; quem ficar sem
               matrícula, CPF ou nascimento na ficha não consegue entrar sozinho.
             </p>
+          )}
+          {previa && cargosSemFuncao.length > 0 && (
+            <section className="cargos-sem-funcao" aria-labelledby="cargos-sem-funcao-titulo">
+              <h3 id="cargos-sem-funcao-titulo">
+                Cargos sem função nesta planilha: {cargosSemFuncao.length}
+              </h3>
+              <p className="muted">
+                As pessoas destes cargos ficam de fora até a função existir. Nada foi gravado ainda.
+              </p>
+              {!criaFuncoes && (
+                <p className="import-warning">
+                  Quem cuida da Operação (Master ou Dono) cria estas funções.
+                </p>
+              )}
+              <div className="data-table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Filial</th>
+                      <th>Cargo</th>
+                      <th>Variações</th>
+                      <th>CBO 2002</th>
+                      <th>Pessoas</th>
+                      <th>Sugestão</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cargosSemFuncao.map((c) => (
+                      <tr key={`${c.filialId ?? c.filial}:${c.chave}`}>
+                        <td>{c.filial || <span className="muted">—</span>}</td>
+                        <td>
+                          <strong>{c.nome}</strong>
+                        </td>
+                        <td>
+                          {c.variacoes.length > 1 ? (
+                            c.variacoes.map((v) => `${v.grafia} (${v.linhas})`).join(", ")
+                          ) : (
+                            <span className="muted">—</span>
+                          )}
+                        </td>
+                        <td>
+                          {c.cbo2002.length === 0 ? (
+                            <span className="muted">—</span>
+                          ) : (
+                            c.cbo2002.join(", ")
+                          )}
+                          {c.cbo2002.length > 1 && (
+                            <div className="import-row-warning">CBO diferente entre as linhas: confira</div>
+                          )}
+                        </td>
+                        <td>{c.pessoas}</td>
+                        <td>
+                          {c.sugestoes.length > 0 ? (
+                            c.sugestoes.join("; ")
+                          ) : (
+                            <span className="muted">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
           )}
           <div className="data-table-wrap">
             <table className="data-table">

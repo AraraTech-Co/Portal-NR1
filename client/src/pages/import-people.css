@@ -62,3 +62,23 @@
 .import-divergence input {
   margin-top: 0.2rem;
 }
+
+/* O bloco "Cargos sem função" da prévia (Correção 6, C6-2). */
+.cargos-sem-funcao {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+
+.cargos-sem-funcao h3 {
+  margin: 0;
+}
+
+.import-row-warning {
+  margin-top: 0.25rem;
+  font-size: 0.85rem;
+  color: var(--sem-warning-fg);
+}

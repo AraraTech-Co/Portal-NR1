@@ -228,7 +228,7 @@ describe("a planilha da folha é lida como sai do sistema de folha [PF-1]", () =
       FILIAIS,
     );
     expect(lido.problems).toEqual([
-      `Linha 2: função "REPOSITORA" não existe na filial "Administrativo". Cadastre a função com esse nome em Operação ou corrija o cargo na planilha.`,
+      `Linha 2: função "REPOSITORA" não existe na filial "Administrativo". Veja Cargos sem função, acima.`,
     ]);
     expect(lido.rows).toEqual([]);
     expect(lido.recusadas.map((r) => [r.linha, r.nome])).toEqual([[2, "BIA"]]);

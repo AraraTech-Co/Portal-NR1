@@ -39,6 +39,30 @@ export type FuncaoDaEmpresa = {
   id: string;
   name: string;
   establishment?: { id?: string; name: string } | null;
+  /** Para sugerir "mesmo CBO" no bloco de cargos sem função. [C6-2] */
+  cbo2002?: string | null;
+};
+
+/**
+ * Um cargo da planilha que não casou com nenhuma função da filial: uma
+ * entrada por filial e chave do cargo, com as grafias que caíram nela.
+ * O bloco "Cargos sem função" da prévia mostra estas entradas; ele não grava
+ * nada. [C6-2]
+ */
+export type CargoSemFuncao = {
+  filialId: string | null;
+  filial: string;
+  chave: string;
+  /** O nome proposto para a função: a grafia masculina, ou a mais frequente. */
+  nome: string;
+  variacoes: { grafia: string; linhas: number }[];
+  pessoas: number;
+  /** Os CBO 2002 que as linhas trazem; mais de um é aviso. */
+  cbo2002: string[];
+  /** As linhas da planilha com este cargo. */
+  linhas: number[];
+  /** "Mesmo CBO de …": outro cargo do bloco ou função da filial. Só sugere. */
+  sugestoes: string[];
 };
 
 /**
@@ -65,6 +89,8 @@ export type Lido = {
    * aviso dela, não recusa.
    */
   recusadas: LinhaRecusada[];
+  /** Os cargos sem função, agrupados, para o bloco da prévia. [C6-2] */
+  cargosSemFuncao: CargoSemFuncao[];
   /** O número da linha no Excel de cada linha de `rows`, na mesma ordem. */
   numeros: number[];
   /** Em que modelo a planilha veio. [PF-1] */
@@ -306,6 +332,98 @@ function separador(linha: string): string {
  * filial na empresa, é obrigatória. Sem a lista de filiais, a coluna só
  * desempata a função pelo nome, como antes. [C3-3]
  */
+const CONECTIVOS = new Set(["de", "da", "do", "das", "dos", "e"]);
+
+/**
+ * O nome da função criada: inicial maiúscula, conectivos em minúscula
+ * (decisão do Léo, D6-2). "ENCARREGADA DE LOJA" → "Encarregada de Loja".
+ * A folha não traz acento; o nome é editável antes de criar. [C6-2] [C6-3]
+ */
+export function nomeDeFuncao(grafia: string): string {
+  return grafia
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((p, i) => (i > 0 && CONECTIVOS.has(p) ? p : p.charAt(0).toUpperCase() + p.slice(1)))
+    .join(" ");
+}
+
+/** A grafia "neutra" de um cargo, só sem acento e sem pontuação, sem dobrar o gênero. */
+function semGenero(grafia: string): string {
+  return grafia
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function agruparCargosSemFuncao(
+  linhas: { filialId: string | null; filial: string; grafia: string; cbo2002: string | null; linha: number }[],
+  funcoes: FuncaoDaEmpresa[],
+): CargoSemFuncao[] {
+  const grupos = new Map<string, CargoSemFuncao & { _contagem: Map<string, number> }>();
+  for (const l of linhas) {
+    const chave = chaveDoCargo(l.grafia);
+    if (!chave) continue;
+    const k = `${l.filialId ?? l.filial}:${chave}`;
+    const g =
+      grupos.get(k) ??
+      Object.assign(
+        {
+          filialId: l.filialId,
+          filial: l.filial,
+          chave,
+          nome: "",
+          variacoes: [],
+          pessoas: 0,
+          cbo2002: [] as string[],
+          linhas: [] as number[],
+          sugestoes: [] as string[],
+        },
+        { _contagem: new Map<string, number>() },
+      );
+    g._contagem.set(l.grafia, (g._contagem.get(l.grafia) ?? 0) + 1);
+    g.pessoas += 1;
+    g.linhas.push(l.linha);
+    if (l.cbo2002 && !g.cbo2002.includes(l.cbo2002)) g.cbo2002.push(l.cbo2002);
+    grupos.set(k, g);
+  }
+  const lista = [...grupos.values()];
+  for (const g of lista) {
+    g.variacoes = [...g._contagem.entries()]
+      .map(([grafia, n]) => ({ grafia, linhas: n }))
+      .sort((a, b) => b.linhas - a.linhas || a.grafia.localeCompare(b.grafia));
+    /*
+      O nome proposto: a grafia masculina, quando a planilha tem as duas (a
+      que não muda ao dobrar o gênero); senão, a mais frequente.
+    */
+    const masculina =
+      g.variacoes.length > 1 ? g.variacoes.find((v) => chaveDoCargo(v.grafia) === semGenero(v.grafia)) : undefined;
+    g.nome = nomeDeFuncao((masculina ?? g.variacoes[0]!).grafia);
+  }
+  /* "Mesmo CBO de …": só quando o cargo tem um CBO 2002, e só sugere. */
+  for (const g of lista) {
+    if (g.cbo2002.length !== 1) continue;
+    const cbo = g.cbo2002[0];
+    for (const outro of lista) {
+      if (outro !== g && outro.filial === g.filial && outro.cbo2002.length === 1 && outro.cbo2002[0] === cbo) {
+        g.sugestoes.push(`Mesmo CBO de "${outro.variacoes[0]!.grafia}"`);
+      }
+    }
+    for (const f of funcoes) {
+      const daFilial = g.filialId ? f.establishment?.id === g.filialId : (f.establishment?.name ?? "") === g.filial;
+      if (daFilial && f.cbo2002 === cbo && chaveDoCargo(f.name) !== g.chave) {
+        g.sugestoes.push(`Mesmo CBO da função "${f.name}"`);
+      }
+    }
+  }
+  return lista
+    .map(({ _contagem, ...g }) => g)
+    .sort((a, b) => a.filial.localeCompare(b.filial) || b.pessoas - a.pessoas || a.nome.localeCompare(b.nome));
+}
+
 export function lerLinhas(
   texto: string,
   funcoes: FuncaoDaEmpresa[],
@@ -317,7 +435,7 @@ export function lerLinhas(
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter(Boolean);
-  if (linhas.length === 0) return { rows: [], problems: [], recusadas: [], numeros: [], modelo: null };
+  if (linhas.length === 0) return { rows: [], problems: [], recusadas: [], cargosSemFuncao: [], numeros: [], modelo: null };
   const sep = separador(linhas[0]!);
   return lerTabela(
     linhas.map((l) => l.split(sep).map((c) => c.trim())),
@@ -343,7 +461,7 @@ export function lerTabela(
   origem: "texto" | "xlsx" = "xlsx",
 ): Lido {
   const inicio = matriz.findIndex((l) => l.some((c) => c !== ""));
-  if (inicio < 0) return { rows: [], problems: [], recusadas: [], numeros: [], modelo: null };
+  if (inicio < 0) return { rows: [], problems: [], recusadas: [], cargosSemFuncao: [], numeros: [], modelo: null };
   const primeira = matriz[inicio]!;
   const daFolha = ehDaFolha(primeira);
   const cabecalho = daFolha ? primeira.map(chaveDaFolha) : primeira.map((c) => semAcento(c));
@@ -406,6 +524,8 @@ export function lerTabela(
   const cpfVisto = new Map<string, number>();
   /* O nome de cada linha, para a recusa aparecer com ele na prévia. */
   const nomeDaLinha = new Map<number, string>();
+  /* Os cargos que não casaram, linha a linha, para o bloco da prévia. [C6-2] */
+  const semFuncao: { filialId: string | null; filial: string; grafia: string; cbo2002: string | null; linha: number }[] = [];
   const matriculaVista = new Map<string, number>();
 
   if (colunasIgnoradas.length > 0) {
@@ -547,11 +667,19 @@ export function lerTabela(
         aviso fácil de não ver: agora a linha fica de fora até o nome bater.
       */
       if (candidatas.length === 0) {
+        /* A linha continua de fora, e o motivo aponta para o bloco. [C6-2] */
         problems.push(
           unidade
-            ? `Linha ${numero}: função "${nomeDaFuncao}" não existe na filial "${unidade}". Cadastre a função com esse nome em Operação ou corrija o cargo na planilha.`
-            : `Linha ${numero}: função "${nomeDaFuncao}" não existe. Cadastre a função com esse nome em Operação ou corrija o cargo na planilha.`,
+            ? `Linha ${numero}: função "${nomeDaFuncao}" não existe na filial "${unidade}". Veja Cargos sem função, acima.`
+            : `Linha ${numero}: função "${nomeDaFuncao}" não existe. Veja Cargos sem função, acima.`,
         );
+        semFuncao.push({
+          filialId: filial?.id ?? null,
+          filial: filial?.name ?? unidade ?? "",
+          grafia: nomeDaFuncao,
+          cbo2002: (row as LinhaLocal).job_role_cbo2002?.trim() || null,
+          linha: numero,
+        });
         continue;
       } else if (candidatas.length > 1) {
         const unidades = [
@@ -681,7 +809,14 @@ export function lerTabela(
   }
   const recusadas = [...porLinha.values()].sort((a, b) => a.linha - b.linha);
 
-  return { rows, problems, recusadas, numeros, modelo: daFolha ? "folha" : "csv" };
+  return {
+    rows,
+    problems,
+    recusadas,
+    cargosSemFuncao: agruparCargosSemFuncao(semFuncao, funcoes),
+    numeros,
+    modelo: daFolha ? "folha" : "csv",
+  };
 }
 
 

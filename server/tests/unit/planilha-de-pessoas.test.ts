@@ -99,7 +99,7 @@ describe("o que já era guardado continua [B2-1-L] [CB-6]", () => {
         linha: 2,
         nome: "Maria",
         motivos: [
-          'função "Soldador" não existe. Cadastre a função com esse nome em Operação ou corrija o cargo na planilha.',
+          'função "Soldador" não existe. Veja Cargos sem função, acima.',
         ],
       },
     ]);
