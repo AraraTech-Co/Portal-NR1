@@ -4,7 +4,9 @@ import {
   NIVEIS_DA_COPIA,
   NIVEL_DA_COPIA_LABEL,
   copiarEntreFiliais,
+  linhasDoQueJaExistia,
   previaDaCopia,
+  type JaExistiaNaCopia,
   type PreviaDaCopia,
   type ResultadoDaCopia,
 } from "@/api/copia-entre-filiais";
@@ -15,6 +17,30 @@ import { Dialog } from "@/components/Dialog";
 function valor(v: unknown): string {
   if (v === null || v === undefined || v === "") return "—";
   return String(v);
+}
+
+/** O que já existia no destino e o que ficou de fora, na prévia e no resultado. [C6-6] */
+function JaExistia({ r }: { r: JaExistiaNaCopia }) {
+  const linhas = linhasDoQueJaExistia(r);
+  return (
+    <>
+      {linhas.map((l) => (
+        <p key={l} className="muted" style={{ margin: 0 }}>
+          {l}
+        </p>
+      ))}
+      {r.de_fora.length > 0 && (
+        <div className="form-error" role="alert">
+          <p style={{ margin: 0 }}>Ficou de fora, com o que estiver dentro:</p>
+          <ul style={{ margin: "0.25rem 0 0" }}>
+            {r.de_fora.map((m) => (
+              <li key={m}>{m}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </>
+  );
 }
 
 function somar(r: ResultadoDaCopia, campo: "criados" | "atualizados"): number {
@@ -152,6 +178,8 @@ export function CopiarDeOutraFilial({
                   </table>
                 </div>
 
+                <JaExistia r={previa} />
+
                 {previa.conflitos.length > 0 && (
                   <fieldset className="form-field">
                     <legend>
@@ -193,12 +221,15 @@ export function CopiarDeOutraFilial({
             )}
 
             {resultado && (
-              <p role="status">
-                Cópia feita: {somar(resultado, "criados")} item(ns) novo(s) e {somar(resultado, "atualizados")}{" "}
-                atualizado(s).
-                {resultado.ignorados.length > 0 &&
-                  ` ${resultado.ignorados.length} item(ns) que esta filial mudou ficaram como estavam.`}
-              </p>
+              <>
+                <p role="status">
+                  Cópia feita: {somar(resultado, "criados")} item(ns) novo(s) e {somar(resultado, "atualizados")}{" "}
+                  atualizado(s).
+                  {resultado.ignorados.length > 0 &&
+                    ` ${resultado.ignorados.length} item(ns) que esta filial mudou ficaram como estavam.`}
+                </p>
+                <JaExistia r={resultado} />
+              </>
             )}
 
             {error && (
