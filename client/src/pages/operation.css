@@ -231,3 +231,27 @@
 .op-job-cbo-form .form-error {
   grid-column: 1 / -1;
 }
+
+/* Os cargos da folha juntados à função. [C6-4] */
+.op-aliases {
+  display: grid;
+  gap: 0.2rem;
+  font-size: 0.82rem;
+  min-width: 0;
+}
+
+.op-aliases ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+}
+
+.op-aliases li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  overflow-wrap: anywhere;
+}

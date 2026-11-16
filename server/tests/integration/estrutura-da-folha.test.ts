@@ -181,12 +181,12 @@ describe("criar e juntar", () => {
 
   it("apelido que apontava para função arquivada é reapontado, sem bater na unicidade", async () => {
     await prisma.jobRoleAlias.create({
-      data: { organizationId: orgId, establishmentId: loja, chave: "op estoque", jobRoleId: antiga, createdById: usuarios[0]! },
+      data: { organizationId: orgId, establishmentId: loja, chave: "op estoque", grafia: "Op Estoque", jobRoleId: antiga, createdById: usuarios[0]! },
     });
     const res = await criar("Mia", [{ filial_id: loja, cargo: "OP ESTOQUE", acao: "juntar", juntar_funcao_id: caixa }]);
     expect(res.status, JSON.stringify(res.body)).toBe(201);
     const apelidos = await prisma.jobRoleAlias.findMany({ where: { establishmentId: loja, chave: "op estoque" } });
-    expect(apelidos.map((a) => a.jobRoleId)).toEqual([caixa]);
+    expect(apelidos.map((a) => [a.jobRoleId, a.grafia])).toEqual([[caixa, "OP ESTOQUE"]]);
   });
 
   it("juntar um cargo que já casa com outra função da filial: 409", async () => {
@@ -248,8 +248,13 @@ describe("dois cliques ao mesmo tempo", () => {
 describe("o apelido na lista de funções e a remoção", () => {
   it("GET /api/job-roles traz os apelidos; o SST não remove; o Master remove", async () => {
     const lista = await request(app).get("/api/job-roles").set(as(token.Mia!));
-    const doCaixa = (lista.body.job_roles as { id: string; aliases: { id: string; chave: string }[] }[]).find((f) => f.id === caixa)!;
-    expect(doCaixa.aliases.map((a) => a.chave)).toEqual(["com op caixo", "op estoque"]);
+    const doCaixa = (lista.body.job_roles as { id: string; aliases: { id: string; chave: string; grafia: string }[] }[]).find(
+      (f) => f.id === caixa,
+    )!;
+    expect(doCaixa.aliases.map((a) => [a.chave, a.grafia])).toEqual([
+      ["com op caixo", "COM OP CAIXA"],
+      ["op estoque", "OP ESTOQUE"],
+    ]);
     const alvo = doCaixa.aliases[0]!;
     expect((await request(app).delete(`/api/job-roles/${caixa}/apelidos/${alvo.id}`).set(as(token.Sara!))).status).toBe(403);
     expect((await request(app).delete(`/api/job-roles/${caixa}/apelidos/${alvo.id}`).set(as(token.Mia!))).status).toBe(204);

@@ -34,7 +34,7 @@ export type JobRole = {
   sector_name?: string;
   establishment?: { id: string; name: string };
   /** Os cargos da folha juntados a esta função (chave do cargo). [C6-4] */
-  aliases?: { id: string; chave: string }[];
+  aliases?: { id: string; chave: string; grafia: string }[];
 };
 
 export type Activity = {
@@ -187,6 +187,11 @@ export async function updateJobRole(
     method: "PATCH",
     body: JSON.stringify(input),
   });
+}
+
+/** Remover o apelido do cargo da folha: o cargo volta a "Cargos sem função". [C6-4] */
+export async function removeJobRoleAlias(jobRoleId: string, aliasId: string) {
+  return request(`/api/job-roles/${jobRoleId}/apelidos/${aliasId}`, { method: "DELETE" });
 }
 
 export async function archiveJobRole(id: string) {

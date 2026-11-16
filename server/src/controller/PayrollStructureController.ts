@@ -144,7 +144,9 @@ class PayrollStructureController {
           }
 
           /* Apelido: a regra é a mesma para "juntar" e para o nome trocado no "criar". */
-          const gravarApelido = async (i: number, filialId: string, chave: string, jobRoleId: string) => {
+          const gravarApelido = async (i: number, filialId: string, cargo: string, jobRoleId: string) => {
+            const chave = chaveDoCargo(cargo);
+            const grafia = cargo.trim().replace(/\s+/g, " ");
             if (filialDaFuncao.get(jobRoleId) !== filialId) erro(i, "a função escolhida não é desta filial.");
             const daFuncao = funcaoPorChave.get(`${filialId}:${chave}`) ?? [];
             if (daFuncao.some((f) => f.id !== jobRoleId)) {
@@ -158,12 +160,12 @@ class PayrollStructureController {
                 erro(i, `o cargo já está juntado com a função "${existente.jobRole.name}" nesta filial.`, 409);
               }
               /* Apontava para função arquivada: reaponta, em vez de bater na unicidade. */
-              await tx.jobRoleAlias.update({ where: { id: existente.id }, data: { jobRoleId, createdById: actorId } });
+              await tx.jobRoleAlias.update({ where: { id: existente.id }, data: { jobRoleId, grafia, createdById: actorId } });
               criados.apelidos.push({ id: existente.id, chave, jobRoleId });
               return;
             }
             const novo = await tx.jobRoleAlias.create({
-              data: { organizationId: orgId, establishmentId: filialId, chave, jobRoleId, createdById: actorId },
+              data: { organizationId: orgId, establishmentId: filialId, chave, grafia, jobRoleId, createdById: actorId },
             });
             apelidoPorChave.set(`${filialId}:${chave}`, { ...novo, jobRole: { name: "", archivedAt: null } });
             criados.apelidos.push({ id: novo.id, chave, jobRoleId });
@@ -233,7 +235,7 @@ class PayrollStructureController {
             }
             funcaoDoCargo.set(`${l.filialId}:${chaveCargo}`, jobRoleId);
             /* O nome trocado não casa com o cargo: o cargo vira apelido dela. */
-            if (chaveNome !== chaveCargo) await gravarApelido(l.i, l.filialId, chaveCargo, jobRoleId);
+            if (chaveNome !== chaveCargo) await gravarApelido(l.i, l.filialId, l.cargo, jobRoleId);
           }
 
           for (const l of linhas.filter((x) => x.acao === "juntar")) {
@@ -243,7 +245,7 @@ class PayrollStructureController {
             const destino = funcaoId || (outroCargo ? funcaoDoCargo.get(`${l.filialId}:${chaveDoCargo(outroCargo)}`) : undefined);
             if (!destino) erro(l.i, "escolha a função, ou o cargo desta planilha, com que juntar.");
             funcaoDoCargo.set(`${l.filialId}:${chaveCargo}`, destino!);
-            await gravarApelido(l.i, l.filialId, chaveCargo, destino!);
+            await gravarApelido(l.i, l.filialId, l.cargo, destino!);
           }
         },
         { timeout: 30_000 },

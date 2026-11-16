@@ -66,7 +66,7 @@ beforeAll(async () => {
   await prisma.membership.create({ data: { userId: user.id, organizationId: orgId, role: Role.MASTER } });
   await prisma.accountMembership.create({ data: { accountId: contaId, userId: user.id, role: AccountRole.USER } });
   await prisma.jobRoleAlias.create({
-    data: { organizationId: orgId, establishmentId: loja, chave: "com op caixo", jobRoleId: caixa, createdById: user.id },
+    data: { organizationId: orgId, establishmentId: loja, chave: "com op caixo", grafia: "COM OP CAIXA", jobRoleId: caixa, createdById: user.id },
   });
   const res = await request(app).post("/api/auth").send({ login, password: SENHA });
   expect(res.status, JSON.stringify(res.body)).toBe(200);

@@ -2948,6 +2948,8 @@ model JobRoleAlias {
   establishmentId String
   /// A chave do cargo (`chaveDoCargo`), não a grafia.
   chave           String
+  /// O cargo como veio na folha, para Operação mostrar "Também chamada na folha de".
+  grafia          String
   jobRoleId       String
   createdById     String
   createdAt       DateTime @default(now())

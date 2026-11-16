@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS "JobRoleAlias" (
     "organizationId" TEXT NOT NULL,
     "establishmentId" TEXT NOT NULL,
     "chave" TEXT NOT NULL,
+    "grafia" TEXT NOT NULL,
     "jobRoleId" TEXT NOT NULL,
     "createdById" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,

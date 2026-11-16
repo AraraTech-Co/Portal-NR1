@@ -7,6 +7,7 @@ import {
   createEstablishment,
   comAvisoDeEquivalente,
   createJobRole,
+  removeJobRoleAlias,
   createSector,
   moveJobRole,
   updateJobRole,
@@ -30,7 +31,7 @@ import { CboDaFuncao } from "./CboDaFuncao";
 import "@/components/form.css";
 import "./operation.css";
 import { LoadingState } from "@/components/LoadingState";
-import { ActivityCard, EstablishmentCard, NameActions } from "./OperationEditors";
+import { ActivityCard, ApelidosDaFuncao, EstablishmentCard, NameActions } from "./OperationEditors";
 
 function Column({
   title,
@@ -136,6 +137,9 @@ function QuickAdd({
 
 export function OperationPage() {
   const { canWrite: canEdit } = useModuleAccess("operacao");
+  /* Remover apelido do cargo: Operação e Conta, como criar pela planilha. [C6-4] */
+  const { canWrite: editaConta } = useModuleAccess("conta");
+  const removeApelido = canEdit && editaConta;
   /* Copiar a estrutura de outra filial: o SST e o Master. [C3-8] */
   const { user } = useAuth();
   const podeCopiar = canCopyBetweenUnits(user?.permission);
@@ -471,6 +475,15 @@ export function OperationPage() {
                         canEdit={canEdit}
                         onSave={async (cbo) => {
                           await updateJobRole(j.id, cbo);
+                          await reload();
+                        }}
+                      />
+                      <ApelidosDaFuncao
+                        funcao={j.name}
+                        apelidos={j.aliases ?? []}
+                        podeRemover={removeApelido}
+                        onRemover={async (aliasId) => {
+                          await removeJobRoleAlias(j.id, aliasId);
                           await reload();
                         }}
                       />

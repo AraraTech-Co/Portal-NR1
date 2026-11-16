@@ -562,7 +562,7 @@ class WorkplaceController {
             },
           },
           /* Os cargos da folha juntados a esta função. [C6-4] */
-          aliases: { select: { id: true, chave: true }, orderBy: { chave: "asc" } },
+          aliases: { select: { id: true, chave: true, grafia: true }, orderBy: { chave: "asc" } },
         },
       });
       res.json({
