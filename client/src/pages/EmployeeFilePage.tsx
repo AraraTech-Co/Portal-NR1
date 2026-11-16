@@ -60,6 +60,7 @@ function statusTone(status: string): "success" | "warning" | "danger" | "neutral
 const AUDIT_LABEL: Record<string, string> = {
   "employee_profile.create": "Ficha criada",
   "employee_profile.update": "Ficha alterada",
+  "employee_payroll_data.update": "Dados da folha da ficha alterados",
   "employee_profile.dismiss": "Desligamento registrado",
   "employee_profile.reinstate": "Desligamento revertido",
 };

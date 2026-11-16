@@ -27,6 +27,7 @@ import {
 import { useModuleAccess } from "@/lib/module-access";
 import { CargosSemFuncaoBloco } from "./CargosSemFuncao";
 import { importarEmLotes } from "@/lib/importar-em-lotes";
+import { avisoDasLinhasDeFora } from "@/lib/linhas-de-fora";
 import { PlanilhaIlegivel, gerarXlsx, lerXlsx, pareceOfficeProtegido, pareceXlsx } from "@/lib/xlsx";
 
 const PAPEIS_DA_PLANILHA = Object.entries(ORG_ROLE_LABEL)
@@ -439,14 +440,9 @@ export function ImportPeople() {
           </p>
           {recusadas.length > 0 && (
             <p className="import-warning" role="alert">
-              <strong>
-                {recusadas.length === 1
-                  ? "1 linha da planilha fica de fora"
-                  : `${recusadas.length} linhas da planilha ficam de fora`}
-              </strong>{" "}
-              e não {relatorio ? "foram cadastradas" : "serão cadastradas"}. Estão na tabela abaixo
-              como Erro, com o motivo. Corrija a planilha e envie de novo: quem já entrou não é
-              cadastrado outra vez.
+              <strong>{avisoDasLinhasDeFora(recusadas.length, Boolean(relatorio)).titulo}</strong>{" "}
+              {avisoDasLinhasDeFora(recusadas.length, Boolean(relatorio)).resto} Corrija a planilha e
+              envie de novo: quem já entrou não é cadastrado outra vez.
             </p>
           )}
           {previa && comDiferenca > 0 && (
