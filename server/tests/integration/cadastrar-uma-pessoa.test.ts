@@ -65,7 +65,10 @@ beforeAll(async () => {
 afterAll(async () => {
   const users = await prisma.user.findMany({ where: { name: { contains: `Formulario` , endsWith: SUFIXO } }, select: { id: true } });
   const ids = users.map((u) => u.id);
-  await prisma.auditEvent.deleteMany({ where: { organizationId: ORG_ID, entityId: { in: ids } } });
+  const fichas = await prisma.employeeProfile.findMany({ where: { userId: { in: ids } }, select: { id: true } });
+  await prisma.auditEvent.deleteMany({
+    where: { organizationId: ORG_ID, entityId: { in: [...ids, ...fichas.map((f) => f.id)] } },
+  });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
   await prisma.jobRole.deleteMany({ where: { id: funcaoDaOutra } });
   await prisma.sector.deleteMany({ where: { establishmentId: outraFilial } });
@@ -92,13 +95,34 @@ describe("o formulário de uma pessoa", () => {
     expect((trilha.after as { via: string }).via).toBe("formulario");
   });
 
-  it("de novo com o mesmo CPF: não cria outra pessoa", async () => {
+  it("de novo com o mesmo CPF: não cria outra pessoa, completa a ficha, e a trilha diz formulario", async () => {
     const p = pessoa(2);
     expect((await cadastrar("rh", p)).status).toBe(201);
     const deNovo = await cadastrar("rh", { ...p, admitted_at: "2024-02-01" });
     expect(deNovo.status).toBe(201);
-    expect(deNovo.body.results[0].status).not.toBe("created");
-    expect(await prisma.employeeProfile.count({ where: { organizationId: ORG_ID, taxId: p.tax_id } })).toBe(1);
+    expect(deNovo.body.results[0].status).toBe("completed");
+    const fichas = await prisma.employeeProfile.findMany({ where: { organizationId: ORG_ID, taxId: p.tax_id } });
+    expect(fichas).toHaveLength(1);
+    const trilha = await prisma.auditEvent.findFirstOrThrow({
+      where: { organizationId: ORG_ID, action: "employee_profile.update", entityType: "EmployeeProfile", entityId: fichas[0]!.id },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(trilha.after).toMatchObject({ via: "formulario" });
+    expect((trilha.after as { filled: string[] }).filled.length).toBeGreaterThan(0);
+  });
+
+  it("o campo divergente aceito pela API com origem formulario: a trilha diz formulario", async () => {
+    const p = pessoa(13);
+    expect((await cadastrar("rh", p)).status).toBe(201);
+    const res = await cadastrar("rh", { ...p, birth_date: "1991-06-11", aceitar: ["birth_date"] });
+    expect(res.status).toBe(201);
+    const ficha = await prisma.employeeProfile.findFirstOrThrow({ where: { organizationId: ORG_ID, taxId: p.tax_id } });
+    expect(ficha.birthDate?.toISOString().slice(0, 10)).toBe("1991-06-11");
+    const trilha = await prisma.auditEvent.findFirstOrThrow({
+      where: { organizationId: ORG_ID, action: "employee_profile.update", entityType: "EmployeeProfile", entityId: ficha.id },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(trilha.after).toMatchObject({ via: "formulario", confirmed: ["birth_date"] });
   });
 
   it("sem nascimento, ou sem CPF e sem matrícula: 400, com ou sem conferir, e nada gravado", async () => {
