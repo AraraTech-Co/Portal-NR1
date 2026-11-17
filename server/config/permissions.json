@@ -55,6 +55,14 @@
     "user": true,
     "master": false
   },
+  "gerente_geral": {
+    "owner": false,
+    "admin": false,
+    "sst": true,
+    "rh": false,
+    "user": true,
+    "master": false
+  },
   "colaborador": {
     "owner": false,
     "admin": false,

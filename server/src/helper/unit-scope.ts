@@ -31,7 +31,7 @@ const CENTRAL_PERMISSIONS: readonly string[] = ["master", "owner", "rh"];
  * abrangência técnica que já tinham. O colaborador NÃO está aqui: ele vê o
  * próprio e o coletivo da sua unidade de trabalho.
  */
-const WHOLE_ORG_PERMISSIONS: readonly string[] = [...CENTRAL_PERMISSIONS, "sst", "fiscal"];
+const WHOLE_ORG_PERMISSIONS: readonly string[] = [...CENTRAL_PERMISSIONS, "sst", "fiscal", "gerente_geral"];
 
 export function isUnitScoped(permission: string): boolean {
   return UNIT_SCOPED_PERMISSIONS.includes(permission);

@@ -109,6 +109,13 @@ const USERS: Spec[] = [
     naConta: true,
   },
   {
+    login: "teste.gerentegeral",
+    name: "Gerente Geral Teste",
+    email: "teste.gerentegeral@teste.local",
+    orgRole: Role.GERENTE_GERAL,
+    naConta: true,
+  },
+  {
     login: "teste.admloja",
     name: "ADM Loja Teste",
     email: "teste.admloja@teste.local",

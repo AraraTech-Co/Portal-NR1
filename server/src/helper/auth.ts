@@ -33,6 +33,8 @@ export function effectivePermission(orgRole: Role | null | undefined): string {
       return "supervisor";
     case Role.GERENTE:
       return "gerente";
+    case Role.GERENTE_GERAL:
+      return "gerente_geral";
     case Role.ADM_LOJA:
       return "adm_loja";
     // "Admin (legado)" não é mais oferecido, mas quem tem continua valendo
@@ -55,6 +57,7 @@ export function orgRoleToAccountRole(orgRole: Role): AccountRole {
       return AccountRole.OWNER;
     case Role.RH:
     case Role.SST:
+    case Role.GERENTE_GERAL:
     case Role.GERENTE:
     case Role.ADM_LOJA:
     case Role.ADMIN:

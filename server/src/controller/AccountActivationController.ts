@@ -41,12 +41,16 @@ function fail(res: Response, err: unknown) {
   res.status(e.status || 500).json({ message: e.message || "Erro interno." });
 }
 
-/** Master, Dono e RH — os que cuidam de Conta e usuários. [D1] */
+/** Master, Dono, RH e Gerente geral — os que cuidam de Conta e usuários. [D1] [GG] */
 function podeAgir(auth: AuthRequest): boolean {
   const a = auth.actor!;
   return (
     canWriteModule(a.permission, "ativacao") &&
-    (Boolean(a.isMaster) || a.role === Role.OWNER || a.role === Role.MASTER || a.role === Role.RH)
+    (Boolean(a.isMaster) ||
+      a.role === Role.OWNER ||
+      a.role === Role.MASTER ||
+      a.role === Role.RH ||
+      a.role === Role.GERENTE_GERAL)
   );
 }
 
@@ -93,7 +97,7 @@ async function alvo(req: Request, res: Response) {
   const auth = req as AuthRequest;
   const orgId = actorOrgId(auth);
   if (!podeAgir(auth)) {
-    res.status(403).json({ message: "Só Master, Dono e RH agem sobre o acesso das contas." });
+    res.status(403).json({ message: "Só Master, Dono, RH e Gerente geral agem sobre o acesso das contas." });
     return null;
   }
   const membership = await prisma.membership.findFirst({
