@@ -13,6 +13,11 @@ import { holidayCalendarFor } from "../../src/helper/ethics-deadline";
  * B). Os feriados "dos próximos dias" cobrem 12 dias corridos, para o teste
  * não depender do dia da semana em que roda.
  *
+ * Sem os feriados do teste, o prazo não tem teto fixo: um feriado nacional
+ * na janela (20/11, por exemplo) estica o prazo normal para 6 dias. Por isso
+ * a comparação é com o prazo calculado só com os nacionais, e o teto de 12
+ * dias separa "com os feriados do teste" de "sem eles".
+ *
  * Feriados, filiais e denúncias do teste são apagados no fim.
  */
 const ORG_ID = "aaaaaaaa-0001-4000-8000-000000000001";
@@ -50,6 +55,16 @@ async function denunciar(establishment_id: string, category = "OTHER") {
     where: { id: res.body.report.id },
     select: { id: true, createdAt: true, dueAt: true },
   });
+}
+
+/**
+ * O prazo sem nenhum feriado cadastrado: só os nacionais e a Sexta-feira
+ * Santa conforme a filial. Os 13 dias de feriados do teste empurram o prazo
+ * para além de 12 dias; os nacionais e o fim de semana, nunca.
+ */
+const SEM_FERIADO_CADASTRADO = 12 * DIA;
+function soNacionais(r: { createdAt: Date }, goodFriday: boolean) {
+  return computeDueAt(r.createdAt, "NORMAL", { goodFriday }).toISOString();
 }
 
 /** Feriados não repetidos nos próximos 12 dias, na filial ou na empresa. */
@@ -136,7 +151,8 @@ describe("o prazo da denúncia usa os feriados da filial e da empresa [C4-11]", 
     const deA = await denunciar(filialA);
     const deB = await denunciar(filialB);
     expect(deA.dueAt!.getTime() - deA.createdAt.getTime()).toBeGreaterThan(12 * DIA);
-    expect(deB.dueAt!.getTime() - deB.createdAt.getTime()).toBeLessThan(6 * DIA);
+    expect(deB.dueAt!.toISOString(), "B segue só os nacionais").toBe(soNacionais(deB, false));
+    expect(deB.dueAt!.getTime() - deB.createdAt.getTime()).toBeLessThan(SEM_FERIADO_CADASTRADO);
     expect(deA.dueAt!.toISOString()).toBe(
       computeDueAt(deA.createdAt, "NORMAL", await holidayCalendarFor(ORG_ID, filialA)).toISOString(),
     );
@@ -174,7 +190,10 @@ describe("o prazo da denúncia usa os feriados da filial e da empresa [C4-11]", 
       expect((await request(app).delete(`/api/feriados/${f.id}`).set(as(rh))).status).toBe(204);
     }
     const nova = await denunciar(filialA);
-    expect(nova.dueAt!.getTime() - nova.createdAt.getTime()).toBeLessThan(6 * DIA);
+    const calendario = await holidayCalendarFor(ORG_ID, filialA);
+    expect(calendario.extraDates).toEqual([]);
+    expect(nova.dueAt!.toISOString()).toBe(soNacionais(nova, calendario.goodFriday ?? true));
+    expect(nova.dueAt!.getTime() - nova.createdAt.getTime()).toBeLessThan(SEM_FERIADO_CADASTRADO);
   });
 
   it("feriado da empresa de OUTRA organização não entra no prazo desta", async () => {
@@ -197,8 +216,8 @@ describe("o prazo da denúncia usa os feriados da filial e da empresa [C4-11]", 
     try {
       const deB = await denunciar(filialB);
       /* Esta empresa já não tem feriado cadastrado (o teste anterior excluiu): só os nacionais. */
-      expect(deB.dueAt!.toISOString()).toBe(computeDueAt(deB.createdAt, "NORMAL", { goodFriday: false }).toISOString());
-      expect(deB.dueAt!.getTime() - deB.createdAt.getTime()).toBeLessThan(6 * DIA);
+      expect(deB.dueAt!.toISOString()).toBe(soNacionais(deB, false));
+      expect(deB.dueAt!.getTime() - deB.createdAt.getTime()).toBeLessThan(SEM_FERIADO_CADASTRADO);
     } finally {
       await prisma.holiday.deleteMany({ where: { id: { in: alheios.map((h) => h.id) } } });
     }
