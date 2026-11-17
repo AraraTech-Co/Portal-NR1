@@ -4,7 +4,7 @@ import { effectivePermission } from "./auth";
 import { canWriteModule } from "./module-access";
 import type { Actor } from "../types/auth";
 
-/** Ordem: COLABORADOR < SUPERVISOR < ADM_LOJA < GERENTE < RH/SST < ADMIN < OWNER < MASTER */
+/** Ordem: COLABORADOR < SUPERVISOR < ADM_LOJA < GERENTE < GERENTE_GERAL < RH/SST < ADMIN < OWNER < MASTER */
 const ORG_RANK: Record<Role, number> = {
   COLABORADOR: 1,
   /** Fora da hierarquia: quem atribui é quem cuida de Conta e usuários. */
@@ -12,6 +12,8 @@ const ORG_RANK: Record<Role, number> = {
   SUPERVISOR: 2,
   ADM_LOJA: 3,
   GERENTE: 4,
+  /** Acima do Gerente e abaixo do RH. [GG] */
+  GERENTE_GERAL: 4.5,
   RH: 5,
   SST: 5,
   ADMIN: 6,
@@ -91,8 +93,9 @@ export function assignableOrgRoles(actor: Actor): Role[] {
       r !== Role.ADMIN,
   );
   // Pela planilha de acessos, só Master e RH cuidam de Conta e usuários —
-  // são eles que dão acesso a alguém de fora. [S7-A]
-  if (canWriteModule(actor.permission, "conta")) below.push(Role.FISCAL);
+  // são eles que dão acesso a alguém de fora. [S7-A] O Gerente geral também
+  // escreve em Conta, mas o acesso de fora segue com o RH ou acima. [GG]
+  if (canWriteModule(actor.permission, "conta") && ceiling >= ORG_RANK.RH) below.push(Role.FISCAL);
   return below.length > 0 ? below : [Role.COLABORADOR];
 }
 

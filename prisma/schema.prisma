@@ -148,6 +148,9 @@ enum Role {
   ADMIN
   SST
   RH
+  /// Acima do Gerente e abaixo do RH: cadastra pessoas, age na Ativação e
+  /// vê a empresa toda. [GG]
+  GERENTE_GERAL
   GERENTE
   ADM_LOJA
   SUPERVISOR

@@ -255,9 +255,10 @@ export function cuidaDaFilial(roleKey: string): boolean {
  * Os dados da planilha da folha (documentos, endereço, dependentes,
  * rescisão): Master, Dono e RH leem e editam os de todos; a própria pessoa
  * lê os seus, sem editar; ninguém mais. Decisão do Leonardo em 12/11/2026,
- * nem o ADM loja, que publica holerite. [PF-2]
+ * nem o ADM loja, que publica holerite. [PF-2] O Gerente geral também, que
+ * importa a planilha da folha: decisão do Leonardo em 17/11/2026. [GG]
  */
-const PAYROLL_DATA_ROLES: readonly string[] = ["master", "owner", "rh"];
+const PAYROLL_DATA_ROLES: readonly string[] = ["master", "owner", "rh", "gerente_geral"];
 
 export function canManagePayrollData(roleKey: string): boolean {
   return PAYROLL_DATA_ROLES.includes(normalizeRoleKey(roleKey));
