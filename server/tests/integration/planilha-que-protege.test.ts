@@ -32,11 +32,44 @@ async function entrar(login: string) {
 
 /** A filial do seed: a organização de teste tem mais de uma, e a linha sem função diz qual; com função, vale a dela. [C3-3] */
 const FILIAL_DO_SEED = "aaaaaaaa-0001-4000-8000-000000000011";
+
+/** CPF válido e novo a cada linha. */
+let seq = 0;
+function cpfFicticio(n: number): string {
+  const base = String(100000000 + ((Date.now() + n * 104729) % 800000000));
+  const d = base.split("").map(Number);
+  const dv = (k: number) => {
+    const r = (d.slice(0, k).reduce((t, x, i) => t + x * (k + 1 - i), 0) * 10) % 11;
+    return r === 10 ? 0 : r;
+  };
+  d.push(dv(9));
+  d.push(dv(10));
+  return d.join("");
+}
+
+/*
+  Cada linha leva matrícula, CPF e nascimento (obrigatórios desde 23/11),
+  para que a recusa venha só do nome ou do papel, que é o que este arquivo
+  testa.
+*/
+const comIdentidade = (p: Record<string, unknown>) => {
+  seq += 1;
+  return {
+    registration: `PP${seq}${SUFIXO}`.slice(0, 18),
+    tax_id: cpfFicticio(seq),
+    birth_date: "1990-05-10",
+    ...p,
+  };
+};
+
 async function importar(people: Record<string, unknown>[], apply = true) {
   const res = await request(app)
     .post("/api/pessoas-acessos/importar")
     .set(as(master))
-    .send({ people: people.map((p) => (p.job_role_id ? p : { establishment_id: FILIAL_DO_SEED, ...p })), apply });
+    .send({
+      people: people.map(comIdentidade).map((p) => (p.job_role_id ? p : { establishment_id: FILIAL_DO_SEED, ...p })),
+      apply,
+    });
   // 200 na prévia, 201 quando grava.
   expect([200, 201], JSON.stringify(res.body)).toContain(res.status);
   return res.body as {

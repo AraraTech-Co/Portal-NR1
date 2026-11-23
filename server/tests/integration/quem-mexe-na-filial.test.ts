@@ -21,8 +21,20 @@ let app: Express;
 let filial = "";
 const token: Record<string, string> = {};
 const QUEM_NAO_CUIDA = ["sst", "gerente", "supervisor", "admloja", "rh"];
+/** CNPJ válido e novo a cada execução: o CNPJ não se repete entre filiais (23/11). */
+function cnpjFicticio(semente: number): string {
+  const d = String(10000000 + (semente % 89999999)).padStart(8, "0").split("").map(Number);
+  d.push(0, 0, 0, 1);
+  const dv = (pesos: number[]) => {
+    const r = d.slice(0, pesos.length).reduce((t, x, i) => t + x * pesos[i]!, 0) % 11;
+    return r < 2 ? 0 : 11 - r;
+  };
+  d.push(dv([5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]));
+  d.push(dv([6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]));
+  return d.join("");
+}
 const CADASTRAIS: Record<string, string> = {
-  tax_id: "11.222.333/0001-81",
+  tax_id: cnpjFicticio(Date.now()),
   legal_name: "Razão de Teste LTDA",
   payroll_code: "9876",
   address: "Rua do Teste, 1",

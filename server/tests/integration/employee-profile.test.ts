@@ -34,6 +34,7 @@ describe("Employee profiles (RH)", () => {
         user_id: userId,
         registration: "MAT-001",
         tax_id: "123.456.789-09",
+        birth_date: "1985-04-12",
         phone: "11999990000",
         job_role_id: JOB_ID,
         admitted_at: "2024-01-15",
@@ -69,7 +70,8 @@ describe("Employee profiles (RH)", () => {
     const res = await request(app)
       .post("/api/employee-profiles")
       .set("Authorization", `Bearer ${token}`)
-      .send({ user_id: userId, registration: "MAT-002" });
+      /* Com os três da identidade (23/11) e outro CPF: o 409 é da ficha repetida da mesma pessoa. */
+      .send({ user_id: userId, registration: "MAT-002", tax_id: "111.444.777-35", birth_date: "1985-04-12", job_role_id: JOB_ID });
     expect(res.status).toBe(409);
   });
 
@@ -82,8 +84,12 @@ describe("Employee profiles (RH)", () => {
       .send({
         user_id: master.user.id,
         tax_id: "12345",
+        registration: "MAT-003",
+        birth_date: "1985-04-12",
+        job_role_id: JOB_ID,
       });
     expect(res.status).toBe(400);
+    expect(res.body.message).toBe("CPF inválido — confira os números.");
   });
 
   it("gets me and lists", async () => {

@@ -84,8 +84,23 @@ async function membro(nome: string, role: Role = Role.COLABORADOR) {
   return { id: user.id, login };
 }
 
+/*
+  A ficha nasce com matrícula, CPF e nascimento (23/11). O que o teste não
+  traz recebe um valor novo, para que o resultado dependa só da filial e da
+  matrícula, que é o que este arquivo testa.
+*/
+let seqDaFicha = 0;
+const comIdentidade = (body: Record<string, unknown>) => {
+  seqDaFicha += 1;
+  return {
+    ...("registration" in body ? {} : { registration: `F${seqDaFicha}-${SUFIXO}`.slice(0, 20) }),
+    ...("tax_id" in body ? {} : { tax_id: cpfFicticio(Date.now() + 1_000_003 * seqDaFicha) }),
+    ...("birth_date" in body ? {} : { birth_date: "1990-05-10" }),
+    ...body,
+  };
+};
 const criarFicha = (body: Record<string, unknown>) =>
-  request(app).post("/api/employee-profiles").set(as(rh.token)).send(body);
+  request(app).post("/api/employee-profiles").set(as(rh.token)).send(comIdentidade(body));
 
 const editarFicha = (id: string, body: Record<string, unknown>) =>
   request(app).patch(`/api/employee-profiles/${id}`).set(as(rh.token)).send(body);
@@ -182,7 +197,7 @@ describe("a chave da matrícula apara como o servidor [C3-2]", () => {
   it("matrícula colada com espaço duro entra pelo número e não duplica na filial", async () => {
     const NBSP = "\u00a0";
     const importar = (linhas: Record<string, unknown>[]) =>
-      request(app).post("/api/pessoas-acessos/importar").set(as(rh.token)).send({ people: linhas });
+      request(app).post("/api/pessoas-acessos/importar").set(as(rh.token)).send({ people: linhas.map(comIdentidade) });
     const res = await importar([
       { name: `C32 Planilha ${SUFIXO} nbsp`, registration: `${NBSP}05${NUM}`, job_role_id: filialA.jobRoleId },
     ]);
@@ -360,7 +375,7 @@ describe("matrícula única por filial [C3-2]", () => {
 
   it("a planilha põe a ficha na filial da função e casa a matrícula dentro dela", async () => {
     const importar = (linhas: Record<string, unknown>[]) =>
-      request(app).post("/api/pessoas-acessos/importar").set(as(rh.token)).send({ people: linhas });
+      request(app).post("/api/pessoas-acessos/importar").set(as(rh.token)).send({ people: linhas.map(comIdentidade) });
     const nome = (s: string) => `C32 Planilha ${SUFIXO} ${s}`;
 
     const res = await importar([
@@ -391,7 +406,13 @@ describe("matrícula única por filial [C3-2]", () => {
       Reimportar a pessoa de B com outra grafia da matrícula: é ela, não
       outra — a planilha completa o CPF que faltava na ficha dela. Se não
       a achasse, tentaria criar outra e cairia na unicidade ("pulada").
+      A ficha fica sem CPF como as de antes de 23/11, quando a pessoa nova
+      ainda entrava sem ele.
     */
+    await prisma.employeeProfile.updateMany({
+      where: { organizationId: ORG_ID, establishmentId: filialB.id, registrationKey: `8${NUM}` },
+      data: { taxId: null },
+    });
     const cpf = cpfFicticio(Date.now());
     const de_novo = await importar([
       { name: nome("B"), registration: `0008${NUM}`, job_role_id: filialB.jobRoleId, tax_id: cpf },

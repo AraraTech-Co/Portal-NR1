@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import prisma from "../model/prisma";
+import { filialRepetida } from "../helper/filial-unica";
 import { Establishment } from "../model/schema/Establishment/Establishment";
 import { Sector } from "../model/schema/Sector/Sector";
 import { JobRole } from "../model/schema/JobRole/JobRole";
@@ -233,10 +234,16 @@ class WorkplaceController {
         res.status(400).json({ message: "Informe o nome." });
         return;
       }
+      const cnpj = cnpjOrNull(tax_id);
+      const repetida = await filialRepetida(orgId, { nome: name, cnpj });
+      if (repetida) {
+        res.status(409).json({ message: repetida });
+        return;
+      }
       const row = await new Establishment().create.new({
         organizationId: orgId,
         name: name.trim(),
-        taxId: cnpjOrNull(tax_id),
+        taxId: cnpj,
         address: textOrNull(address),
       });
       // A data em que a unidade passou a existir é o começo do inventário:
@@ -296,6 +303,16 @@ class WorkplaceController {
         }
       }
       const taxId = tax_id !== undefined ? cnpjOrNull(tax_id) : existing.taxId;
+      /* Nome ou CNPJ de outra filial: 409. Só o que muda é conferido. (23/11) */
+      const repetida = await filialRepetida(
+        orgId,
+        { nome: name !== undefined ? name : null, cnpj: tax_id !== undefined ? taxId : null },
+        id,
+      );
+      if (repetida) {
+        res.status(409).json({ message: repetida });
+        return;
+      }
       const legalName = legal_name !== undefined ? textOrNull(legal_name) : existing.legalName;
       if (legalName && legalName.length > 200) {
         res.status(400).json({ message: "A razão social passa de 200 caracteres." });

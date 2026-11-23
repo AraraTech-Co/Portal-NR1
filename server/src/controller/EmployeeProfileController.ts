@@ -9,6 +9,7 @@ import { actorOrgId, actorUserId } from "../helper/org-scope";
 import { writeAudit } from "../helper/audit";
 import { isValidCpf, normalizeCpf } from "../helper/cpf";
 import { parseBirthDate } from "../helper/birth-date";
+import { apagaIdentidade, faltaNaIdentidade } from "../helper/identidade";
 import {
   canChangePersonnelRecord,
   canManageModule,
@@ -537,6 +538,7 @@ class EmployeeProfileController {
         user_id,
         registration,
         tax_id,
+        birth_date,
         phone,
         job_role_id,
         establishment_id,
@@ -545,6 +547,7 @@ class EmployeeProfileController {
         user_id?: string;
         registration?: string;
         tax_id?: string;
+        birth_date?: string;
         phone?: string;
         job_role_id?: string;
         establishment_id?: string;
@@ -555,6 +558,13 @@ class EmployeeProfileController {
         res.status(400).json({ message: "Informe user_id." });
         return;
       }
+      /* A ficha nasce com matrícula, CPF e nascimento: é com eles que a pessoa entra. (23/11) */
+      const falta = faltaNaIdentidade({ nascimento: birth_date, cpf: tax_id, matricula: registration });
+      if (falta) {
+        res.status(400).json({ message: falta });
+        return;
+      }
+      const birthDate = parseBirthDate(birth_date);
 
       const membership = await prisma.membership.findFirst({
         where: { userId: user_id, organizationId: orgId },
@@ -618,6 +628,7 @@ class EmployeeProfileController {
         userId: user_id,
         registration: matricula,
         taxId,
+        birthDate,
         phone: blank(phone),
         jobRoleId: job_role_id ?? null,
         establishmentId: filial.establishmentId,
@@ -746,6 +757,12 @@ class EmployeeProfileController {
           message: "CPF, matrícula e nascimento só podem ser alterados pelo RH.",
           code: "PERSONNEL_RECORD_ONLY",
         });
+        return;
+      }
+      /* Apagar matrícula, CPF ou nascimento é recusado; chave ausente não muda nada. (23/11) */
+      const apaga = apagaIdentidade(body, current);
+      if (apaga) {
+        res.status(400).json({ message: apaga });
         return;
       }
       // Encerrar o vínculo tem rota própria, com data e motivo. [S5-H] [OB-8]

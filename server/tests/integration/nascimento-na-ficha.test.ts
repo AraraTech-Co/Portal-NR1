@@ -20,6 +20,19 @@ const SUFIXO = Date.now().toString(36);
 
 const as = (token: string) => ({ Authorization: `Bearer ${token}` });
 
+/** CPF válido e novo a cada execução: a pessoa nova entra com matrícula, CPF e nascimento (23/11). */
+function cpfFicticio(n: number): string {
+  const base = String(100000000 + ((Date.now() + n * 104729) % 800000000));
+  const d = base.split("").map(Number);
+  const dv = (k: number) => {
+    const r = (d.slice(0, k).reduce((t, x, i) => t + x * (k + 1 - i), 0) * 10) % 11;
+    return r === 10 ? 0 : r;
+  };
+  d.push(dv(9));
+  d.push(dv(10));
+  return d.join("");
+}
+
 let app: Express;
 let rh: { token: string };
 let supervisor: { token: string };
@@ -60,9 +73,9 @@ async function perfil(matricula: string) {
 describe("nascimento pela planilha [C1-7]", () => {
   it("entra na criação; data inválida ou futura fica de fora com o motivo", async () => {
     const res = await importar([
-      { name: `Ana Nascida ${SUFIXO}`, registration: `N1-${SUFIXO}`, birth_date: "1990-03-15" },
-      { name: `Bia Nascida ${SUFIXO}`, registration: `N2-${SUFIXO}`, birth_date: "2990-01-01" },
-      { name: `Cid Nascida ${SUFIXO}`, registration: `N3-${SUFIXO}`, birth_date: "1990-02-31" },
+      { name: `Ana Nascida ${SUFIXO}`, registration: `N1-${SUFIXO}`, tax_id: cpfFicticio(1), birth_date: "1990-03-15" },
+      { name: `Bia Nascida ${SUFIXO}`, registration: `N2-${SUFIXO}`, tax_id: cpfFicticio(2), birth_date: "2990-01-01" },
+      { name: `Cid Nascida ${SUFIXO}`, registration: `N3-${SUFIXO}`, tax_id: cpfFicticio(3), birth_date: "1990-02-31" },
     ]);
     expect(res.status, JSON.stringify(res.body)).toBe(201);
     const [ana, bia, cid] = res.body.results;
@@ -74,8 +87,12 @@ describe("nascimento pela planilha [C1-7]", () => {
   });
 
   it("em cadastro existente, completa o branco e nunca sobrescreve", async () => {
-    const criada = await importar([{ name: `Dan Nascida ${SUFIXO}`, registration: `N4-${SUFIXO}` }]);
+    const criada = await importar([
+      { name: `Dan Nascida ${SUFIXO}`, registration: `N4-${SUFIXO}`, tax_id: cpfFicticio(4), birth_date: "1999-09-09" },
+    ]);
     expect(criada.body.results[0].status).toBe("created");
+    /* Uma ficha antiga, sem nascimento: desde 23/11 a pessoa nova já entra com ele. */
+    await prisma.employeeProfile.update({ where: { id: (await perfil(`N4-${SUFIXO}`)).id }, data: { birthDate: null } });
     expect((await perfil(`N4-${SUFIXO}`)).birthDate).toBeNull();
 
     const completa = await importar([
@@ -94,7 +111,10 @@ describe("nascimento pela planilha [C1-7]", () => {
 
 describe("nascimento na ficha [C1-7]", () => {
   it("só o RH altera; quem não vê o CPF não vê o nascimento, nem no histórico", async () => {
-    await importar([{ name: `Eva Nascida ${SUFIXO}`, registration: `N5-${SUFIXO}` }]);
+    const eva = await importar([
+      { name: `Eva Nascida ${SUFIXO}`, registration: `N5-${SUFIXO}`, tax_id: cpfFicticio(5), birth_date: "1980-01-01" },
+    ]);
+    expect(eva.body.results[0].status, JSON.stringify(eva.body.results[0])).toBe("created");
     const { id } = await perfil(`N5-${SUFIXO}`);
 
     const semRh = await request(app)
