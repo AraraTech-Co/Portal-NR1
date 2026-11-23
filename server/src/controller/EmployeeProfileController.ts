@@ -760,7 +760,7 @@ class EmployeeProfileController {
         return;
       }
       /* Apagar matrícula, CPF ou nascimento é recusado; chave ausente não muda nada. (23/11) */
-      const apaga = apagaIdentidade(body);
+      const apaga = apagaIdentidade(body, current);
       if (apaga) {
         res.status(400).json({ message: apaga });
         return;

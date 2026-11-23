@@ -138,11 +138,17 @@ describe("a ficha", () => {
     expect(ficha.birthDate?.toISOString().slice(0, 10)).toBe("1990-05-10");
   });
 
-  it("editar: apagar dá 400 (vazio, espaço ou null); ausente não muda nada", async () => {
-    /* Uma ficha antiga, sem nascimento. */
+  it("editar: apagar o que a ficha tem dá 400 (vazio, espaço ou null), e nada muda", async () => {
     const userId = await semFicha(2);
     const ficha = await prisma.employeeProfile.create({
-      data: { organizationId: ORG_ID, userId, taxId: cpfFicticio(Date.now() + 77), registration: `IDV${SUFIXO}`.slice(0, 12), jobRoleId: JOB_ID },
+      data: {
+        organizationId: ORG_ID,
+        userId,
+        taxId: cpfFicticio(Date.now() + 77),
+        registration: `IDV${SUFIXO}`.slice(0, 12),
+        birthDate: new Date("1990-05-10T00:00:00.000Z"),
+        jobRoleId: JOB_ID,
+      },
     });
     const editar = (corpo: Record<string, unknown>) =>
       request(app).patch(`/api/employee-profiles/${ficha.id}`).set(as(token.rh!)).send(corpo);
@@ -153,12 +159,31 @@ describe("a ficha", () => {
         expect(res.body.message).toBe(mensagem);
       }
     }
-    const telefone = await editar({ phone: "19 99999-0000" });
-    expect(telefone.status, JSON.stringify(telefone.body)).toBe(200);
     const depois = await prisma.employeeProfile.findUniqueOrThrow({ where: { id: ficha.id } });
     expect(depois.taxId).toBe(ficha.taxId);
     expect(depois.registration).toBe(ficha.registration);
+    expect(depois.birthDate?.toISOString()).toBe(ficha.birthDate?.toISOString());
+  });
+
+  it("editar a ficha antiga sem nascimento com o corpo que a tela manda: 200, e o nascimento segue vazio", async () => {
+    const userId = await semFicha(3);
+    const ficha = await prisma.employeeProfile.create({
+      data: { organizationId: ORG_ID, userId, taxId: cpfFicticio(Date.now() + 91), registration: `IDW${SUFIXO}`.slice(0, 12), jobRoleId: JOB_ID },
+    });
+    /* EmployeeFilePage.salvar: com cuidaDoQuadro, manda os três sempre, e o nascimento vazio como null. */
+    const tela = await request(app).patch(`/api/employee-profiles/${ficha.id}`).set(as(token.rh!)).send({
+      registration: ficha.registration,
+      tax_id: ficha.taxId,
+      birth_date: null,
+      phone: "19 99999-0000",
+      job_role_id: JOB_ID,
+      admitted_at: null,
+    });
+    expect(tela.status, JSON.stringify(tela.body)).toBe(200);
+    const depois = await prisma.employeeProfile.findUniqueOrThrow({ where: { id: ficha.id } });
+    expect(depois.phone).toBe("19 99999-0000");
     expect(depois.birthDate).toBeNull();
+    expect(depois.taxId).toBe(ficha.taxId);
   });
 });
 
@@ -191,6 +216,27 @@ describe("a filial sem duplicar", () => {
     const depois = await criar("master", { name: `Terceira CNPJ ${SUFIXO}`, tax_id: cnpj });
     expect(depois.status).toBe(409);
     expect(depois.body.message).toBe(`O CNPJ informado já é da filial Com CNPJ ${SUFIXO} (arquivada).`);
+  });
+
+  it("trocar o CNPJ para o de outra filial dá 409, ativa ou arquivada; o próprio em outra formatação passa", async () => {
+    const cnpjA = cnpjFicticio(Date.now() + 11);
+    const cnpjB = cnpjFicticio(Date.now() + 22);
+    const cnpjC = cnpjFicticio(Date.now() + 33);
+    const a = (await criar("master", { name: `Troca A ${SUFIXO}`, tax_id: cnpjA })).body.establishment.id as string;
+    await criar("master", { name: `Troca B ${SUFIXO}`, tax_id: cnpjB });
+    const c = (await criar("master", { name: `Troca C ${SUFIXO}`, tax_id: cnpjC })).body.establishment.id as string;
+    await prisma.establishment.update({ where: { id: c }, data: { archivedAt: new Date() } });
+
+    const paraAtiva = await editar("master", a, { tax_id: cnpjB });
+    expect(paraAtiva.status).toBe(409);
+    expect(paraAtiva.body.message).toBe(`O CNPJ informado já é da filial Troca B ${SUFIXO}.`);
+    const paraArquivada = await editar("master", a, { tax_id: cnpjC });
+    expect(paraArquivada.status).toBe(409);
+    expect(paraArquivada.body.message).toBe(`O CNPJ informado já é da filial Troca C ${SUFIXO} (arquivada).`);
+    const formatado = cnpjA.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5");
+    const proprio = await editar("master", a, { tax_id: formatado });
+    expect(proprio.status, JSON.stringify(proprio.body)).toBe(200);
+    expect((await prisma.establishment.findUniqueOrThrow({ where: { id: a } })).taxId).toBe(cnpjA);
   });
 
   it("renomear para o nome de outra dá 409, também para o Gerente; a própria em outra grafia passa", async () => {

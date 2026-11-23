@@ -19,11 +19,19 @@ export function faltaNaIdentidade(p: { nascimento: unknown; cpf: unknown; matric
   return null;
 }
 
-/** Para a edição: a chave presente e vazia apaga o dado, e isso é recusado. Ausente não muda nada. */
-export function apagaIdentidade(body: Record<string, unknown>): string | null {
-  const apaga = (chave: string) => chave in body && vazio(body[chave]);
-  if (apaga("birth_date")) return FALTA_NASCIMENTO;
-  if (apaga("tax_id")) return FALTA_CPF;
-  if (apaga("registration")) return FALTA_MATRICULA;
+/**
+ * Para a edição: recusa só APAGAR — a ficha tem o dado e o corpo manda a
+ * chave vazia. Chave ausente não muda nada, e vazio sobre vazio também não:
+ * a tela da ficha manda os três sempre, e a ficha antiga sem nascimento
+ * continua editável nos outros campos.
+ */
+export function apagaIdentidade(
+  body: Record<string, unknown>,
+  atual: { birthDate: Date | null; taxId: string | null; registration: string | null },
+): string | null {
+  const apaga = (chave: string, tem: unknown) => chave in body && vazio(body[chave]) && !vazio(tem);
+  if (apaga("birth_date", atual.birthDate)) return FALTA_NASCIMENTO;
+  if (apaga("tax_id", atual.taxId)) return FALTA_CPF;
+  if (apaga("registration", atual.registration)) return FALTA_MATRICULA;
   return null;
 }
