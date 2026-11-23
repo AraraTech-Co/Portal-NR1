@@ -15,6 +15,8 @@ import { randomBytes } from "crypto";
 import { FIRST_ACCESS_WINDOW_DAYS, canonicalRegistration } from "../helper/auth-attempts";
 import { MATRICULA_FORA_DO_PADRAO, matriculaNoPadrao } from "../helper/matricula";
 import { avisoDeIdade, parseBirthDate } from "../helper/birth-date";
+import { faltaNaIdentidade } from "../helper/identidade";
+import { mesmoNome } from "../helper/nome";
 import { lerDataDeCalendario } from "../helper/data-de-calendario";
 import type { AuthRequest } from "../types/auth";
 import {
@@ -88,11 +90,6 @@ function dia(d: Date | null | undefined): string {
   return d.toISOString().slice(0, 10).split("-").reverse().join("/");
 }
 
-/** "ANA  DA SILVA" e "Ana da Silva" são o mesmo nome: a folha escreve em maiúsculas. */
-function mesmoNome(a: string, b: string): boolean {
-  const n = (x: string) => x.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
-  return n(a) === n(b);
-}
 
 const CBO = /^[0-9][0-9.-]{0,9}$/;
 
@@ -455,16 +452,9 @@ class PeopleImportController {
           return;
         }
         const pessoa = linhas[0]!;
-        if (!texto(pessoa.birth_date)) {
-          res.status(400).json({ message: "Informe a data de nascimento: é com ela que a pessoa faz o primeiro acesso." });
-          return;
-        }
-        if (!texto(pessoa.tax_id)) {
-          res.status(400).json({ message: "Informe o CPF: o primeiro acesso pede matrícula, CPF e data de nascimento." });
-          return;
-        }
-        if (!texto(pessoa.registration)) {
-          res.status(400).json({ message: "Informe a matrícula: o primeiro acesso pede matrícula, CPF e data de nascimento." });
+        const falta = faltaNaIdentidade({ nascimento: pessoa.birth_date, cpf: pessoa.tax_id, matricula: pessoa.registration });
+        if (falta) {
+          res.status(400).json({ message: falta });
           return;
         }
       }
@@ -869,6 +859,15 @@ class PeopleImportController {
               `A planilha traz rescisão em ${dia(rescisaoDeQuemChega)}: quem já saiu e não está no portal não é cadastrado.`,
             );
           }
+
+          /*
+            A pessoa nova entra com matrícula, CPF e nascimento, pela
+            planilha também: sem um deles, não faz o primeiro acesso. Vem
+            DEPOIS da decisão de completar a ficha de quem já existe, que
+            segue preenchendo só o que falta. (decisão do Léo, 23/11)
+          */
+          const faltaNaNova = faltaNaIdentidade({ nascimento: birthDate, cpf: taxId, matricula });
+          if (faltaNaNova) throw new Error(faltaNaNova);
 
           if (taxId) cpfsDaLeva.add(taxId);
           if (chave) matriculasDaLeva.add(`${filial ?? "-"}:${chave}`);

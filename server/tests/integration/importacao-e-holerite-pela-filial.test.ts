@@ -108,8 +108,30 @@ async function entrar(login: string) {
   return res.body.token as string;
 }
 
+/** CPF válido e novo a cada linha. */
+let seqDaLinha = 0;
+function cpfFicticio(n: number): string {
+  const base = String(100000000 + ((Date.now() + n * 104729) % 800000000));
+  const d = base.split("").map(Number);
+  const dv = (k: number) => {
+    const r = (d.slice(0, k).reduce((t, x, i) => t + x * (k + 1 - i), 0) * 10) % 11;
+    return r === 10 ? 0 : r;
+  };
+  d.push(dv(9));
+  d.push(dv(10));
+  return d.join("");
+}
+/*
+  A pessoa nova entra com matrícula, CPF e nascimento (23/11): cada linha
+  leva o que falta, para que o resultado dependa só da filial, que é o que
+  este arquivo testa.
+*/
+const comIdentidade = (p: Record<string, unknown>) => {
+  seqDaLinha += 1;
+  return { registration: `9${seqDaLinha}`, tax_id: cpfFicticio(seqDaLinha), birth_date: "1990-05-10", ...p };
+};
 const importar = (token: string, people: Record<string, unknown>[], dry_run: boolean) =>
-  request(app).post("/api/pessoas-acessos/importar").set(as(token)).send({ people, dry_run });
+  request(app).post("/api/pessoas-acessos/importar").set(as(token)).send({ people: people.map(comIdentidade), dry_run });
 
 const lote = (pdf: Buffer, extra: Record<string, unknown> = {}) => ({
   reference_month: 10,

@@ -108,6 +108,7 @@ describe("o trabalhador entra pelo que ele sabe de cor [B2-1-F]", () => {
         name: `Pereira Entrada ${SUFIXO}`,
         registration: matricula,
         tax_id: cpf,
+        birth_date: "1990-05-10",
         establishment_id: FILIAL,
       },
     ]);
@@ -141,9 +142,17 @@ describe("o trabalhador entra pelo que ele sabe de cor [B2-1-F]", () => {
   it("matrícula certa com senha errada continua sendo recusada", async () => {
     const matricula = `N${SUFIXO}`.slice(0, 12);
     const criar = await importar([
-      { name: `Souza Senha ${SUFIXO}`, registration: matricula, establishment_id: FILIAL },
+      {
+        name: `Souza Senha ${SUFIXO}`,
+        registration: matricula,
+        tax_id: cpfFicticio(Date.now() + 7919),
+        birth_date: "1990-05-10",
+        establishment_id: FILIAL,
+      },
     ]);
     expect(criar.status).toBe(201);
+    /* A pessoa existe: o 401 abaixo é da senha, não de matrícula desconhecida. */
+    expect(criar.body.results[0].status, JSON.stringify(criar.body.results[0])).toBe("created");
 
     const res = await entrar(matricula, "senha-errada-mesmo", FILIAL);
     expect(res.status).toBe(401);
@@ -157,8 +166,20 @@ describe("o trabalhador entra pelo que ele sabe de cor [B2-1-F]", () => {
     const senha = ["senha", "zeros", SUFIXO].join("-");
 
     const criar = await importar([
-      { name: `Lima Zeros ${SUFIXO}`, registration: comZeros, establishment_id: FILIAL },
-      { name: `Rocha Zeros ${SUFIXO}`, registration: semZeros, establishment_id: FILIAL },
+      {
+        name: `Lima Zeros ${SUFIXO}`,
+        registration: comZeros,
+        tax_id: cpfFicticio(Date.now() + 15731),
+        birth_date: "1990-05-10",
+        establishment_id: FILIAL,
+      },
+      {
+        name: `Rocha Zeros ${SUFIXO}`,
+        registration: semZeros,
+        tax_id: cpfFicticio(Date.now() + 31547),
+        birth_date: "1990-05-10",
+        establishment_id: FILIAL,
+      },
     ]);
     expect(criar.status, JSON.stringify(criar.body)).toBe(201);
     const [a, b] = criar.body.results as { status: string; login: string }[];
@@ -308,12 +329,22 @@ describe("o convite pede só o que é de quem entra [OB-1] [S1-M] [S1-Q]", () =>
 describe("a planilha completa quem já existe [CB-2] [S1-G]", () => {
   it("preenche o que está em branco e não toca no que já tem", async () => {
     const matricula = `C${SUFIXO}`.slice(0, 12);
-    // Entra sem CPF, sem função e sem admissão.
+    // Entra sem função e sem admissão.
     const primeira = await importar([
-      { name: `Marcos Incompleto ${SUFIXO}`, registration: matricula },
+      {
+        name: `Marcos Incompleto ${SUFIXO}`,
+        registration: matricula,
+        tax_id: cpfFicticio(Date.now() + 611953),
+        birth_date: "1990-05-10",
+      },
     ]);
     expect(primeira.status).toBe(201);
     const login = primeira.body.results[0].login as string;
+    /*
+      E sem CPF, como as fichas de antes de 23/11: desde então a pessoa nova
+      já entra com ele, então a ficha incompleta é uma ficha antiga.
+    */
+    await prisma.employeeProfile.updateMany({ where: { organizationId: ORG_ID, user: { login } }, data: { taxId: null } });
 
     const antes = await prisma.employeeProfile.findFirstOrThrow({
       where: { organizationId: ORG_ID, user: { login } },
@@ -365,9 +396,10 @@ describe("a planilha completa quem já existe [CB-2] [S1-G]", () => {
     const matricula = `D${SUFIXO}`.slice(0, 12);
     const cpfBom = cpfFicticio(Date.now() + 15485863);
     const primeira = await importar([
-      { name: `Ana Completa ${SUFIXO}`, registration: matricula, tax_id: cpfBom },
+      { name: `Ana Completa ${SUFIXO}`, registration: matricula, tax_id: cpfBom, birth_date: "1990-05-10" },
     ]);
     expect(primeira.status).toBe(201);
+    expect(primeira.body.results[0].status, JSON.stringify(primeira.body.results[0])).toBe("created");
     const login = primeira.body.results[0].login as string;
 
     const outroCpf = cpfFicticio(Date.now() + 32452843);
@@ -392,7 +424,12 @@ describe("a planilha completa quem já existe [CB-2] [S1-G]", () => {
 
   it("a prévia conta o que completaria, sem gravar", async () => {
     const matricula = `E${SUFIXO}`.slice(0, 12);
-    await importar([{ name: `Previa ${SUFIXO}`, registration: matricula }]);
+    const criada = await importar([
+      { name: `Previa ${SUFIXO}`, registration: matricula, tax_id: cpfFicticio(Date.now() + 86028121), birth_date: "1990-05-10" },
+    ]);
+    expect(criada.body.results[0].status, JSON.stringify(criada.body.results[0])).toBe("created");
+    /* Ficha antiga, sem CPF (antes de 23/11 a pessoa entrava sem ele). */
+    await prisma.employeeProfile.updateMany({ where: { organizationId: ORG_ID, registration: matricula }, data: { taxId: null } });
     const cpf = cpfFicticio(Date.now() + 49979687);
 
     const previa = await importar(

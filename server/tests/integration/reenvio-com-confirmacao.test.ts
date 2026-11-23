@@ -319,7 +319,7 @@ describe("datas inválidas pedem dd/mm/aaaa [C4-3]", () => {
     });
     const texto = await importar([{ name: "DATA TEXTO", tax_id: cpf("755755755"), admitted_at: "amanhã", job_role_id: repositor }], true);
     expect(texto.body.results[0].message).toBe("Data de admissão inválida — use dd/mm/aaaa.");
-    const br = await importar([{ name: "DATA BR", tax_id: cpf("766766766"), admitted_at: "1/2/2020", job_role_id: repositor }], true);
+    const br = await importar([{ name: "DATA BR", tax_id: cpf("766766766"), registration: "000903", birth_date: "1990-01-05", admitted_at: "1/2/2020", job_role_id: repositor }], true);
     expect(br.body.results[0].status).toBe("created");
   });
 });
@@ -328,8 +328,8 @@ describe("idade fora do comum avisa, sem bloquear [C4-8]", () => {
   it("nascimento que dá 6 anos entra com o aviso; um comum, sem", async () => {
     const res = await importar(
       [
-        { name: "IDADE ESTRANHA", tax_id: cpf("777177717"), birth_date: "2020-01-05", job_role_id: repositor },
-        { name: "IDADE COMUM", tax_id: cpf("788188818"), birth_date: "1990-01-05", job_role_id: repositor },
+        { name: "IDADE ESTRANHA", tax_id: cpf("777177717"), registration: "000904", birth_date: "2020-01-05", job_role_id: repositor },
+        { name: "IDADE COMUM", tax_id: cpf("788188818"), registration: "000905", birth_date: "1990-01-05", job_role_id: repositor },
       ],
       true,
     );

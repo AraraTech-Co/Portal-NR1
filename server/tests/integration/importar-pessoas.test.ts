@@ -51,6 +51,21 @@ const CPFS = [0, 1, 2, 3].map((i) => cpfFicticio(Date.now() + i * 7919));
 
 /** A filial do seed: a organização de teste tem mais de uma, e a linha sem função diz qual; com função, vale a dela. [C3-3] */
 const FILIAL_DO_SEED = "aaaaaaaa-0001-4000-8000-000000000011";
+/*
+  A pessoa nova entra com matrícula, CPF e nascimento (23/11). A linha que
+  não traz um deles recebe um valor novo, para que o resultado dependa só do
+  que cada teste quer provar. Quem quer o próprio valor o põe na linha.
+*/
+let seqDaLinha = 0;
+const comIdentidade = (p: Record<string, unknown>) => {
+  seqDaLinha += 1;
+  return {
+    ...("registration" in p ? {} : { registration: `IMP${seqDaLinha}-${SUFIXO}`.slice(0, 20) }),
+    ...("tax_id" in p ? {} : { tax_id: cpfFicticio(Date.now() + 1_000_003 * seqDaLinha) }),
+    ...("birth_date" in p ? {} : { birth_date: "1990-05-10" }),
+    ...p,
+  };
+};
 const importar = (
   token: string,
   people: Record<string, unknown>[],
@@ -60,7 +75,7 @@ const importar = (
     .post("/api/pessoas-acessos/importar")
     .set(as(token))
     .send({
-      people: people.map((p) => (p.job_role_id ? p : { establishment_id: FILIAL_DO_SEED, ...p })),
+      people: people.map(comIdentidade).map((p) => (p.job_role_id ? p : { establishment_id: FILIAL_DO_SEED, ...p })),
       dry_run: dryRun,
     });
 
@@ -138,7 +153,7 @@ describe("cadastrar várias pessoas de uma vez [S1-A]", () => {
     // Quem "já existe" é criado aqui mesmo: depender do CPF do seed deixa o
     // teste refém de outro arquivo que edita a ficha do colaborador.
     const jaExiste = await importar(rh.token, [
-      { name: `Veterana Importada ${SUFIXO}`, tax_id: CPFS[0] },
+      { name: `Veterana Importada ${SUFIXO}`, tax_id: CPFS[0], registration: `IMP-V-${SUFIXO}`.slice(0, 20) },
     ]);
     expect(jaExiste.body.created).toBe(1);
 
@@ -147,7 +162,7 @@ describe("cadastrar várias pessoas de uma vez [S1-A]", () => {
       { name: `CPF torto Importada ${SUFIXO}`, tax_id: "11111111111" },
       { name: "", email: `sem.nome@${SUFIXO}.local` },
       { name: `Função torta Importada ${SUFIXO}`, job_role_id: "nao-existe" },
-      { name: `Repetida Importada ${SUFIXO}`, tax_id: CPFS[0] },
+      { name: `Repetida Importada ${SUFIXO}`, tax_id: CPFS[0], registration: `IMP-V-${SUFIXO}`.slice(0, 20) },
     ]);
     expect(res.status).toBe(201);
     expect(res.body.created).toBe(1);

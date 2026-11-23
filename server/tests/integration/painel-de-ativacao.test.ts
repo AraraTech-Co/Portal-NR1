@@ -60,15 +60,21 @@ async function pessoa(dados = true): Promise<string> {
           establishment_id: "aaaaaaaa-0001-4000-8000-000000000011",
           name: `Painel Pessoa ${seq} ${SUFIXO}`,
           registration: `PA${seq}${SUFIXO}`.slice(0, 18),
-          ...(dados
-            ? { birth_date: "1988-08-08", tax_id: cpfFicticio(Date.now() + seq * 7919) }
-            : {}),
+          birth_date: "1988-08-08",
+          tax_id: cpfFicticio(Date.now() + seq * 7919),
         },
       ],
     });
   expect(res.status, `importar: ${res.status} ${JSON.stringify(res.body)}`).toBe(201);
   expect(res.body.results[0].status, JSON.stringify(res.body)).toBe("created");
   const u = await prisma.user.findUniqueOrThrow({ where: { login: res.body.results[0].login } });
+  /*
+    Ficha antiga, de antes da regra de 23/11: o cadastro novo já exige os
+    três, então a falta de dados só existe em ficha que veio antes dela.
+  */
+  if (!dados) {
+    await prisma.employeeProfile.updateMany({ where: { userId: u.id }, data: { birthDate: null, taxId: null } });
+  }
   return u.id;
 }
 

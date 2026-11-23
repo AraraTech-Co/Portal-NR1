@@ -162,9 +162,17 @@ describe("o formulário de uma pessoa", () => {
     expect(typeof acesso.body.token).toBe("string");
   });
 
-  it("pela planilha, sem nascimento e sem CPF, segue como antes, e a trilha diz import", async () => {
+  it("pela planilha: sem nascimento e sem CPF a linha é erro (regra de 23/11); com os três, entra e a trilha diz import", async () => {
     const semNada = { name: `Pessoa Formulario 7 ${SUFIXO}`, job_role_id: JOB_ID };
-    const res = await request(app).post("/api/pessoas-acessos/importar").set(as(token.rh!)).send({ people: [semNada] });
+    const recusada = await request(app).post("/api/pessoas-acessos/importar").set(as(token.rh!)).send({ people: [semNada] });
+    expect(recusada.status).toBe(201);
+    expect(recusada.body.results[0]).toMatchObject({
+      status: "error",
+      message: "Informe a data de nascimento: é com ela que a pessoa faz o primeiro acesso.",
+    });
+    expect(await prisma.user.count({ where: { name: `Pessoa Formulario 7 ${SUFIXO}` } })).toBe(0);
+
+    const res = await request(app).post("/api/pessoas-acessos/importar").set(as(token.rh!)).send({ people: [pessoa(7)] });
     expect(res.status).toBe(201);
     expect(res.body.results[0].status).toBe("created");
     const conta = await prisma.user.findUniqueOrThrow({ where: { login: res.body.results[0].login } });

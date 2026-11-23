@@ -15,6 +15,24 @@ import { isValidCnpj } from "../../src/helper/cnpj";
 const SENHA = "teste1234";
 const SUFIXO = Date.now().toString(36);
 
+/*
+  CNPJ válido e novo a cada execução, escrito com a pontuação: o CNPJ não se
+  repete entre filiais (23/11), então um fixo quebraria a segunda execução.
+*/
+function cnpjFicticio(semente: number): string {
+  const d = String(10000000 + (semente % 89999999)).padStart(8, "0").split("").map(Number);
+  d.push(0, 0, 0, 1);
+  const dv = (pesos: number[]) => {
+    const r = d.slice(0, pesos.length).reduce((t, x, i) => t + x * pesos[i]!, 0) % 11;
+    return r < 2 ? 0 : 11 - r;
+  };
+  d.push(dv([5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]));
+  d.push(dv([6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]));
+  return d.join("");
+}
+const CNPJ = cnpjFicticio(Date.now());
+const CNPJ_PONTUADO = `${CNPJ.slice(0, 2)}.${CNPJ.slice(2, 5)}.${CNPJ.slice(5, 8)}/${CNPJ.slice(8, 12)}-${CNPJ.slice(12)}`;
+
 async function entrar(app: Express, login: string) {
   const res = await request(app).post("/api/auth").send({ login, password: SENHA });
   expect(res.status, `login de ${login}`).toBe(200);
@@ -59,9 +77,9 @@ describe("estabelecimento com endereço [S1-H]", () => {
     const ok = await request(app)
       .post("/api/establishments")
       .set(as(dona.token))
-      .send({ name: `Loja ${SUFIXO}`, tax_id: "11.222.333/0001-81", address: "  Rua das Flores, 10 — Americana/SP " });
-    expect(ok.status).toBe(201);
-    expect(ok.body.establishment.taxId).toBe("11222333000181");
+      .send({ name: `Loja ${SUFIXO}`, tax_id: CNPJ_PONTUADO, address: "  Rua das Flores, 10 — Americana/SP " });
+    expect(ok.status, JSON.stringify(ok.body)).toBe(201);
+    expect(ok.body.establishment.taxId).toBe(CNPJ);
     expect(ok.body.establishment.address).toBe("Rua das Flores, 10 — Americana/SP");
     id = ok.body.establishment.id;
   });
