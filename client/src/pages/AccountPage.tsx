@@ -97,6 +97,9 @@ export function AccountPage() {
         registration?: string;
         is_external?: boolean;
         access_until?: string;
+        /** Só para o pedido antigo, que chegou sem eles. */
+        tax_id?: string;
+        birth_date?: string;
       }
     >
   >({});
@@ -237,6 +240,8 @@ export function AccountPage() {
                 ? undefined
                 : roles?.registration?.trim() || undefined,
               is_external: roles?.is_external ?? false,
+              ...(roles?.tax_id?.trim() ? { tax_id: roles.tax_id.trim() } : {}),
+              ...(roles?.birth_date ? { birth_date: roles.birth_date } : {}),
               ...(roles?.org_role === "FISCAL"
                 ? { access_until: roles.access_until || defaultFiscalUntil() }
                 : {}),
@@ -504,7 +509,7 @@ export function AccountPage() {
                         {!decideRoles[r.id]?.is_external && (
                           <input
                             value={decideRoles[r.id]?.registration ?? ""}
-                            placeholder="Matrícula"
+                            placeholder="Matrícula (obrigatória)"
                             aria-label={`Matrícula de ${r.name}`}
                             aria-invalid={
                               recusaDoPedido[r.id]?.code === "REGISTRATION_TAKEN" || undefined
@@ -525,6 +530,60 @@ export function AccountPage() {
                             }}
                           />
                         )}
+                        {/*
+                          Quem ganha ficha entra com matrícula, CPF e nascimento.
+                          O CPF chega mascarado; o pedido antigo, sem os dois,
+                          recebe-os aqui. (23/11/2026)
+                        */}
+                        {!decideRoles[r.id]?.is_external &&
+                          decideRoles[r.id]?.org_role !== "FISCAL" && (
+                            <div className="muted" style={{ marginTop: "0.3rem" }}>
+                              {r.tax_id ? (
+                                <div>CPF {r.tax_id}</div>
+                              ) : (
+                                <input
+                                  value={decideRoles[r.id]?.tax_id ?? ""}
+                                  placeholder="CPF (obrigatório)"
+                                  inputMode="numeric"
+                                  aria-label={`CPF de ${r.name}`}
+                                  onChange={(e) => {
+                                    limparRecusa(r.id);
+                                    setDecideRoles((prev) => ({
+                                      ...prev,
+                                      [r.id]: {
+                                        ...prev[r.id],
+                                        org_role: prev[r.id]?.org_role ?? "COLABORADOR",
+                                        tax_id: e.target.value,
+                                      },
+                                    }));
+                                  }}
+                                />
+                              )}
+                              {r.has_birth_date ? (
+                                <div>Nascimento informado</div>
+                              ) : (
+                                <label className="form-field">
+                                  Nascimento
+                                  <input
+                                    type="date"
+                                    value={decideRoles[r.id]?.birth_date ?? ""}
+                                    aria-label={`Data de nascimento de ${r.name}`}
+                                    onChange={(e) => {
+                                      limparRecusa(r.id);
+                                      setDecideRoles((prev) => ({
+                                        ...prev,
+                                        [r.id]: {
+                                          ...prev[r.id],
+                                          org_role: prev[r.id]?.org_role ?? "COLABORADOR",
+                                          birth_date: e.target.value,
+                                        },
+                                      }));
+                                    }}
+                                  />
+                                </label>
+                              )}
+                            </div>
+                          )}
                       </td>
                       <td>
                         {r.account_name}

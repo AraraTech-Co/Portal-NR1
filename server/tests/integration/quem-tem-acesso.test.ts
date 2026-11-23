@@ -5,6 +5,7 @@ import type { Express } from "express";
 import { AccountRole, Role } from "@prisma/client";
 import { createApp } from "../../src/app";
 import prisma from "../../src/model/prisma";
+import { identidadeDoPedido } from "../helpers/identidade-do-pedido";
 
 /**
  * Quem tem acesso, quem perdeu e por quê.
@@ -232,6 +233,7 @@ describe("o convite não entrega a conta sem querer [B2-1-A] [CB-17]", () => {
         name: `Intruso ${SUFIXO}`,
         email: `intruso.${SUFIXO}@teste.local`,
         password: "umaSenhaQualquer1",
+        ...identidadeDoPedido(),
       });
     expect(pedido.status, "o cadastro em si não exige mais matrícula").toBe(201);
 

@@ -3,6 +3,7 @@ import request from "supertest";
 import type { Express } from "express";
 import { createApp } from "../../src/app";
 import prisma from "../../src/model/prisma";
+import { identidadeDoPedido } from "../helpers/identidade-do-pedido";
 
 /**
  * O pedido de entrada pelo link avisa quem pode decidir. [CB-29]
@@ -44,7 +45,7 @@ async function pedido(nome: string) {
   links.push(link.body.link.id);
   const res = await request(app)
     .post(`/api/invites/${link.body.link.token}`)
-    .send({ name: nome, password: SENHA_DO_PEDIDO });
+    .send({ name: nome, password: SENHA_DO_PEDIDO, ...identidadeDoPedido() });
   expect(res.status, JSON.stringify(res.body)).toBe(201);
   pedidos.push(res.body.request_id);
   return res.body.request_id as string;
@@ -142,7 +143,7 @@ describe("o pedido de entrada avisa quem decide [CB-29]", () => {
     const res = await request(app)
       .post(`/api/join-requests/${id}/decide`)
       .set(as(master))
-      .send({ action: "approve", org_role: "COLABORADOR" });
+      .send({ action: "approve", org_role: "COLABORADOR", registration: `AV${SUFIXO}`.slice(0, 12) });
     expect(res.status, JSON.stringify(res.body)).toBe(200);
     expect(await avisos(id, true)).toEqual([]);
     expect((await avisos(outro, true)).length).toBe(pendentesDoOutro);

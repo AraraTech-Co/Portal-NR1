@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { Role } from "@prisma/client";
 import { createApp } from "../../src/app";
 import prisma from "../../src/model/prisma";
+import { identidadeDoPedido } from "../helpers/identidade-do-pedido";
 
 /**
  * A recusa da aprovação aparece onde quem aprova está olhando.
@@ -43,7 +44,7 @@ const pedidos: string[] = [];
 async function pedir(nome: string) {
   const res = await request(app)
     .post(`/api/invites/${linkToken}`)
-    .send({ name: nome, email: `${nome.replace(/\W+/g, ".").toLowerCase()}@teste.local`, password: "umaSenhaQualquer1" });
+    .send({ name: nome, email: `${nome.replace(/\W+/g, ".").toLowerCase()}@teste.local`, password: "umaSenhaQualquer1", ...identidadeDoPedido() });
   expect(res.status, JSON.stringify(res.body)).toBe(201);
   pedidos.push(res.body.request_id);
   return res.body.request_id as string;

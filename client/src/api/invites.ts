@@ -28,6 +28,10 @@ export type JoinRequest = {
   email: string | null;
   registration: string | null;
   is_external: boolean;
+  /** CPF mascarado (`***.456.789-**`), ou nulo no pedido antigo. */
+  tax_id: string | null;
+  /** Se quem pediu informou o nascimento (a data não vem). */
+  has_birth_date: boolean;
   created_at: string;
   invite_link_id: string | null;
   role_mode: "FIXED" | "ON_APPROVE";
@@ -87,6 +91,9 @@ export function decideJoinRequest(
     note?: string;
     /** Fim do acesso do fiscal (AAAA-MM-DD). Vazio → 30 dias. */
     access_until?: string;
+    /** Para o pedido antigo, que chegou sem CPF ou sem nascimento. */
+    tax_id?: string;
+    birth_date?: string;
   },
 ) {
   return request<{ ok: boolean; status: string; access_expires_at?: string }>(
@@ -113,6 +120,9 @@ export function acceptPublicInvite(
     /** O portal não envia nem confirma e-mail: é opcional. [OB-1] */
     email?: string;
     password: string;
+    /** CPF e nascimento: a ficha nasce completa na aprovação. */
+    tax_id: string;
+    birth_date: string;
   },
 ) {
   return request<{

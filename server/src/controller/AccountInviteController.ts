@@ -1,6 +1,6 @@
 import { randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
-import { AccountRole, InviteRoleMode, NotificationKind, Role } from "@prisma/client";
+import { AccountRole, InviteRoleMode, NotificationKind, Prisma, Role } from "@prisma/client";
 import { Request, Response } from "express";
 import prisma from "../model/prisma";
 import { filialDaFicha } from "../helper/filial-da-ficha";
@@ -22,9 +22,18 @@ import {
   quemDecidePedidosDaConta,
 } from "../helper/invite-access";
 import { resolveAccessUntil } from "../helper/access-period";
+import { isValidCpf, mascararCpf, normalizeCpf } from "../helper/cpf";
+import { parseBirthDate } from "../helper/birth-date";
+import { FALTA_CPF, FALTA_MATRICULA, faltaNaIdentidade } from "../helper/identidade";
 import type { AuthRequest } from "../types/auth";
 
 function fail(res: Response, err: unknown) {
+  if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+    res.status(409).json({
+      message: "Já existe ficha com este CPF ou com esta matrícula na filial. Confira os dados do pedido.",
+    });
+    return;
+  }
   const e = err as { status?: number; message?: string; code?: string };
   res
     .status(e.status || 500)
@@ -37,6 +46,24 @@ function blank(v?: string | null) {
 
 function httpError(status: number, message: string, code?: string): Error {
   return Object.assign(new Error(message), { status, ...(code ? { code } : {}) });
+}
+
+/**
+ * Na aprovação não há primeiro acesso (a pessoa já criou a senha): a mensagem
+ * diz o que falta para a ficha, não para o primeiro acesso.
+ */
+function faltaNaAprovacao(falta: string): string {
+  if (falta === FALTA_MATRICULA) return "Informe a matrícula: quem entra com ficha precisa de matrícula, CPF e data de nascimento.";
+  if (falta === FALTA_CPF) return "Informe o CPF de quem pediu: quem entra com ficha precisa de matrícula, CPF e data de nascimento.";
+  return "Informe a data de nascimento de quem pediu: quem entra com ficha precisa de matrícula, CPF e data de nascimento.";
+}
+
+/** CPF informado: só dígitos e com os verificadores batendo. Vazio vira nulo. */
+function cpfInformado(raw: unknown): string | null {
+  if (raw === undefined || raw === null || String(raw).trim() === "") return null;
+  const cpf = normalizeCpf(String(raw));
+  if (!isValidCpf(cpf)) throw httpError(400, "CPF inválido — confira os números.");
+  return cpf;
 }
 
 /**
@@ -333,10 +360,12 @@ class AccountInviteController {
         marcar-se externo muda o próprio vínculo e matrícula é número que o
         RH atribui. [S1-M] [S1-Q]
       */
-      const { name, email, password } = req.body as {
+      const { name, email, password, tax_id, birth_date } = req.body as {
         name?: string;
         email?: string;
         password?: string;
+        tax_id?: unknown;
+        birth_date?: unknown;
       };
       const link = await prisma.accountInviteLink.findUnique({
         where: { token: req.params.token },
@@ -361,6 +390,15 @@ class AccountInviteController {
       if (!password || password.length < 8) {
         throw httpError(400, "A senha deve ter pelo menos 8 caracteres.");
       }
+      /*
+        CPF e nascimento vêm de quem pede, para a ficha nascer completa na
+        aprovação. Sem oráculo: o envio nunca diz que o CPF já está na
+        empresa; isso é conferido por quem aprova. (23/11/2026)
+      */
+      const taxId = cpfInformado(tax_id);
+      if (!taxId) throw httpError(400, "Informe o seu CPF.");
+      const birthDate = parseBirthDate(birth_date);
+      if (!birthDate) throw httpError(400, "Informe a sua data de nascimento.");
 
       if (cleanEmail) {
         const existingMembership = await prisma.accountMembership.findFirst({
@@ -413,6 +451,8 @@ class AccountInviteController {
             // Quem aprova define os dois. [S1-M]
             registration: null,
             isExternal: false,
+            taxId,
+            birthDate,
             status: "PENDING",
           },
         });
@@ -509,6 +549,9 @@ class AccountInviteController {
             email: r.email,
             registration: r.registration,
             is_external: r.isExternal,
+            /* Mascarado: quem aprova só confere com a pessoa. O nascimento não sai. */
+            tax_id: mascararCpf(r.taxId),
+            has_birth_date: r.birthDate !== null,
             created_at: r.createdAt,
             invite_link_id: r.inviteLinkId,
             role_mode: link?.roleMode ?? InviteRoleMode.ON_APPROVE,
@@ -541,6 +584,9 @@ class AccountInviteController {
         is_external?: boolean;
         /** Fim do acesso do fiscal (AAAA-MM-DD). Vazio → 30 dias. */
         access_until?: string;
+        /** CPF e nascimento, para o pedido que chegou sem eles. (23/11/2026) */
+        tax_id?: unknown;
+        birth_date?: unknown;
       };
       if (body.action !== "approve" && body.action !== "reject") {
         throw httpError(400, "action deve ser approve ou reject.");
@@ -571,6 +617,9 @@ class AccountInviteController {
             decidedById: actor.userId,
             decidedAt: new Date(),
             decisionNote: blank(body.note),
+            /* Dado de quem não entrou: não fica guardado. */
+            taxId: null,
+            birthDate: null,
           },
         });
         await writeAudit({
@@ -629,6 +678,19 @@ class AccountInviteController {
       if (registration && !matriculaNoPadrao(registration)) {
         throw httpError(400, MATRICULA_FORA_DO_PADRAO);
       }
+      /*
+        Quem ganha ficha (não é externo nem fiscal) entra com matrícula, CPF e
+        nascimento, como em todo cadastro com ficha. O CPF e o nascimento vêm
+        do pedido; o pedido antigo, que chegou sem eles, recebe-os aqui de
+        quem aprova, com a mesma validação. (23/11/2026)
+      */
+      const temFicha = !isExternal && orgRole !== Role.FISCAL;
+      const taxId = temFicha ? (cpfInformado(body.tax_id) ?? request.taxId) : null;
+      const birthDate = temFicha ? (parseBirthDate(body.birth_date) ?? request.birthDate) : null;
+      if (temFicha) {
+        const falta = faltaNaIdentidade({ nascimento: birthDate, cpf: taxId, matricula: registration });
+        if (falta) throw httpError(400, faltaNaAprovacao(falta));
+      }
       const filial = await filialDaFicha(request.account.organizationId, {});
       const filialDoPedido = filial.ok ? filial.establishmentId : null;
 
@@ -661,6 +723,21 @@ class AccountInviteController {
               409,
               `A matrícula ${registration} já é de ${taken.user.name}. Escolha outra matrícula para este pedido.`,
               "REGISTRATION_TAKEN",
+            );
+          }
+        }
+
+        if (taxId) {
+          const cpfEmUso = await tx.employeeProfile.findFirst({
+            where: { organizationId: request.account.organizationId, taxId },
+            select: { id: true },
+          });
+          if (cpfEmUso) {
+            /* Sem o nome: quem aprova nem sempre pode ver CPF de outras fichas. */
+            throw httpError(
+              409,
+              "Este CPF já está na ficha de outra pessoa da empresa. Confira o CPF com quem pediu.",
+              "TAX_ID_TAKEN",
             );
           }
         }
@@ -715,6 +792,8 @@ class AccountInviteController {
               organizationId: request.account.organizationId,
               userId: user.id,
               registration,
+              taxId,
+              birthDate,
               /*
                 Sem função no pedido: com uma filial só na empresa, é a dela;
                 com mais de uma, a ficha fica sem filial e o RH completa. [C3-2]
@@ -736,6 +815,9 @@ class AccountInviteController {
             decidedAt: new Date(),
             decisionNote: blank(body.note),
             passwordHash: "",
+            /* Já estão na ficha (ou não servem, sem ficha): não ficam no pedido. */
+            taxId: null,
+            birthDate: null,
           },
         });
       });
@@ -761,6 +843,7 @@ class AccountInviteController {
         status: "APPROVED",
         role,
         org_role: orgRole,
+        tax_id: mascararCpf(taxId),
         ...(fiscalUntil ? { access_expires_at: fiscalUntil.toISOString() } : {}),
       });
     } catch (err) {
