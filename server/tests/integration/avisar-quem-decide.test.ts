@@ -5,6 +5,7 @@ import { Role } from "@prisma/client";
 import type { Express } from "express";
 import { createApp } from "../../src/app";
 import prisma from "../../src/model/prisma";
+import { identidadeDoPedido } from "../helpers/identidade-do-pedido";
 
 /**
  * Seis fatos ainda aconteciam sem aviso nenhum — e quem precisava agir só
@@ -368,7 +369,7 @@ describe("o pedido de entrada entra na mesa de quem aprova [CB-53]", () => {
 
     const pedido = await request(app)
       .post(`/api/invites/${token}`)
-      .send({ name: `Quem Espera ${SUFIXO}`, password: "senha-boa-123" });
+      .send({ name: `Quem Espera ${SUFIXO}`, password: "senha-boa-123", ...identidadeDoPedido() });
     expect(pedido.status, JSON.stringify(pedido.body)).toBe(201);
     pedidosDeEntrada.push(pedido.body.request_id);
 

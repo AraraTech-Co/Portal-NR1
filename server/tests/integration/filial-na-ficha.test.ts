@@ -6,6 +6,7 @@ import { AccountRole, Role } from "@prisma/client";
 import { createApp } from "../../src/app";
 import prisma from "../../src/model/prisma";
 import { canonicalRegistration } from "../../src/helper/auth-attempts";
+import { identidadeDoPedido } from "../helpers/identidade-do-pedido";
 
 /**
  * Filial na ficha e matrícula única por filial. [C3-2]
@@ -271,7 +272,7 @@ describe("matrícula só com ASCII imprimível [C3-2]", () => {
     try {
       const pedido = await request(app)
         .post(`/api/invites/${link.body.link.token}`)
-        .send({ name: `C32 Convite ${SUFIXO}`, password: ["senha", "convite", SUFIXO].join("-") });
+        .send({ name: `C32 Convite ${SUFIXO}`, password: ["senha", "convite", SUFIXO].join("-"), ...identidadeDoPedido() });
       expect(pedido.status, JSON.stringify(pedido.body)).toBe(201);
       const aprovar = await request(app)
         .post(`/api/join-requests/${pedido.body.request_id}/decide`)

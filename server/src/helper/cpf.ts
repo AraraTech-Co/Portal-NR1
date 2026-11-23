@@ -25,3 +25,14 @@ export function isValidCpf(value: string): boolean {
 
   return checkDigit(9) === digits[9] && checkDigit(10) === digits[10];
 }
+
+/**
+ * CPF para mostrar a quem não precisa dele inteiro: `***.456.789-**`. Vale em
+ * toda resposta do pedido de entrada, inclusive a da decisão.
+ */
+export function mascararCpf(cpf: string | null | undefined): string | null {
+  if (!cpf) return null;
+  const d = normalizeCpf(cpf);
+  if (d.length !== 11) return "***.***.***-**";
+  return `***.${d.slice(3, 6)}.${d.slice(6, 9)}-**`;
+}

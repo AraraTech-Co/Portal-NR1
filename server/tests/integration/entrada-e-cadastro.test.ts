@@ -5,6 +5,7 @@ import type { Express } from "express";
 import { Role } from "@prisma/client";
 import { createApp } from "../../src/app";
 import prisma from "../../src/model/prisma";
+import { identidadeDoPedido } from "../helpers/identidade-do-pedido";
 
 /**
  * Entrar e ser cadastrado.
@@ -228,7 +229,7 @@ describe("o convite pede só o que é de quem entra [OB-1] [S1-M] [S1-Q]", () =>
     const token = await linkDeConvite();
     const res = await request(app)
       .post(`/api/invites/${token}`)
-      .send({ name: `Sem Email ${SUFIXO}`, password: "senha-boa-123" });
+      .send({ name: `Sem Email ${SUFIXO}`, password: "senha-boa-123", ...identidadeDoPedido() });
     expect(res.status, JSON.stringify(res.body)).toBe(201);
     pedidos.push(res.body.request_id);
 
@@ -250,6 +251,7 @@ describe("o convite pede só o que é de quem entra [OB-1] [S1-M] [S1-Q]", () =>
         password: "senha-boa-123",
         registration: "0001",
         is_external: true,
+        ...identidadeDoPedido(),
       });
     expect(res.status).toBe(201);
     pedidos.push(res.body.request_id);
@@ -266,7 +268,7 @@ describe("o convite pede só o que é de quem entra [OB-1] [S1-M] [S1-Q]", () =>
     const token = await linkDeConvite();
     const pedido = await request(app)
       .post(`/api/invites/${token}`)
-      .send({ name: `Aprovado Com Matricula ${SUFIXO}`, password: "senha-boa-123" });
+      .send({ name: `Aprovado Com Matricula ${SUFIXO}`, password: "senha-boa-123", ...identidadeDoPedido() });
     expect(pedido.status).toBe(201);
     pedidos.push(pedido.body.request_id);
 
@@ -299,7 +301,7 @@ describe("o convite pede só o que é de quem entra [OB-1] [S1-M] [S1-Q]", () =>
     const token = await linkDeConvite();
     const pedido = await request(app)
       .post(`/api/invites/${token}`)
-      .send({ name: `Terceiro ${SUFIXO}`, password: "senha-boa-123" });
+      .send({ name: `Terceiro ${SUFIXO}`, password: "senha-boa-123", ...identidadeDoPedido() });
     pedidos.push(pedido.body.request_id);
 
     const decisao = await request(app)

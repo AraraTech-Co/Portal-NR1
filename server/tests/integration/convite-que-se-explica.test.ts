@@ -4,6 +4,7 @@ import type { Express } from "express";
 import { Role } from "@prisma/client";
 import { createApp } from "../../src/app";
 import prisma from "../../src/model/prisma";
+import { identidadeDoPedido } from "../helpers/identidade-do-pedido";
 
 /**
  * O link de convite que diz o que é.
@@ -152,7 +153,7 @@ describe("a lista diz quem usou cada link [S5-I]", () => {
     const nome = `Entrou pelo link ${SUFIXO}`;
     const pedido = await request(app)
       .post(`/api/invites/${token}`)
-      .send({ name: nome, password: `senha-do-convite-${SUFIXO}` });
+      .send({ name: nome, password: `senha-do-convite-${SUFIXO}`, ...identidadeDoPedido() });
     expect(pedido.status, JSON.stringify(pedido.body)).toBe(201);
     pedidos.push(pedido.body.request_id);
 
@@ -187,6 +188,7 @@ describe("o papel fixo no link é sugestão, não sentença [S1-P]", () => {
       .send({
         name: `Papel revisto ${SUFIXO}`,
         password: `senha-do-convite-${SUFIXO}`,
+        ...identidadeDoPedido(),
       });
     expect(pedido.status, JSON.stringify(pedido.body)).toBe(201);
     pedidos.push(pedido.body.request_id);
@@ -231,6 +233,7 @@ describe("o papel fixo no link é sugestão, não sentença [S1-P]", () => {
       .send({
         name: `Papel do link ${SUFIXO}`,
         password: `senha-do-convite-${SUFIXO}`,
+        ...identidadeDoPedido(),
       });
     pedidos.push(pedido.body.request_id);
 

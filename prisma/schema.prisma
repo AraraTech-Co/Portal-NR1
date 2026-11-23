@@ -367,6 +367,11 @@ model AccountJoinRequest {
   registration   String?
   /// Terceiro / visitante sem matrícula da empresa. Definido na aprovação. [S1-M]
   isExternal     Boolean           @default(false)
+  /// CPF (só dígitos) e nascimento informados por quem pede. Vão para a
+  /// ficha na aprovação e são apagados quando o pedido é decidido. A tela de
+  /// quem aprova vê o CPF mascarado. (23/11/2026)
+  taxId          String?
+  birthDate      DateTime?
   status         JoinRequestStatus @default(PENDING)
   /// Papéis definidos na aprovação.
   decidedRole    AccountRole?

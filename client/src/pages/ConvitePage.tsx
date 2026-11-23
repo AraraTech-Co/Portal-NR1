@@ -16,6 +16,8 @@ export function ConvitePage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [cpf, setCpf] = useState("");
+  const [nascimento, setNascimento] = useState("");
   const [password, setPassword] = useState("");
   const [confirma, setConfirma] = useState("");
   const [verSenha, setVerSenha] = useState(false);
@@ -59,7 +61,7 @@ export function ConvitePage() {
         externo mudava o próprio vínculo, e matrícula é número que o RH
         atribui. [S1-M] [S1-Q]
       */
-      await acceptPublicInvite(token, { name, email, password });
+      await acceptPublicInvite(token, { name, email, password, tax_id: cpf, birth_date: nascimento });
       setDone(true);
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Falha ao enviar");
@@ -122,6 +124,26 @@ export function ConvitePage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   autoComplete="email"
+                />
+              </label>
+              <label className="login-field">
+                CPF
+                <input
+                  value={cpf}
+                  onChange={(e) => setCpf(e.target.value)}
+                  required
+                  inputMode="numeric"
+                  placeholder="000.000.000-00"
+                />
+              </label>
+              <label className="login-field">
+                Data de nascimento
+                <input
+                  type="date"
+                  value={nascimento}
+                  onChange={(e) => setNascimento(e.target.value)}
+                  required
+                  autoComplete="bday"
                 />
               </label>
               <label className="login-field">
